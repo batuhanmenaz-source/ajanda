@@ -27,24 +27,32 @@ export function clearGoogleCache() {
 }
 
 // Google ile girişten hemen sonra Supabase oturumu Google anahtarlarını taşır; onları saklarız.
+// Döner: { ok, error } — yenileme anahtarı veritabanına kaydedildi mi?
 export async function captureGoogleTokens(session) {
-  if (!session) return;
+  if (!session) return { ok: false, error: 'no_session' };
   if (session.provider_token) setToken(session.provider_token, 3600);
-  if (session.provider_refresh_token) {
-    const { error } = await supabase.from('google_tokens').upsert({
-      user_id: session.user.id,
-      refresh_token: session.provider_refresh_token,
-      updated_at: new Date().toISOString()
-    });
-    if (error) console.warn('Google yenileme anahtarı kaydedilemedi', error);
+  calListCache = null;
+  if (!session.provider_refresh_token) return { ok: false, error: 'no_refresh_token_from_google' };
+  const { error } = await supabase.from('google_tokens').upsert({
+    user_id: session.user.id,
+    refresh_token: session.provider_refresh_token,
+    updated_at: new Date().toISOString()
+  });
+  if (error) {
+    console.warn('Google yenileme anahtarı kaydedilemedi', error);
+    return { ok: false, error: error.message || 'save_failed' };
   }
+  return { ok: true };
 }
+
+// Son Google hatasının nedeni (Hesap penceresinde gösterilir)
+export let lastGoogleReason = '';
 
 async function accessToken(force = false) {
   if (!force && memToken && memToken.exp > Date.now()) return memToken.token;
   const { data, error } = await supabase.from('google_tokens').select('refresh_token').maybeSingle();
-  if (error) throw new GoogleAuthError(error.message);
-  if (!data || !data.refresh_token) throw new GoogleAuthError('no_refresh_token');
+  if (error) { lastGoogleReason = 'Veritabanında google_tokens tablosu okunamadı (' + error.message + ')'; throw new GoogleAuthError(lastGoogleReason); }
+  if (!data || !data.refresh_token) { lastGoogleReason = 'Kayıtlı Google anahtarı yok'; throw new GoogleAuthError('no_refresh_token'); }
   const r = await fetch('/api/google-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -52,9 +60,11 @@ async function accessToken(force = false) {
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
+    lastGoogleReason = 'Google anahtarı yenilenemedi: ' + (j.error || r.status) + (j.message ? ' — ' + j.message : '');
     if (r.status === 401) throw new GoogleAuthError('refresh_failed');
     throw new Error(j.message || j.error || 'token_error');
   }
+  lastGoogleReason = '';
   setToken(j.access_token, j.expires_in || 3600);
   return j.access_token;
 }

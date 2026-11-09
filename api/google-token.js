@@ -38,7 +38,13 @@ export default async function handler(req, res) {
     });
     const data = await r.json();
     if (!r.ok) {
-      res.status(r.status === 400 ? 401 : 502).json({ error: data.error || 'google_error', message: data.error_description || '' });
+      // invalid_client: Vercel'deki GOOGLE_CLIENT_ID / SECRET hatalı → sunucu ayarı sorunu
+      if (data.error === 'invalid_client' || data.error === 'unauthorized_client') {
+        res.status(500).json({ error: 'bad_server_config', message: 'Vercel\'deki GOOGLE_CLIENT_ID veya GOOGLE_CLIENT_SECRET hatalı.' });
+        return;
+      }
+      // invalid_grant vb.: kullanıcının bir kez yeniden bağlanması gerekir
+      res.status(r.status === 400 || r.status === 401 ? 401 : 502).json({ error: data.error || 'google_error', message: data.error_description || '' });
       return;
     }
     res.setHeader('Cache-Control', 'no-store');

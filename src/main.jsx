@@ -47,20 +47,29 @@ function NotConfigured() {
 function Root() {
   const [session, setSession] = useState(undefined);
   const [authError, setAuthError] = useState('');
+  const [googleSave, setGoogleSave] = useState(null);
 
   useEffect(() => {
     if (DEMO || !configured) return;
     const params = new URLSearchParams(window.location.search + window.location.hash.replace('#', '&'));
     if (params.get('error_description')) setAuthError('Giriş yapılamadı: ' + params.get('error_description'));
 
-    supabase.auth.getSession().then(({ data }) => setSession(data.session || null));
+    // Google'dan dönüldüğünde oturum Google anahtarlarını taşır. Olay adı (SIGNED_IN /
+    // INITIAL_SESSION) zamanlamaya göre değişebildiği için hangisi gelirse gelsin yakalıyoruz.
+    const captured = new Set();
+    const capture = (s) => {
+      if (!s || !s.provider_token || captured.has(s.provider_token)) return;
+      captured.add(s.provider_token);
+      captureGoogleTokens(s)
+        .then((res) => setGoogleSave({ n: Date.now(), ok: res.ok, error: res.error || '' }))
+        .catch((e) => setGoogleSave({ n: Date.now(), ok: false, error: String(e && e.message || e) }));
+      if (window.location.search || window.location.hash) window.history.replaceState({}, '', '/');
+    };
+
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session || null); capture(data.session); });
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s || null);
-      if (event === 'SIGNED_IN' && s && s.provider_token) {
-        captureGoogleTokens(s).catch(console.error);
-        // Adres çubuğundaki giriş parametrelerini temizle
-        if (window.location.search || window.location.hash) window.history.replaceState({}, '', '/');
-      }
+      capture(s);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -79,6 +88,7 @@ function Root() {
       store={realStore}
       demo={false}
       email={session.user.email}
+      googleSave={googleSave}
       onReconnect={() => signInWithGoogle()}
       onSignOut={async () => { clearGoogleCache(); await supabase.auth.signOut(); }}
     />

@@ -5,7 +5,7 @@ import { Sheet } from './ui.jsx';
 import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet } from './sheets.jsx';
 import { MARKETPLACES } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput } from './dates.js';
-import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache } from './google.js';
+import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason } from './google.js';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign } from './sync.js';
 
 const TABS = [
@@ -18,7 +18,7 @@ const TABS = [
 
 const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [] };
 
-export default function App({ store, demo, email, onSignOut, onReconnect }) {
+export default function App({ store, demo, email, onSignOut, onReconnect, googleSave }) {
   const [data, setData] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(() => { try { return sessionStorage.getItem('ajanda-tab') || 'bugun'; } catch { return 'bugun'; } });
@@ -85,10 +85,17 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
     if (demo) return;
     let alive = true;
     checkGoogle()
-      .then(() => alive && setGoogle('ok'))
+      .then(() => { if (alive) { setGoogle('ok'); loadedRange.current = null; } })
       .catch((e) => alive && setGoogle(e instanceof GoogleAuthError ? 'needs_login' : 'error'));
     return () => { alive = false; };
-  }, [demo]);
+    // googleSave: Google'dan dönüldüğünde anahtarlar kaydedilince yeniden kontrol et
+  }, [demo, googleSave]);
+
+  useEffect(() => {
+    if (googleSave && !googleSave.ok && googleSave.error && googleSave.error !== 'no_refresh_token_from_google') {
+      say('Google bağlantısı kaydedilemedi: ' + googleSave.error);
+    }
+  }, [googleSave, say]);
 
   const range = useMemo(() => {
     const today = startOfDay(now);
@@ -379,7 +386,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
         <main className="content">
           {google === 'needs_login' ? (
             <div className="banner">
-              <span>Google Takvim bağlantısı yenilenmeli. Hatırlatmaların takvime gitmesi için bir kez daha giriş yap.</span>
+              <span>Google Takvim bağlantısı yenilenmeli. Hatırlatmaların takvime gitmesi için bir kez daha giriş yap.{lastGoogleReason ? <><br /><small style={{ opacity: 0.8 }}>Neden: {lastGoogleReason}</small></> : null}</span>
               <button type="button" onClick={reconnect}>Yeniden bağla</button>
             </div>
           ) : null}
