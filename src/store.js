@@ -2,7 +2,9 @@
 import { supabase } from './supabase.js';
 import { addDays, startOfDay, toDateInput } from './dates.js';
 
-export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks'];
+export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls'];
+// SQL'i henüz çalıştırılmamış olabilecek tablolar: hata verirse boş sayılır
+const OPTIONAL = new Set(['missed_calls']);
 
 const ORDER = {
   reminders: ['due_at', true],
@@ -10,7 +12,8 @@ const ORDER = {
   notes: ['created_at', false],
   daily_notes: ['note_date', false],
   campaigns: ['start_date', true],
-  campaign_tasks: ['sort', true]
+  campaign_tasks: ['sort', true],
+  missed_calls: ['missed_at', false]
 };
 
 // 03_yarim.sql henüz çalıştırılmadıysa kayıtlar yine de kaydedilsin
@@ -24,7 +27,9 @@ export function createSupabaseStore() {
         const [col, asc] = ORDER[t];
         let q = supabase.from(t).select('*').order(col, { ascending: asc, nullsFirst: false });
         if (t === 'daily_notes') q = q.limit(120);
+        if (t === 'missed_calls') q = q.limit(100);
         const { data, error } = await q;
+        if (error && OPTIONAL.has(t)) { out[t] = []; return; }
         if (error) throw error;
         out[t] = data || [];
       }));
@@ -96,7 +101,7 @@ export function createSupabaseStore() {
 }
 
 // ---------- Örnek veri (demo) ----------
-const DEMO_KEY = 'ajanda-demo-v2';
+const DEMO_KEY = 'ajanda-demo-v3';
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
 
 function seed() {
@@ -126,6 +131,10 @@ function seed() {
     daily_notes: [
       { id: uid(), note_date: toDateInput(addDays(t, -1)), body: 'Temsilciyle görüşüldü; kupon kurgusu onaylandı.' }
     ],
+    missed_calls: [
+      { id: uid(), name: 'Ajans', phone: '905321112233', missed_at: new Date(Date.now() - 25 * 60000).toISOString(), handled: false },
+      { id: uid(), name: null, phone: '902124445566', missed_at: at(-1, 17, 40), handled: false }
+    ],
     campaigns: [
       { id: c1, name: 'Örnek kampanya', marketplace: 'Trendyol', start_date: toDateInput(addDays(t, 1)), end_date: toDateInput(addDays(t, 3)), prep_event_ids: [] },
       { id: c2, name: 'Kasım indirimleri', marketplace: 'Hepsiburada', start_date: toDateInput(addDays(t, 7)), end_date: toDateInput(addDays(t, 13)), prep_event_ids: [] },
@@ -148,6 +157,7 @@ export function createDemoStore() {
   let db;
   try { db = JSON.parse(localStorage.getItem(DEMO_KEY)); } catch { db = null; }
   if (!db) db = seed();
+  if (!db.missed_calls) db.missed_calls = [];
   const save = () => { try { localStorage.setItem(DEMO_KEY, JSON.stringify(db)); } catch { /* yok say */ } };
   save();
   return {

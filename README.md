@@ -12,7 +12,7 @@ Google Takvim, hatırlatmalar, pazaryeri notları, kampanya takvimi ve aramalar�
 
 ## Kurulum özeti
 
-1. Supabase > SQL Editor: `supabase/01_tablolar.sql` ve `supabase/02_google.sql` dosyalarını sırayla çalıştır.
+1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`05` numaralı dosyaları sırayla çalıştır.
 2. Supabase > Authentication > Providers > Google: Google Cloud'daki istemci kimliği ve gizli anahtarı gir.
 3. Vercel'de bu depoyu içe aktar ve şu ortam değişkenlerini tanımla:
 
@@ -22,9 +22,12 @@ Google Takvim, hatırlatmalar, pazaryeri notları, kampanya takvimi ve aramalar�
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase > Settings > API Keys > Publishable key |
 | `GOOGLE_CLIENT_ID` | Google Cloud > Clients |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud > Clients (gizli tutulur) |
+| `SUPABASE_SECRET_KEY` | Supabase > Settings > API Keys > Secret key (gizli tutulur; cevapsız çağrı kapısı için) |
 
 4. Supabase > Authentication > URL Configuration: **Site URL** alanına Vercel adresini yaz.
 5. Telefonda adresi aç: Android'de Chrome menüsü > "Uygulamayı yükle", iPhone'da Safari > Paylaş > "Ana Ekrana Ekle".
+
+**Cevapsız çağrılar (Android):** MacroDroid'de "Cevapsız arama" tetikleyicisi + `POST /api/missed-call` HTTP isteği (token, name, number). Gizli anahtar uygulamada Aramalar > Telefon bağlantısı'ndan alınır.
 
 Örnek verilerle denemek için adresin sonuna `?demo` ekle.
 

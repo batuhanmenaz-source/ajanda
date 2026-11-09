@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen, YarimPanel } from './screens.jsx';
 import { Sheet } from './ui.jsx';
-import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet } from './sheets.jsx';
+import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet } from './sheets.jsx';
+import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput } from './dates.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason } from './google.js';
@@ -16,7 +17,7 @@ const TABS = [
   { id: 'aramalar', label: 'Aramalar', icon: Icon.Phone }
 ];
 
-const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [] };
+const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [] };
 
 export default function App({ store, demo, email, onSignOut, onReconnect, googleSave }) {
   const [data, setData] = useState(EMPTY);
@@ -62,13 +63,13 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   useEffect(() => { load(false); }, [load]);
 
   // ---------- Yarim: WhatsApp ayarları ve kalp sayacı ----------
-  const [love, setLove] = useState({ phone: '', message: '', count: 0 });
+  const [love, setLove] = useState({ phone: '', message: '', count: 0, token: '' });
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c });
+        if (alive) setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' });
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -166,7 +167,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => { console.error(e); say('İşlem yapılamadı. İnternet bağlantını kontrol edip tekrar dene.'); };
 
   // ---------- Hatırlatma & arama ----------
-  const saveItem = async (table, fields) => {
+  const saveItem = async (table, input) => {
+    const { missedId, ...fields } = input;
     try {
       const syncFn = table === 'reminders' ? syncReminder : syncCall;
       let row;
@@ -182,6 +184,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         addLocal(table, [row]);
         const id = await gsync(() => syncFn(row));
         if (id) { await store.update(table, row.id, { google_event_id: id }); patchLocal(table, row.id, { google_event_id: id }); }
+      }
+      if (missedId) {
+        await store.update('missed_calls', missedId, { handled: true });
+        patchLocal('missed_calls', missedId, { handled: true });
       }
       setSheet(null);
       say(table === 'reminders' ? 'Hatırlatma kaydedildi' : 'Arama kaydedildi');
@@ -299,6 +305,21 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     newYarim: () => setSheet({ kind: 'quick', yarim: true }),
     openYarimSettings: () => setSheet({ kind: 'yarimSettings' }),
     openYarim: () => setSheet({ kind: 'yarim' }),
+    openMissedSetup: () => setSheet({ kind: 'missedSetup' }),
+    missedDone: async (m) => {
+      patchLocal('missed_calls', m.id, { handled: true });
+      try { await store.update('missed_calls', m.id, { handled: true }); } catch (e) { patchLocal('missed_calls', m.id, { handled: false }); fail(e); }
+    },
+    missedClearAll: async () => {
+      const open = data.missed_calls.filter((m) => !m.handled);
+      setData((d) => ({ ...d, missed_calls: d.missed_calls.map((m) => ({ ...m, handled: true })) }));
+      try { for (const m of open) await store.update('missed_calls', m.id, { handled: true }); } catch (e) { fail(e); load(true); }
+    },
+    missedLater: (m) => {
+      const due = new Date(Date.now() + 60 * 60000);
+      due.setMinutes(due.getMinutes() < 30 ? 30 : 60, 0, 0);
+      setSheet({ kind: 'item', item: { kind: 'call', title: m.name || prettyPhone(m.phone) || 'Cevapsız arama', phone: m.phone ? '+' + normalizePhone(m.phone) : '', topic: 'Cevapsız arama', due_at: due.toISOString(), missedId: m.id } });
+    },
     loveTapped: (e) => {
       const el = e && e.currentTarget;
       if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
@@ -313,6 +334,36 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openCampaign: (c) => setSheet({ kind: 'campaign', item: c }),
     openNote: (n) => setSheet({ kind: 'note', item: n }),
     toggleTask, addTask, deleteTask, saveDaily
+  };
+
+  const createToken = async () => {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    try {
+      const s = await store.saveSettings({ webhook_token: token });
+      setLove((l) => ({ ...l, token: s.webhook_token || token }));
+    } catch (e) {
+      console.error(e);
+      say('Anahtar kaydedilemedi. Supabase\'de 05 numaralı SQL\'i çalıştırdın mı?');
+    }
+  };
+  const testMissed = async () => {
+    if (demo) {
+      const row = await store.insert('missed_calls', { name: 'Test', phone: '905001112233', missed_at: new Date().toISOString(), handled: false });
+      addLocal('missed_calls', [row]);
+      return '✓ Test kaydı eklendi (örnek mod).';
+    }
+    try {
+      const r = await fetch('/api/missed-call', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: love.token, name: 'Test', number: '905001112233' }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok) { await load(true); return j.duplicate ? '✓ Bağlantı çalışıyor (son 2 dakikada zaten test kaydı vardı).' : '✓ Bağlantı çalışıyor. Cevapsız çağrılar listesinde "Test" kaydını görebilirsin.'; }
+      if (j.error === 'missing_server_config') return '✗ Vercel\'de SUPABASE_SECRET_KEY tanımlı değil ya da tanımlandıktan sonra yeniden yayınlanmadı.';
+      if (j.error === 'bad_token') return '✗ Gizli anahtar tanınmadı.';
+      return '✗ Hata: ' + (j.message || j.error || r.status);
+    } catch {
+      return '✗ Sunucuya ulaşılamadı.';
+    }
   };
 
   const saveYarimSettings = async (patch) => {
@@ -398,7 +449,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
               {tab === 'takvim' && <CalendarScreen data={data} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} />}
               {tab === 'kampanya' && <CampaignsScreen data={data} actions={actions} />}
               {tab === 'notlar' && <NotesScreen data={data} now={now} actions={actions} />}
-              {tab === 'aramalar' && <CallsScreen data={data} now={now} actions={actions} />}
+              {tab === 'aramalar' && <CallsScreen data={data} now={now} actions={actions} missedConfigured={!!love.token} />}
             </>
           )}
         </main>
@@ -423,11 +474,14 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
           <YarimPanel data={data} now={now} actions={actions} love={love} />
         </Sheet>
       )}
+      {sheet && sheet.kind === 'missedSetup' && (
+        <MissedSetupSheet token={love.token} onClose={() => setSheet(null)} onCreateToken={createToken} onTest={testMissed} />
+      )}
       {sheet && sheet.kind === 'yarimSettings' && (
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
       )}
       {sheet && sheet.kind === 'account' && (
-        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect}
+        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}
 

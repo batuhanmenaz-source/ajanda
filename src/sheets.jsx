@@ -101,7 +101,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete }) {
     const due = date ? combine(date, time).toISOString() : null;
     try {
       if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim });
-      else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim });
+      else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim, missedId: initial.missedId });
     } finally { setBusy(false); }
   };
 
@@ -319,8 +319,48 @@ export function YarimSettingsSheet({ initial, count, onClose, onSave }) {
   );
 }
 
+// ---------- Cevapsız çağrı bağlantısı ----------
+function CopyBox({ label, value }) {
+  const [ok, setOk] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(value); setOk(true); setTimeout(() => setOk(false), 1500); } catch { /* yok say */ }
+  };
+  return (
+    <div className="field">
+      <span className="lbl">{label}</span>
+      <div className="copybox"><code>{value}</code><button type="button" className="btn" onClick={copy}>{ok ? 'Kopyalandı' : 'Kopyala'}</button></div>
+    </div>
+  );
+}
+
+export function MissedSetupSheet({ token, onClose, onCreateToken, onTest }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState('');
+  const endpoint = window.location.origin + '/api/missed-call';
+  const test = async () => {
+    setBusy(true); setResult('');
+    try { setResult(await onTest()); } finally { setBusy(false); }
+  };
+  return (
+    <Sheet title="Telefon bağlantısı" onClose={onClose}>
+      <p className="hint" style={{ margin: 0, fontSize: 14 }}>Telefondaki MacroDroid, cevapsız bir çağrı olduğunda arayanın adını ve numarasını buraya gönderir. Bu kapıdan sadece kayıt eklenebilir, verilerin okunamaz.</p>
+      {token ? (
+        <>
+          <CopyBox label="Adres (URL)" value={endpoint} />
+          <CopyBox label="Gizli anahtar (token)" value={token} />
+          <button type="button" className="btn big" disabled={busy} onClick={test}>{busy ? 'Deneniyor…' : 'Test kaydı gönder'}</button>
+          {result ? <p className="hint" style={{ margin: 0, fontSize: 14, color: result.startsWith('✓') ? 'var(--green)' : 'var(--danger)' }}>{result}</p> : null}
+          <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => { if (window.confirm('Yeni anahtar oluşturulursa MacroDroid\'deki eski anahtar çalışmaz. Devam edilsin mi?')) onCreateToken(); }}>Yeni anahtar oluştur</button>
+        </>
+      ) : (
+        <button type="button" className="btn big primary" onClick={onCreateToken}>Gizli anahtar oluştur</button>
+      )}
+    </Sheet>
+  );
+}
+
 // ---------- Hesap ----------
-export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut }) {
+export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup }) {
   const gText = { ok: 'Bağlı', checking: 'Kontrol ediliyor…', needs_login: 'Yeniden bağlanmalı', error: 'Ulaşılamıyor', off: 'Örnek modda kapalı' }[google] || google;
   return (
     <Sheet title="Hesap" onClose={onClose}>
@@ -330,6 +370,7 @@ export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefr
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!demo && <button type="button" className="btn big" onClick={onReconnect}>Google Takvim'i yeniden bağla</button>}
+        <button type="button" className="btn big" onClick={onMissedSetup}>Telefon bağlantısı (cevapsız çağrılar)</button>
         <button type="button" className="btn big" onClick={onRefresh}>Verileri yenile</button>
         {!demo && <button type="button" className="btn big danger" onClick={onSignOut}>Çıkış yap</button>}
       </div>

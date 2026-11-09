@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Mp, Check, Section, Progress } from './ui.jsx';
 import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START } from './constants.js';
-import { whatsappLink, DEFAULT_LOVE_MESSAGE } from './whatsapp.js';
+import { whatsappLink, DEFAULT_LOVE_MESSAGE, prettyPhone, normalizePhone } from './whatsapp.js';
 import {
   addDays, startOfDay, sameDay, fmtTime, fmtShort, fmtLong, whenLabel, rangeLabel, relDays, weekStart,
   WEEKDAYS_SHORT, fromDateInput, toDateInput, daysBetween, dayLabel
@@ -232,8 +232,52 @@ function YarimTile({ data, now, actions, love }) {
   );
 }
 
+// ---------- CEVAPSIZ ÇAĞRILAR ----------
+const MissedIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /><path d="M16 3l5 5M21 3l-5 5" /></svg>
+);
+
+export function MissedCallsSection({ missed, now, actions, showEmpty, configured }) {
+  const open = (missed || []).filter((m) => !m.handled).sort((a, b) => b.missed_at.localeCompare(a.missed_at));
+  if (!open.length && !showEmpty) return null;
+  return (
+    <Section title="Cevapsız çağrılar" action={open.length > 1
+      ? <button type="button" className="linkbtn" onClick={actions.missedClearAll}>Tümünü kapat</button>
+      : <span className="meta">{open.length ? open.length + ' çağrı' : ''}</span>}>
+      <div className="card list missed-list">
+        {open.length ? open.map((m) => {
+          const t = new Date(m.missed_at);
+          const num = prettyPhone(m.phone);
+          return (
+            <div key={m.id} className="row missed-row">
+              <span className="missed-icon"><MissedIcon /></span>
+              <div className="body" style={{ padding: '10px 0' }}>
+                <span className="title" style={{ fontWeight: 600 }}>{m.name || num || 'Bilinmeyen numara'}</span>
+                <span className="meta"><span className="time">{whenLabel(t, now)}</span>{m.name && num ? <span>{num}</span> : null}</span>
+              </div>
+              {m.phone ? <a className="missed-btn call" href={'tel:+' + normalizePhone(m.phone)} aria-label={(m.name || num) + ' geri ara'}><Icon.Phone width="18" height="18" /></a> : null}
+              <button type="button" className="missed-btn" aria-label={(m.name || num) + ' için arama hatırlatması kur'} onClick={() => actions.missedLater(m)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2 2M5 3L2 6M22 6l-3-3" /></svg>
+              </button>
+              <button type="button" className="missed-btn" aria-label={(m.name || num) + ' kapat'} onClick={() => actions.missedDone(m)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+              </button>
+            </div>
+          );
+        }) : (
+          <div className="empty" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+            <span>{configured ? 'Cevapsız çağrı yok.' : 'Telefon bağlantısı henüz kurulmadı.'}</span>
+            {!configured ? <button type="button" className="btn" onClick={actions.openMissedSetup}>Bağlantıyı kur</button> : null}
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 // ---------- BUGÜN ----------
 export function TodayScreen({ data: allData, events, google, now, actions, goTab, love }) {
+  const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} />;
   const today = startOfDay(now);
   const open = (arr) => arr.filter((x) => !x.done);
   // Yarim kayıtları kendi alanında takip edilir; iş listelerinde görünmez
@@ -303,6 +347,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {missedEl}
         <Section title="Takvim" meta="Google Takvim">
           <div className="card list">
             {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
@@ -590,7 +635,7 @@ export function NotesScreen({ data, now, actions }) {
 }
 
 // ---------- ARAMALAR ----------
-export function CallsScreen({ data, now, actions }) {
+export function CallsScreen({ data, now, actions, missedConfigured }) {
   const open = data.calls.filter((c) => !c.done).sort((a, b) => (a.due_at || '9').localeCompare(b.due_at || '9'));
   const done = data.calls.filter((c) => c.done).sort((a, b) => (b.due_at || '').localeCompare(a.due_at || '')).slice(0, 20);
   const card = (c) => {
@@ -615,8 +660,13 @@ export function CallsScreen({ data, now, actions }) {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="button" className="btn primary" onClick={() => actions.newCall()}>+ Arama ekle</button>
+      <MissedCallsSection missed={data.missed_calls} now={now} actions={actions} showEmpty configured={missedConfigured} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Aranacaklar</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="btn" onClick={actions.openMissedSetup}>Telefon bağlantısı</button>
+          <button type="button" className="btn primary" onClick={() => actions.newCall()}>+ Arama ekle</button>
+        </div>
       </div>
       <div className="notes-grid">
         {open.length ? open.map(card) : <div className="card"><p className="empty">Aranacak kimse yok.</p></div>}
