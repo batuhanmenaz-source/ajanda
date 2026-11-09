@@ -69,7 +69,9 @@ async function gfetch(path, opts = {}, retried = false) {
   if (r.status === 401 || r.status === 403) {
     const j = await r.json().catch(() => ({}));
     const msg = (j.error && j.error.message) || 'forbidden';
-    if (r.status === 401) throw new GoogleAuthError(msg);
+    const reasons = JSON.stringify(j.error || {});
+    // Takvim izni verilmemişse (giriş sırasında kutu işaretlenmemişse) yeniden bağlanmak gerekir
+    if (r.status === 401 || /insufficient|SCOPE_INSUFFICIENT|insufficientPermissions/i.test(reasons)) throw new GoogleAuthError(msg);
     throw new Error(msg);
   }
   if (r.status === 204) return null;
@@ -82,8 +84,11 @@ async function gfetch(path, opts = {}, retried = false) {
   return j;
 }
 
+// Bağlantıyı ve takvim iznini birlikte kontrol eder
 export async function checkGoogle() {
   await accessToken();
+  calListCache = null;
+  await calendarList();
   return true;
 }
 
