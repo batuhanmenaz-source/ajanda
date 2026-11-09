@@ -25,9 +25,11 @@ export default async function handler(req, res) {
   }
   const q = { ...(req.query || {}), ...(body && typeof body === 'object' ? body : {}) };
 
-  const token = clean(q.token, 100);
+  // Kopyala-yapıştırda araya giren boşluk/satır sonlarını temizle
+  const token = clean(q.token || q.Token || q.TOKEN, 200).replace(/\s+/g, '');
   if (token.length < 20) {
-    res.status(401).json({ ok: false, error: 'bad_token' });
+    // 400: anahtar hiç gelmedi ya da eksik (MacroDroid'de parametre adı/değeri yanlış)
+    res.status(400).json({ ok: false, error: 'missing_token' });
     return;
   }
 
