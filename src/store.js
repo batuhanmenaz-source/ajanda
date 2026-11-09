@@ -13,6 +13,9 @@ const ORDER = {
   campaign_tasks: ['sort', true]
 };
 
+// 03_yarim.sql henüz çalıştırılmadıysa kayıtlar yine de kaydedilsin
+const missingYarim = (e) => /for_yarim/.test((e && (e.message || '')) + ' ' + (e && (e.details || '')));
+
 export function createSupabaseStore() {
   return {
     async loadAll() {
@@ -28,7 +31,11 @@ export function createSupabaseStore() {
       return out;
     },
     async insert(table, row) {
-      const { data, error } = await supabase.from(table).insert(row).select().single();
+      let { data, error } = await supabase.from(table).insert(row).select().single();
+      if (error && missingYarim(error) && 'for_yarim' in row) {
+        const { for_yarim: _x, ...rest } = row;
+        ({ data, error } = await supabase.from(table).insert(rest).select().single());
+      }
       if (error) throw error;
       return data;
     },
@@ -39,7 +46,11 @@ export function createSupabaseStore() {
       return data;
     },
     async update(table, id, patch) {
-      const { data, error } = await supabase.from(table).update(patch).eq('id', id).select().single();
+      let { data, error } = await supabase.from(table).update(patch).eq('id', id).select().single();
+      if (error && missingYarim(error) && 'for_yarim' in patch) {
+        const { for_yarim: _x, ...rest } = patch;
+        ({ data, error } = await supabase.from(table).update(rest).eq('id', id).select().single());
+      }
       if (error) throw error;
       return data;
     },
@@ -60,7 +71,7 @@ export function createSupabaseStore() {
 }
 
 // ---------- Örnek veri (demo) ----------
-const DEMO_KEY = 'ajanda-demo-v1';
+const DEMO_KEY = 'ajanda-demo-v2';
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
 
 function seed() {
@@ -73,7 +84,9 @@ function seed() {
       { id: uid(), title: 'Missha stok kontrolü', due_at: at(0, 16), marketplace: 'Hepsiburada', done: false },
       { id: uid(), title: 'Haftalık reklam raporunu hazırla', due_at: at(0, 17, 30), marketplace: 'Amazon', done: false },
       { id: uid(), title: 'Banner görsellerini iste', due_at: at(1, 9, 30), marketplace: 'MCLUB', done: false },
-      { id: uid(), title: 'Ürün açıklamalarını güncelle', due_at: null, marketplace: 'N11', done: false }
+      { id: uid(), title: 'Ürün açıklamalarını güncelle', due_at: null, marketplace: 'N11', done: false },
+      { id: uid(), title: 'Akşam yemeği rezervasyonu', due_at: at(0, 18), marketplace: null, done: false, for_yarim: true },
+      { id: uid(), title: 'Çiçek siparişi ver', due_at: at(3, 10), marketplace: null, done: false, for_yarim: true }
     ],
     calls: [
       { id: uid(), who: 'Kategori yöneticisi', topic: 'Ek kampanya katılımı', phone: '', due_at: at(0, 15), done: false },

@@ -18,8 +18,11 @@ export const SRC_COLORS = {
   Google: '#1971C2',
   Kampanya: '#C2410C',
   'Hatırlatma': '#2F4AC0',
-  Arama: '#2B8A3E'
+  Arama: '#2B8A3E',
+  Yarim: '#D6336C'
 };
+
+export const YARIM = { name: 'Yarim', heart: '❤️', color: '#D6336C', bg: '#FFE8EF', border: '#F9C6D6', ink: '#A61E4D' };
 
 export function mpColor(name) {
   const m = MARKETPLACES.find((x) => x.name === name);

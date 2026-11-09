@@ -16,17 +16,27 @@ function MpSelect({ value, onChange, id, emptyLabel = 'Yok' }) {
 }
 
 // ---------- Hızlı ekle ----------
-export function QuickAdd({ onClose, onSave, onDetail }) {
+function YarimToggle({ on, onClick }) {
+  return (
+    <button type="button" className={'chip yarim-chip' + (on ? ' on' : '')} onClick={onClick} aria-pressed={on}>
+      {on ? '❤️' : '🤍'} Yarim
+    </button>
+  );
+}
+
+export function QuickAdd({ onClose, onSave, onDetail, defaultYarim }) {
   const [q, setQ] = useState('');
   const [typeOverride, setTypeOverride] = useState(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef(null);
   useEffect(() => { const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 50); return () => clearTimeout(t); }, []);
 
+  const [yarimOverride, setYarimOverride] = useState(defaultYarim ? true : null);
   const p = useMemo(() => parseQuick(q), [q]);
   const type = typeOverride || p.type;
+  const yarim = yarimOverride !== null ? yarimOverride : p.yarim;
 
-  const build = () => ({ ...p, type });
+  const build = () => ({ ...p, type, yarim });
 
   const submit = async (e) => {
     if (e) e.preventDefault();
@@ -46,11 +56,12 @@ export function QuickAdd({ onClose, onSave, onDetail }) {
           {['Hatırlatma', 'Arama', 'Not'].map((t) => (
             <button key={t} type="button" className={'chip' + (type === t ? ' on' : '')} onClick={() => setTypeOverride(t)} aria-pressed={type === t}>{t}</button>
           ))}
+          {type !== 'Not' && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
         </div>
         {q.trim() ? (
           <div className="parsed">
             <span>Zaman: {type === 'Not' ? '—' : p.date ? whenLabel(p.date) + (p.hasTime ? '' : ' (varsayılan saat)') : 'Tarihsiz'}</span>
-            <span><span className="dot" style={{ background: p.mp ? mpColor(p.mp) : '#C9C6BE' }} />{p.mp || 'Pazaryeri yok'}</span>
+            {!yarim || type === 'Not' ? <span><span className="dot" style={{ background: p.mp ? mpColor(p.mp) : '#C9C6BE' }} />{p.mp || 'Pazaryeri yok'}</span> : null}
             {p.brand ? <span>Marka: {p.brand}</span> : null}
           </div>
         ) : (
@@ -79,6 +90,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete }) {
   const [mp, setMp] = useState(initial.marketplace || '');
   const [date, setDate] = useState(d0 ? toDateInput(d0) : '');
   const [time, setTime] = useState(d0 ? toTimeInput(d0) : '09:00');
+  const [yarim, setYarim] = useState(!!initial.for_yarim);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -87,8 +99,8 @@ export function ItemSheet({ initial, onClose, onSave, onDelete }) {
     setBusy(true);
     const due = date ? combine(date, time).toISOString() : null;
     try {
-      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: mp || null, due_at: due });
-      else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due });
+      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim });
+      else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim });
     } finally { setBusy(false); }
   };
 
@@ -135,7 +147,11 @@ export function ItemSheet({ initial, onClose, onSave, onDelete }) {
           ))}
           <button type="button" className="chip" onClick={() => setDate('')}>Tarihsiz</button>
         </div>
-        {kind === 'reminder' && (
+        <div className="typechips">
+          <YarimToggle on={yarim} onClick={() => setYarim(!yarim)} />
+          <span className="hint" style={{ alignSelf: 'center' }}>{yarim ? 'Yarim alanında görünür, bildirimin sonunda ❤️ olur' : 'Yarim ile ilgiliyse işaretle'}</span>
+        </div>
+        {kind === 'reminder' && !yarim && (
           <div className="field">
             <label htmlFor="f-mp">Pazaryeri</label>
             <MpSelect id="f-mp" value={mp} onChange={setMp} />

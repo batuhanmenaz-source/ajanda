@@ -111,11 +111,16 @@ export function parseQuick(text, now = new Date()) {
     if (s.includes(bl) || s.includes(bl.replace(/[:\s]/g, ''))) { brand = b; break; }
   }
 
+  // Yarim ile ilgili mi? ("yarım saat" gibi ı'lı kullanım eşleşmez)
+  const yarim = /(^|\s)(yarim|sevgilim)[a-zçğıöşü']*/.test(s);
+  const yarimPrefix = raw.match(/^\s*(yarim|sevgilim)\s*(için)?\s*[:\-]\s*/i);
+  if (yarimPrefix) removals.push(yarimPrefix[0]);
+
   // Başlık
   let title = raw;
   for (const r of removals) title = title.replace(r, ' ');
   title = title.replace(/\s+/g, ' ').replace(/^[\s,.;:-]+|[\s,;:-]+$/g, '').trim();
   if (title) title = title.charAt(0).toLocaleUpperCase('tr-TR') + title.slice(1);
 
-  return { type, date, hasTime, mp, brand, title };
+  return { type, date, hasTime, mp, brand, title, yarim };
 }

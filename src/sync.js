@@ -3,6 +3,7 @@ import { saveTimed, saveAllDay, deleteEvent } from './google.js';
 import { addDays, fromDateInput, startOfDay } from './dates.js';
 
 const mpPrefix = (mp) => (mp ? '[' + mp + '] ' : '');
+const heart = (x) => (x.for_yarim ? ' ❤️' : '');
 
 // Döner: yeni google_event_id (veya null)
 export async function syncReminder(r) {
@@ -11,8 +12,8 @@ export async function syncReminder(r) {
     return null;
   }
   return saveTimed(r.google_event_id, {
-    summary: '🔔 ' + mpPrefix(r.marketplace) + r.title,
-    description: 'Ajanda hatırlatması',
+    summary: '🔔 ' + mpPrefix(r.marketplace) + r.title + heart(r),
+    description: r.for_yarim ? 'Yarim ❤️' : 'Ajanda hatırlatması',
     start: new Date(r.due_at)
   });
 }
@@ -23,7 +24,7 @@ export async function syncCall(c) {
     return null;
   }
   return saveTimed(c.google_event_id, {
-    summary: '📞 ' + c.who + (c.topic ? ' — ' + c.topic : ''),
+    summary: '📞 ' + c.who + (c.topic ? ' — ' + c.topic : '') + heart(c),
     description: (c.phone ? 'Telefon: ' + c.phone + '\n' : '') + 'Ajanda araması',
     start: new Date(c.due_at)
   });

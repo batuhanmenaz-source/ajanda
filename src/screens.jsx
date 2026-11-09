@@ -36,10 +36,10 @@ export function dayItems(day, { data, events }) {
     out.push({ key: 'g' + e.id + day.getDate(), time: e.allDay ? 'Tüm gün' : fmtTime(e.start), title: e.title, src: 'Google', color: SRC_COLORS.Google, sub: e.calendar })
   );
   data.reminders.filter((r) => r.due_at && sameDay(new Date(r.due_at), day)).forEach((r) =>
-    out.push({ key: 'r' + r.id, time: fmtTime(new Date(r.due_at)), title: r.title, src: 'Hatırlatma', color: SRC_COLORS['Hatırlatma'], sub: r.marketplace, done: r.done, item: r, kind: 'reminder' })
+    out.push({ key: 'r' + r.id, time: fmtTime(new Date(r.due_at)), title: r.title + (r.for_yarim ? ' ❤️' : ''), src: r.for_yarim ? 'Yarim' : 'Hatırlatma', color: r.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Hatırlatma'], sub: r.marketplace, done: r.done, item: r, kind: 'reminder' })
   );
   data.calls.filter((c) => c.due_at && sameDay(new Date(c.due_at), day)).forEach((c) =>
-    out.push({ key: 'c' + c.id, time: fmtTime(new Date(c.due_at)), title: c.who + (c.topic ? ' — ' + c.topic : ''), src: 'Arama', color: SRC_COLORS.Arama, done: c.done, item: c, kind: 'call' })
+    out.push({ key: 'c' + c.id, time: fmtTime(new Date(c.due_at)), title: c.who + (c.topic ? ' — ' + c.topic : '') + (c.for_yarim ? ' ❤️' : ''), src: c.for_yarim ? 'Yarim' : 'Arama', color: c.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS.Arama, sub: c.for_yarim ? 'Arama' : '', done: c.done, item: c, kind: 'call' })
   );
   data.campaigns.forEach((c) => {
     const s = fromDateInput(c.start_date);
@@ -62,7 +62,7 @@ function ReminderRow({ r, now, onToggle, onOpen, showDay }) {
     <div className="row">
       <Check on={r.done} onClick={() => onToggle(r)} label={r.done ? 'Tamamlanmadı olarak işaretle' : 'Tamamlandı olarak işaretle'} />
       <button type="button" className="body" onClick={() => onOpen(r)}>
-        <span className={'title' + (r.done ? ' done' : '')}>{r.title}</span>
+        <span className={'title' + (r.done ? ' done' : '')}>{r.title}{r.for_yarim ? ' ❤️' : ''}</span>
         <span className="meta">
           {d ? <span className={'time' + (late ? ' late' : '')}>{showDay || late ? whenLabel(d, now) : fmtTime(d)}</span> : null}
           <Mp name={r.marketplace} />
@@ -79,7 +79,7 @@ function CallRow({ c, now, onToggle, onOpen, showDay }) {
     <div className="row">
       <Check on={c.done} onClick={() => onToggle(c)} label={c.done ? 'Aranmadı olarak işaretle' : 'Arandı olarak işaretle'} />
       <button type="button" className="body" onClick={() => onOpen(c)}>
-        <span className={'title' + (c.done ? ' done' : '')}>{c.who}</span>
+        <span className={'title' + (c.done ? ' done' : '')}>{c.for_yarim ? c.who + ' ❤️' : c.who}</span>
         <span className="meta">
           {d ? <span className={'time' + (late ? ' late' : '')}>{showDay || late ? whenLabel(d, now) : fmtTime(d)}</span> : null}
           {c.topic ? <span>{c.topic}</span> : null}
@@ -107,22 +107,55 @@ function CampaignMini({ c, tasks, onOpen }) {
   );
 }
 
+// ---------- YARİM ----------
+function YarimSection({ data, now, actions }) {
+  const today = startOfDay(now);
+  const until = addDays(today, 8);
+  const items = [
+    ...data.reminders.filter((r) => r.for_yarim).map((r) => ({ kind: 'reminder', item: r, due: r.due_at ? new Date(r.due_at) : null })),
+    ...data.calls.filter((c) => c.for_yarim).map((c) => ({ kind: 'call', item: c, due: c.due_at ? new Date(c.due_at) : null }))
+  ]
+    .filter((x) => (x.item.done ? x.due && sameDay(x.due, today) : !x.due || x.due < until))
+    .sort((a, b) => (a.due ? a.due.getTime() : 9e15) - (b.due ? b.due.getTime() : 9e15));
+  const openCount = items.filter((x) => !x.item.done).length;
+  return (
+    <section className="yarim">
+      <div className="yarim-head">
+        <h2>Yarim <span aria-hidden="true">❤️</span></h2>
+        <button type="button" className="yarim-add" onClick={actions.newYarim}>+ Ekle</button>
+      </div>
+      {items.length ? (
+        <div className="list yarim-list">
+          {items.map((x) => (x.kind === 'reminder'
+            ? <ReminderRow key={'r' + x.item.id} r={x.item} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />
+            : <CallRow key={'c' + x.item.id} c={x.item} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} showDay />))}
+        </div>
+      ) : <p className="yarim-empty">Önümüzdeki günlerde onunla ilgili bir şey yok. Özel günleri, sürprizleri, aranacakları buraya ekleyebilirsin.</p>}
+      {openCount ? <span className="yarim-foot">{openCount} açık · önümüzdeki 7 gün</span> : null}
+    </section>
+  );
+}
+
 // ---------- BUGÜN ----------
-export function TodayScreen({ data, events, google, now, actions, goTab }) {
+export function TodayScreen({ data: allData, events, google, now, actions, goTab }) {
   const today = startOfDay(now);
   const open = (arr) => arr.filter((x) => !x.done);
+  // Yarim kayıtları kendi alanında takip edilir; iş listelerinde görünmez
+  const data = { ...allData, reminders: allData.reminders.filter((r) => !r.for_yarim), calls: allData.calls.filter((c) => !c.for_yarim) };
   const rem = data.reminders.filter((r) => r.due_at && sameDay(new Date(r.due_at), today)).sort((a, b) => a.due_at.localeCompare(b.due_at));
   const calls = data.calls.filter((c) => c.due_at && sameDay(new Date(c.due_at), today)).sort((a, b) => a.due_at.localeCompare(b.due_at));
   const lateR = open(data.reminders).filter((r) => r.due_at && new Date(r.due_at) < today);
   const lateC = open(data.calls).filter((c) => c.due_at && new Date(c.due_at) < today);
   const undated = open(data.reminders).filter((r) => !r.due_at);
+  const yarimToday = [...allData.reminders, ...allData.calls].filter((x) => x.for_yarim && !x.done && x.due_at && sameDay(new Date(x.due_at), today));
   const gToday = (events || []).filter((e) => (e.allDay ? today >= startOfDay(e.start) && today <= startOfDay(e.end) : sameDay(e.start, today)));
   const camps = data.campaigns.filter((c) => { const s = campaignStatus(c, now); return s.key === 'live' || (s.key === 'soon' && daysBetween(today, fromDateInput(c.start_date)) <= 14); }).slice(0, 4);
 
   const upcoming = [
     ...open(rem).map((r) => ({ t: new Date(r.due_at), title: r.title, meta: r.marketplace })),
     ...open(calls).map((c) => ({ t: new Date(c.due_at), title: c.who + ' aranacak', meta: c.topic })),
-    ...gToday.filter((e) => !e.allDay).map((e) => ({ t: e.start, title: e.title, meta: e.calendar }))
+    ...gToday.filter((e) => !e.allDay).map((e) => ({ t: e.start, title: e.title, meta: e.calendar })),
+    ...yarimToday.map((x) => ({ t: new Date(x.due_at), title: (x.title || x.who + ' aranacak') + ' ❤️', meta: 'Yarim' }))
   ].filter((x) => x.t >= now).sort((a, b) => a.t - b.t);
   const next = upcoming[0];
   const lateCount = lateR.length + lateC.length;
@@ -144,6 +177,8 @@ export function TodayScreen({ data, events, google, now, actions, goTab }) {
             </>
           )}
         </section>
+
+        <YarimSection data={allData} now={now} actions={actions} />
 
         {lateCount ? (
           <Section title="Gecikenler" meta={lateCount + ' iş'}>
@@ -434,7 +469,7 @@ export function CallsScreen({ data, now, actions }) {
           {c.phone ? <a className="callicon" href={'tel:' + c.phone.replace(/\s/g, '')} aria-label={c.who + ' ara'} style={{ width: 40, height: 40, borderRadius: 20 }}><Icon.Phone width="18" height="18" /></a>
             : <span className="callicon" style={{ width: 40, height: 40, borderRadius: 20 }}><Icon.Phone width="18" height="18" /></span>}
           <button type="button" style={{ border: 0, background: 'transparent', padding: 0, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 auto' }} onClick={() => actions.openCall(c)}>
-            <span style={{ fontSize: 15, fontWeight: 600, textDecoration: c.done ? 'line-through' : 'none', color: c.done ? 'var(--muted)' : 'inherit' }}>{c.who}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, textDecoration: c.done ? 'line-through' : 'none', color: c.done ? 'var(--muted)' : 'inherit' }}>{c.who}{c.for_yarim ? ' ❤️' : ''}</span>
             <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{c.topic || 'Konu yok'}{c.phone ? ' · ' + c.phone : ''}</span>
           </button>
         </div>

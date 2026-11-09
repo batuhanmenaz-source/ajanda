@@ -124,6 +124,22 @@ button.pill { min-height: 32px; }
 }
 .banner button { border: 0; background: #7A3E00; color: #fff; border-radius: 10px; min-height: 40px; padding: 0 14px; font-weight: 600; }
 
+/* Yarim alanı */
+.yarim {
+  background: #FFE8EF; border: 1px solid #F9C6D6; border-radius: 20px; padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.yarim-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.yarim-head h2 { margin: 0; font-family: var(--display); font-size: 20px; color: #A61E4D; }
+.yarim-add { border: 0; background: #D6336C; color: #fff; border-radius: 999px; min-height: 40px; padding: 0 16px; font-size: 14px; font-weight: 600; }
+.yarim-list { background: #FFFFFF; border: 1px solid #F9C6D6; border-radius: 14px; }
+.yarim-list > * + * { border-top-color: #FCE1EA; }
+.yarim .check.on span { background: #D6336C; border-color: #D6336C; }
+.yarim-empty { margin: 0; font-size: 14px; color: #7A2342; line-height: 1.5; }
+.yarim-foot { font-size: 12px; color: #7A2342; }
+.chip.yarim-chip { border-color: #F9C6D6; background: #FFF5F8; color: #A61E4D; }
+.chip.yarim-chip.on { background: #D6336C; border-color: #D6336C; color: #fff; }
+
 /* Satır */
 .row { display: flex; gap: 6px; align-items: center; padding: 2px 10px 2px 2px; }
 .row .body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 8px 0; border: 0; background: transparent; text-align: left; }

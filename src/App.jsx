@@ -259,14 +259,14 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
       await saveNote({ marketplace: p.mp || null, brand: p.brand || null, title: p.title || 'Not', body: '' });
       setTab('notlar');
     } else if (p.type === 'Arama') {
-      await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due });
+      await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due, for_yarim: !!p.yarim });
     } else {
-      await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.mp || null, due_at: due });
+      await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.yarim ? null : (p.mp || null), due_at: due, for_yarim: !!p.yarim });
     }
   };
   const quickDetail = (p) => {
     if (p.type === 'Not') setSheet({ kind: 'note', item: { marketplace: p.mp, brand: p.brand, title: p.title } });
-    else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null } });
+    else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim } });
   };
 
   const actions = {
@@ -275,6 +275,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
     openReminder: (r) => setSheet({ kind: 'item', item: { ...r, kind: 'reminder' } }),
     openCall: (c) => setSheet({ kind: 'item', item: { ...c, kind: 'call', title: c.who } }),
     newCall: () => setSheet({ kind: 'item', item: { kind: 'call' } }),
+    newYarim: () => setSheet({ kind: 'quick', yarim: true }),
     newItemOn: (d) => { const x = new Date(d); x.setHours(9, 0, 0, 0); setSheet({ kind: 'item', item: { kind: 'reminder', due_at: x.toISOString() } }); },
     openCampaign: (c) => setSheet({ kind: 'campaign', item: c }),
     openNote: (n) => setSheet({ kind: 'note', item: n }),
@@ -368,7 +369,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
         ))}
       </nav>
 
-      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} />}
+      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} />}
       {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} />}
