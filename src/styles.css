@@ -141,6 +141,31 @@ button.pill { min-height: 32px; }
 .yarim-list { background: #FFFFFF; border: 1px solid #F9C6D6; border-radius: 14px; }
 .yarim-list > * + * { border-top-color: #FCE1EA; }
 .yarim .check.on span { background: #D6336C; border-color: #D6336C; }
+/* Üst sıra: Sıradaki + Yarim karesi */
+.today-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: stretch; }
+.today-top .hero { justify-content: center; min-width: 0; }
+.ytile {
+  position: relative; width: 156px; aspect-ratio: 1 / 1; box-sizing: border-box;
+  background: #FFE8EF; border: 1px solid #F9C6D6; border-radius: 20px; padding: 10px 12px 12px;
+  display: flex; flex-direction: column; justify-content: space-between; color: #A61E4D;
+}
+.ytile-open { position: absolute; inset: 0; border: 0; background: transparent; border-radius: 20px; cursor: pointer; z-index: 0; }
+.ytile-open:hover { background: rgba(214, 51, 108, 0.05); }
+.ytile-top { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
+.ytile-top .love-btn { pointer-events: auto; margin-right: -8px; }
+.ytile-name { font-family: var(--display); font-size: 16px; font-weight: 700; }
+.ytile-mid { position: relative; z-index: 1; display: flex; flex-direction: column; pointer-events: none; }
+.ytile-days { font-family: var(--display); font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.ytile-unit { font-size: 13px; font-weight: 600; margin-top: 2px; }
+.ytile-foot { position: relative; z-index: 1; font-size: 12px; font-weight: 600; color: #7A2342; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.today-top .hero .t { font-size: 20px; }
+@media (min-width: 760px) {
+  .ytile { width: 200px; padding: 14px 16px 16px; }
+  .ytile-days { font-size: 52px; }
+  .today-top .hero .t { font-size: 22px; }
+}
+.yarim-panel { background: transparent; border: 0; padding: 0; }
+
 .love-btn {
   position: relative; min-width: 44px; height: 44px; border: 0; background: transparent; border-radius: 22px;
   display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding: 0 6px; cursor: pointer;

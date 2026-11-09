@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
-import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen } from './screens.jsx';
+import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen, YarimPanel } from './screens.jsx';
+import { Sheet } from './ui.jsx';
 import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet } from './sheets.jsx';
 import { MARKETPLACES } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput } from './dates.js';
@@ -290,6 +291,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
     newCall: () => setSheet({ kind: 'item', item: { kind: 'call' } }),
     newYarim: () => setSheet({ kind: 'quick', yarim: true }),
     openYarimSettings: () => setSheet({ kind: 'yarimSettings' }),
+    openYarim: () => setSheet({ kind: 'yarim' }),
     loveTapped: (e) => {
       const el = e && e.currentTarget;
       if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
@@ -409,6 +411,11 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
       {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} />}
+      {sheet && sheet.kind === 'yarim' && (
+        <Sheet title="Yarim" onClose={() => setSheet(null)}>
+          <YarimPanel data={data} now={now} actions={actions} love={love} />
+        </Sheet>
+      )}
       {sheet && sheet.kind === 'yarimSettings' && (
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
       )}

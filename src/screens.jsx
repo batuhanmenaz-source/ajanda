@@ -165,27 +165,31 @@ function LoveButton({ love, actions }) {
   );
 }
 
-function YarimSection({ data, now, actions, love }) {
+function yarimItems(data, now) {
   const today = startOfDay(now);
   const until = addDays(today, 8);
-  const items = [
+  return [
     ...data.reminders.filter((r) => r.for_yarim).map((r) => ({ kind: 'reminder', item: r, due: r.due_at ? new Date(r.due_at) : null })),
     ...data.calls.filter((c) => c.for_yarim).map((c) => ({ kind: 'call', item: c, due: c.due_at ? new Date(c.due_at) : null }))
   ]
     .filter((x) => (x.item.done ? x.due && sameDay(x.due, today) : !x.due || x.due < until))
     .sort((a, b) => (a.due ? a.due.getTime() : 9e15) - (b.due ? b.due.getTime() : 9e15));
+}
+
+const GearIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+);
+
+// Kareye dokununca açılan ayrıntılı Yarim paneli
+export function YarimPanel({ data, now, actions, love }) {
+  const items = yarimItems(data, now);
   const openCount = items.filter((x) => !x.item.done).length;
   return (
-    <section className="yarim">
+    <div className="yarim yarim-panel">
       <div className="yarim-head">
+        <LoveButton love={love} actions={actions} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <h2>Yarim</h2>
-          <LoveButton love={love} actions={actions} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button type="button" className="iconbtn yarim-gear" aria-label="Yarim ayarları" onClick={actions.openYarimSettings}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
-          </button>
+          <button type="button" className="iconbtn yarim-gear" aria-label="Yarim ayarları" onClick={actions.openYarimSettings}><GearIcon /></button>
           <button type="button" className="yarim-add" onClick={actions.newYarim}>+ Ekle</button>
         </div>
       </div>
@@ -198,7 +202,33 @@ function YarimSection({ data, now, actions, love }) {
         </div>
       ) : <p className="yarim-empty">Önümüzdeki günlerde onunla ilgili bir şey yok. Özel günleri, sürprizleri, aranacakları buraya ekleyebilirsin.</p>}
       {openCount ? <span className="yarim-foot">{openCount} açık · önümüzdeki 7 gün</span> : null}
-    </section>
+    </div>
+  );
+}
+
+// Ana sayfanın sağ üstündeki kare
+function YarimTile({ data, now, actions, love }) {
+  const diff = Math.max(0, now - YARIM_START);
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const items = yarimItems(data, now).filter((x) => !x.item.done);
+  const next = nextMonthiversary(YARIM_START, now);
+  const nd = next ? daysBetween(now, next.date) : 99;
+  let foot = items.length ? items.length + ' açık' : 'Liste boş';
+  if (next && nd <= 3) foot = (nd === 0 ? 'Bugün ' : nd === 1 ? 'Yarın ' : nd + ' gün sonra ') + (next.months % 12 === 0 ? (next.months / 12) + '. yıl 💐' : next.months + '. ay 💐');
+  return (
+    <div className="ytile">
+      <button type="button" className="ytile-open" onClick={actions.openYarim} aria-label={'Yarim alanını aç. ' + days + ' gün ' + hours + ' saattir birlikte. ' + foot} />
+      <div className="ytile-top">
+        <span className="ytile-name">Yarim</span>
+        <LoveButton love={love} actions={actions} />
+      </div>
+      <div className="ytile-mid" aria-hidden="true">
+        <span className="ytile-days">{days.toLocaleString('tr-TR')}</span>
+        <span className="ytile-unit">gün {hours} saat</span>
+      </div>
+      <div className="ytile-foot" aria-hidden="true">{foot}</div>
+    </div>
   );
 }
 
@@ -227,8 +257,8 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
   const lateCount = lateR.length + lateC.length;
 
   return (
-    <div className="grid-2">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="today-top">
         <section className="hero">
           <span className="k">Sıradaki</span>
           {next ? (
@@ -243,9 +273,10 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
             </>
           )}
         </section>
-
-        {/* Telefonda Sıradaki kartının altında, geniş ekranda sağ sütunun en üstünde */}
-        <div className="m-only"><YarimSection data={allData} now={now} actions={actions} love={love} /></div>
+        <YarimTile data={allData} now={now} actions={actions} love={love} />
+    </div>
+    <div className="grid-2">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         {lateCount ? (
           <Section title="Gecikenler" meta={lateCount + ' iş'}>
@@ -272,7 +303,6 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div className="d-only"><YarimSection data={allData} now={now} actions={actions} love={love} /></div>
         <Section title="Takvim" meta="Google Takvim">
           <div className="card list">
             {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
@@ -298,6 +328,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
           {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />) : <div className="card"><p className="empty">Önümüzdeki 2 haftada kampanya yok.</p></div>}
         </Section>
       </div>
+    </div>
     </div>
   );
 }
