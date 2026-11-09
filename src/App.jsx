@@ -101,7 +101,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     const today = startOfDay(now);
     const a = weekStart(day) < today ? weekStart(day) : today;
     const ws = addDays(weekStart(day), 7);
-    const b = ws > addDays(today, 1) ? ws : addDays(today, 1);
+    const b = ws > addDays(today, 4) ? ws : addDays(today, 4);
     return [a, b];
   }, [day, now]);
 

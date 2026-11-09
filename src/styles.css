@@ -330,3 +330,16 @@ button.pill { min-height: 32px; }
 }
 @media (min-width: 960px) { .toast { bottom: 32px; } }
 .spinner { padding: 40px; text-align: center; color: var(--muted); }
+
+/* Yaklaşan günler */
+.upcoming { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 760px) { .upcoming { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.upday { display: flex; flex-direction: column; overflow: hidden; }
+.upday-head { display: flex; align-items: center; gap: 8px; padding: 6px 4px 6px 14px; border-bottom: 1px solid var(--line-2); background: #FAF9F7; }
+.upday-name { font-size: 15px; font-weight: 700; }
+.upday-date { font-size: 12px; color: var(--muted); flex: 1 1 auto; }
+.upday-add { width: 40px; height: 40px; color: var(--accent); }
+.ditem-title { font-size: 15px; overflow-wrap: anywhere; }
+.row.timeline.compact { padding: 10px 12px; gap: 10px; }
+.row.timeline.compact .tcol { width: 54px; font-size: 12px; white-space: nowrap; }
+.row.timeline.compact .ditem-title { font-size: 14px; }

@@ -329,7 +329,50 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
         </Section>
       </div>
     </div>
+    <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} />
     </div>
+  );
+}
+
+// Takvimdeki tek satır (Takvim ekranı ve Yaklaşan günler ortak kullanır)
+function DayItemRow({ e, actions, compact }) {
+  return (
+    <button type="button" className={'rowbtn row timeline' + (compact ? ' compact' : '')}
+      onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : null)}>
+      <span className="tcol">{e.time}</span>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
+        <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.src}{e.sub ? ' · ' + e.sub : ''}</span>
+      </span>
+    </button>
+  );
+}
+
+// Bugün sayfasının altındaki "Yaklaşan günler"
+function UpcomingDays({ data, events, google, now, actions, count = 3 }) {
+  const today = startOfDay(now);
+  const days = Array.from({ length: count }, (_, i) => addDays(today, i + 1));
+  return (
+    <Section title={'Yaklaşan ' + count + ' gün'} meta={rangeLabel(days[0], days[days.length - 1])}>
+      <div className="upcoming">
+        {days.map((d) => {
+          const items = dayItems(d, { data, events });
+          return (
+            <div key={d.toISOString()} className="card upday">
+              <div className="upday-head">
+                <span className="upday-name">{dayLabel(d, now)}</span>
+                <span className="upday-date">{WEEKDAYS_SHORT[d.getDay()]} · {fmtShort(d)}</span>
+                <button type="button" className="iconbtn upday-add" aria-label={fmtLong(d) + ' gününe ekle'} onClick={() => actions.newItemOn(d)}><Icon.Plus width="18" height="18" /></button>
+              </div>
+              <div className="list">
+                {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact />)
+                  : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Boş gün'}</p>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
   );
 }
 
@@ -367,16 +410,7 @@ export function CalendarScreen({ data, events, google, now, day, setDay, actions
       <Section title={dayLabel(day, now) === fmtShort(day) ? fmtLong(day) : dayLabel(day, now) + ' · ' + fmtShort(day)} action={<button type="button" className="linkbtn" onClick={() => actions.newItemOn(day)}>+ Bu güne ekle</button>}>
         <div className="card list">
           {google === 'checking' ? <p className="empty">Google Takvim yükleniyor…</p> : null}
-          {items.length ? items.map((e) => (
-            <button type="button" key={e.key} className="rowbtn row timeline"
-              onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : null)}>
-              <span className="tcol">{e.time}</span>
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                <span style={{ fontSize: 15, textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
-                <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.src}{e.sub ? ' · ' + e.sub : ''}</span>
-              </span>
-            </button>
-          )) : google !== 'checking' ? <p className="empty">Bu gün için kayıt yok.</p> : null}
+          {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} />) : google !== 'checking' ? <p className="empty">Bu gün için kayıt yok.</p> : null}
         </div>
       </Section>
     </div>
