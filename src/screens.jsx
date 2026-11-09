@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Mp, Check, Section, Progress } from './ui.jsx';
-import { MARKETPLACES, SRC_COLORS, mpColor } from './constants.js';
+import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START } from './constants.js';
 import {
   addDays, startOfDay, sameDay, fmtTime, fmtShort, fmtLong, whenLabel, rangeLabel, relDays, weekStart,
   WEEKDAYS_SHORT, fromDateInput, toDateInput, daysBetween, dayLabel
@@ -108,6 +108,39 @@ function CampaignMini({ c, tasks, onOpen }) {
 }
 
 // ---------- YARİM ----------
+function nextMonthiversary(start, now) {
+  for (let k = 1; k < 1200; k++) {
+    const d = new Date(start);
+    d.setMonth(start.getMonth() + k);
+    if (d > now) return { date: d, months: k };
+  }
+  return null;
+}
+
+function YarimCounter({ now }) {
+  const start = YARIM_START;
+  const diff = Math.max(0, now - start);
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const next = nextMonthiversary(start, now);
+  let nextText = '';
+  if (next) {
+    const n = daysBetween(now, next.date);
+    const what = next.months % 12 === 0 ? (next.months / 12) + '. yıl dönümünüz' : next.months + '. ay dönümünüz';
+    nextText = (n === 0 ? 'Bugün ' : n === 1 ? 'Yarın ' : n + ' gün sonra ') + what + (n <= 1 ? ' 💐' : '');
+  }
+  return (
+    <div className="yarim-counter" aria-label={'Birlikte geçen süre: ' + days + ' gün ' + hours + ' saat'}>
+      <div className="yc-num">
+        <span className="yc-big">{days.toLocaleString('tr-TR')}</span><span className="yc-unit">gün</span>
+        <span className="yc-big">{hours}</span><span className="yc-unit">saat</span>
+      </div>
+      <div className="yc-since">10 Temmuz 2026'dan beri birlikte</div>
+      {nextText ? <div className="yc-next">{nextText}</div> : null}
+    </div>
+  );
+}
+
 function YarimSection({ data, now, actions }) {
   const today = startOfDay(now);
   const until = addDays(today, 8);
@@ -124,6 +157,7 @@ function YarimSection({ data, now, actions }) {
         <h2>Yarim <span aria-hidden="true">❤️</span></h2>
         <button type="button" className="yarim-add" onClick={actions.newYarim}>+ Ekle</button>
       </div>
+      <YarimCounter now={now} />
       {items.length ? (
         <div className="list yarim-list">
           {items.map((x) => (x.kind === 'reminder'

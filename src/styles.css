@@ -135,6 +135,15 @@ button.pill { min-height: 32px; }
 .yarim-list { background: #FFFFFF; border: 1px solid #F9C6D6; border-radius: 14px; }
 .yarim-list > * + * { border-top-color: #FCE1EA; }
 .yarim .check.on span { background: #D6336C; border-color: #D6336C; }
+.yarim-counter {
+  background: #FFFFFF; border: 1px solid #F9C6D6; border-radius: 16px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.yc-num { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px; color: #A61E4D; }
+.yc-big { font-family: var(--display); font-size: 40px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+.yc-unit { font-size: 16px; font-weight: 600; margin-right: 10px; }
+.yc-since { font-size: 13px; color: #7A2342; }
+.yc-next { font-size: 13px; font-weight: 600; color: #A61E4D; margin-top: 2px; }
 .yarim-empty { margin: 0; font-size: 14px; color: #7A2342; line-height: 1.5; }
 .yarim-foot { font-size: 12px; color: #7A2342; }
 .chip.yarim-chip { border-color: #F9C6D6; background: #FFF5F8; color: #A61E4D; }

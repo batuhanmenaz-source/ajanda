@@ -24,6 +24,9 @@ export const SRC_COLORS = {
 
 export const YARIM = { name: 'Yarim', heart: '❤️', color: '#D6336C', bg: '#FFE8EF', border: '#F9C6D6', ink: '#A61E4D' };
 
+// İlişkinin başladığı an (Türkiye saati)
+export const YARIM_START = new Date('2026-07-10T22:00:00+03:00');
+
 export function mpColor(name) {
   const m = MARKETPLACES.find((x) => x.name === name);
   return m ? m.color : '#868B96';
