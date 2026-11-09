@@ -3,6 +3,7 @@ import { Sheet } from './ui.jsx';
 import { parseQuick } from './parse.js';
 import { MARKETPLACES, BRANDS, DEFAULT_PREPS, mpColor } from './constants.js';
 import { toDateInput, toTimeInput, combine, whenLabel, addDays, startOfDay } from './dates.js';
+import { normalizePhone, prettyPhone, DEFAULT_LOVE_MESSAGE } from './whatsapp.js';
 
 const EXAMPLES = ['yarın 10:00 HB fiyat güncelle', 'Cuma 15:00 kargo firmasını ara', 'not: Trendyol komisyon oranını kontrol et'];
 
@@ -279,6 +280,40 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(initial)}>Sil</button>}
           <button type="submit" className="btn big primary" disabled={busy || invalid}>Kaydet</button>
         </div>
+      </form>
+    </Sheet>
+  );
+}
+
+// ---------- Yarim ayarları ----------
+export function YarimSettingsSheet({ initial, count, onClose, onSave }) {
+  const [phone, setPhone] = useState(initial.phone || '');
+  const [message, setMessage] = useState(initial.message || DEFAULT_LOVE_MESSAGE);
+  const [busy, setBusy] = useState(false);
+  const norm = normalizePhone(phone);
+  const valid = norm.length >= 11;
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!valid || busy) return;
+    setBusy(true);
+    try { await onSave({ yarim_phone: norm, love_message: message.trim() || DEFAULT_LOVE_MESSAGE }); } finally { setBusy(false); }
+  };
+  return (
+    <Sheet title="Yarim ❤️" onClose={onClose}>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p className="hint" style={{ margin: 0, fontSize: 14 }}>Kalbe dokunduğunda WhatsApp bu numarayla ve aşağıdaki mesajla açılır; göndermek için WhatsApp'ta gönder'e basman yeterli.</p>
+        <div className="field">
+          <label htmlFor="y-phone">WhatsApp numarası</label>
+          <input id="y-phone" type="tel" inputMode="tel" autoComplete="off" placeholder="0532 123 45 67" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          {phone && !valid ? <span className="hint" style={{ color: 'var(--danger)' }}>Numarayı başında 0 ile, 11 hane olarak yaz.</span> : null}
+          {valid ? <span className="hint">{prettyPhone(phone)}</span> : null}
+        </div>
+        <div className="field">
+          <label htmlFor="y-msg">Mesaj</label>
+          <input id="y-msg" type="text" value={message} onChange={(e) => setMessage(e.target.value)} />
+        </div>
+        <p className="hint" style={{ margin: 0 }}>Şimdiye kadar {count} kez kalp gönderdin.</p>
+        <button type="submit" className="btn big primary" style={{ background: '#D6336C', borderColor: '#D6336C' }} disabled={!valid || busy}>Kaydet</button>
       </form>
     </Sheet>
   );

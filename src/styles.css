@@ -109,7 +109,13 @@ button.pill { min-height: 32px; }
 .list > * + * { border-top: 1px solid var(--line-2); }
 .empty { margin: 0; padding: 20px 16px; font-size: 14px; color: var(--muted); text-align: center; }
 
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; align-items: start; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.d-only { display: none; }
+@media (min-width: 760px) {
+  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .d-only { display: block; }
+  .m-only { display: none; }
+}
 
 .hero {
   background: var(--accent); color: #fff; border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 8px;
@@ -135,6 +141,18 @@ button.pill { min-height: 32px; }
 .yarim-list { background: #FFFFFF; border: 1px solid #F9C6D6; border-radius: 14px; }
 .yarim-list > * + * { border-top-color: #FCE1EA; }
 .yarim .check.on span { background: #D6336C; border-color: #D6336C; }
+.love-btn {
+  position: relative; min-width: 44px; height: 44px; border: 0; background: transparent; border-radius: 22px;
+  display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding: 0 6px; cursor: pointer;
+}
+.love-btn:hover { background: rgba(214, 51, 108, 0.08); }
+.love-btn:active .love-heart { transform: scale(1.35); }
+.love-heart { font-size: 22px; line-height: 1; transition: transform 0.15s ease; }
+.love-count { align-self: flex-end; margin: 0 0 9px 2px; font-size: 11px; font-weight: 700; color: #A61E4D; font-variant-numeric: tabular-nums; line-height: 1; }
+.love-btn.pop .love-heart { animation: lovepop 0.5s ease; }
+@keyframes lovepop { 0% { transform: scale(1); } 40% { transform: scale(1.5); } 100% { transform: scale(1); } }
+.yarim-gear { color: #A61E4D; }
+.yarim-gear:hover { background: rgba(214, 51, 108, 0.08); }
 .yarim-counter {
   background: #FFFFFF; border: 1px solid #F9C6D6; border-radius: 16px; padding: 14px 16px;
   display: flex; flex-direction: column; gap: 4px;

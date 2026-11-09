@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen } from './screens.jsx';
-import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet } from './sheets.jsx';
+import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet } from './sheets.jsx';
 import { MARKETPLACES } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput } from './dates.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache } from './google.js';
@@ -59,6 +59,19 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
   }, [store, say]);
 
   useEffect(() => { load(false); }, [load]);
+
+  // ---------- Yarim: WhatsApp ayarları ve kalp sayacı ----------
+  const [love, setLove] = useState({ phone: '', message: '', count: 0 });
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
+        if (alive) setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c });
+      } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
+    })();
+    return () => { alive = false; };
+  }, [store]);
 
   useEffect(() => {
     const onVis = () => { if (document.visibilityState === 'visible') { setNow(new Date()); load(true); loadedRange.current = null; refreshEvents(); } };
@@ -276,10 +289,33 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
     openCall: (c) => setSheet({ kind: 'item', item: { ...c, kind: 'call', title: c.who } }),
     newCall: () => setSheet({ kind: 'item', item: { kind: 'call' } }),
     newYarim: () => setSheet({ kind: 'quick', yarim: true }),
+    openYarimSettings: () => setSheet({ kind: 'yarimSettings' }),
+    loveTapped: (e) => {
+      const el = e && e.currentTarget;
+      if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+      setLove((l) => ({ ...l, count: l.count + 1 }));
+      store.addLove().catch((err) => {
+        console.error(err);
+        setLove((l) => ({ ...l, count: Math.max(0, l.count - 1) }));
+        say('Kalp sayacı kaydedilemedi.');
+      });
+    },
     newItemOn: (d) => { const x = new Date(d); x.setHours(9, 0, 0, 0); setSheet({ kind: 'item', item: { kind: 'reminder', due_at: x.toISOString() } }); },
     openCampaign: (c) => setSheet({ kind: 'campaign', item: c }),
     openNote: (n) => setSheet({ kind: 'note', item: n }),
     toggleTask, addTask, deleteTask, saveDaily
+  };
+
+  const saveYarimSettings = async (patch) => {
+    try {
+      const s = await store.saveSettings(patch);
+      setLove((l) => ({ ...l, phone: s.yarim_phone || '', message: s.love_message || '' }));
+      setSheet(null);
+      say('Kaydedildi ❤️');
+    } catch (e) {
+      console.error(e);
+      say('Kaydedilemedi. Supabase\'de 04 numaralı SQL\'i çalıştırdın mı?');
+    }
   };
 
   const reconnect = () => { clearGoogleCache(); onReconnect && onReconnect(); };
@@ -349,7 +385,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={data} events={events} google={google} now={now} actions={actions} goTab={setTab} />}
+              {tab === 'bugun' && <TodayScreen data={data} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} />}
               {tab === 'takvim' && <CalendarScreen data={data} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} />}
               {tab === 'kampanya' && <CampaignsScreen data={data} actions={actions} />}
               {tab === 'notlar' && <NotesScreen data={data} now={now} actions={actions} />}
@@ -373,6 +409,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect }) {
       {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} />}
+      {sheet && sheet.kind === 'yarimSettings' && (
+        <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
+      )}
       {sheet && sheet.kind === 'account' && (
         <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />

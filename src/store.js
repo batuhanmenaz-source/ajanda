@@ -66,6 +66,31 @@ export function createSupabaseStore() {
         .single();
       if (error) throw error;
       return data;
+    },
+    // Yarim ayarları ve kalp sayacı (04_kalp.sql)
+    async getSettings() {
+      const { data, error } = await supabase.from('app_settings').select('*').maybeSingle();
+      if (error) throw error;
+      return data || {};
+    },
+    async saveSettings(patch) {
+      const { data: u } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('app_settings')
+        .upsert({ user_id: u.user.id, ...patch, updated_at: new Date().toISOString() })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    async loveCount() {
+      const { count, error } = await supabase.from('love_taps').select('id', { count: 'exact', head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+    async addLove() {
+      const { error } = await supabase.from('love_taps').insert({});
+      if (error) throw error;
     }
   };
 }
@@ -139,6 +164,10 @@ export function createDemoStore() {
       const ex = db.daily_notes.find((r) => r.note_date === note_date);
       if (ex) { ex.body = body; save(); return ex; }
       const r = { id: uid(), note_date, body }; db.daily_notes.push(r); save(); return r;
-    }
+    },
+    async getSettings() { return db.settings || {}; },
+    async saveSettings(patch) { db.settings = { ...(db.settings || {}), ...patch }; save(); return db.settings; },
+    async loveCount() { return db.love || 0; },
+    async addLove() { db.love = (db.love || 0) + 1; save(); }
   };
 }
