@@ -352,7 +352,7 @@ export function MarketplacePanel({ name, data, now, actions }) {
 }
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: allData, events, google, now, actions, goTab, love, yarimHidden }) {
+export function TodayScreen({ data: allData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth }) {
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} />;
   const today = startOfDay(now);
   const open = (arr) => arr.filter((x) => !x.done);
@@ -451,6 +451,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
       </div>
     </div>
     <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} />
+    <MonthCalendar data={allData} events={events} google={google} now={now} actions={actions} month={month} setMonth={setMonth} />
     <MarketplaceStrip data={allData} now={now} actions={actions} />
     </div>
   );
@@ -495,6 +496,86 @@ function UpcomingDays({ data, events, google, now, actions, count = 3 }) {
         })}
       </div>
     </Section>
+  );
+}
+
+// Bugün sayfasının altındaki aylık takvim
+const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+function MonthCalendar({ data, events, google, now, actions, month, setMonth }) {
+  const [sel, setSel] = useState(null);
+  const today = startOfDay(now);
+  const gridStart = weekStart(month);
+  const cells = useMemo(() => Array.from({ length: 42 }, (_, i) => {
+    const d = addDays(gridStart, i);
+    const items = dayItems(d, { data, events });
+    // Çok günlü kampanya/etkinlikler şerit, diğerleri nokta/etiket olarak
+    const bars = items.filter((e) => e.kind === 'campaign' && e.time === 'Tüm gün');
+    const rest = items.filter((e) => !(e.kind === 'campaign' && e.time === 'Tüm gün'));
+    return { d, items, bars, rest };
+  }), [data, events, gridStart.getTime()]);
+  // Son satır tamamen sonraki aya aitse gösterme
+  const rows = cells[35].d.getMonth() !== month.getMonth() ? 5 : 6;
+  const shown = cells.slice(0, rows * 7);
+  const selCell = sel ? shown.find((c) => sameDay(c.d, sel)) : null;
+  const go = (n) => { setSel(null); setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1)); };
+  const isThisMonth = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
+
+  return (
+    <section className="section">
+      <div className="section-head">
+        <h2>{MONTH_NAMES[month.getMonth()]} {month.getFullYear()}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {!isThisMonth ? <button type="button" className="linkbtn" style={{ marginRight: 6 }} onClick={() => { setSel(null); setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Bu ay</button> : null}
+          <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
+          <button type="button" className="iconbtn" aria-label="Sonraki ay" onClick={() => go(1)}><Icon.Right /></button>
+        </div>
+      </div>
+      <div className="card mcal">
+        <div className="mcal-head" aria-hidden="true">
+          {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((w) => <span key={w}>{w}</span>)}
+        </div>
+        <div className="mcal-grid">
+          {shown.map(({ d, items, bars, rest }) => {
+            const out = d.getMonth() !== month.getMonth();
+            const past = d < today;
+            const isToday = sameDay(d, today);
+            const isSel = sel && sameDay(d, sel);
+            const colors = [...new Set(rest.map((e) => e.color))].slice(0, 4);
+            return (
+              <button type="button" key={d.toISOString()}
+                className={'mcal-day' + (out ? ' out' : '') + (past ? ' past' : '') + (isToday ? ' today' : '') + (isSel ? ' sel' : '')}
+                onClick={() => setSel(isSel ? null : d)} aria-pressed={!!isSel}
+                aria-label={fmtLong(d) + (items.length ? ', ' + items.length + ' kayıt' : ', boş')}>
+                <span className="mcal-num">{d.getDate()}</span>
+                <span className="mcal-bars">
+                  {bars.slice(0, 2).map((b) => <span key={b.key} className="mcal-bar" style={{ background: b.item && b.item.marketplace ? mpColor(b.item.marketplace) : b.color }} />)}
+                </span>
+                {/* Telefonda noktalar, geniş ekranda kısa etiketler */}
+                <span className="mcal-dots">{colors.map((c) => <span key={c} className="dot" style={{ background: c, width: 6, height: 6 }} />)}</span>
+                <span className="mcal-labels">
+                  {items.slice(0, 3).map((e) => (
+                    <span key={e.key} className="mcal-label"><span className="dot" style={{ background: e.item && e.item.marketplace && e.kind === 'campaign' ? mpColor(e.item.marketplace) : e.color, width: 6, height: 6 }} />{e.title}</span>
+                  ))}
+                  {items.length > 3 ? <span className="mcal-more">+{items.length - 3}</span> : null}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {selCell ? (
+        <div className="card list">
+          <div className="upday-head">
+            <span className="upday-name">{dayLabel(selCell.d, now)}</span>
+            <span className="upday-date">{fmtLong(selCell.d)}</span>
+            <button type="button" className="iconbtn upday-add" aria-label={fmtLong(selCell.d) + ' gününe ekle'} onClick={() => actions.newItemOn(selCell.d)}><Icon.Plus width="18" height="18" /></button>
+          </div>
+          {selCell.items.length ? selCell.items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact />)
+            : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Bu gün boş.'}</p>}
+        </div>
+      ) : <p className="hint" style={{ margin: 0 }}>Ayrıntı için bir güne dokun. Renkli şeritler kampanya ve etkinlikleri gösterir.</p>}
+    </section>
   );
 }
 

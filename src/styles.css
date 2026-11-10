@@ -369,3 +369,35 @@ button.pill { min-height: 32px; }
   .side-mp:hover { background: var(--chip); }
   .mp-strip { display: none; }
 }
+
+/* Aylık takvim */
+.mcal { padding: 8px; }
+.mcal-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); padding: 2px 0 6px; }
+.mcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.mcal-day {
+  border: 0; background: #FAF9F7; border-radius: 10px; min-height: 58px; padding: 5px 3px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; color: var(--ink); cursor: pointer;
+}
+.mcal-day:hover { background: var(--chip); }
+.mcal-day.out { background: transparent; }
+.mcal-day.out .mcal-num { color: #B0ADA5; }
+.mcal-day.past:not(.today) .mcal-num { color: var(--muted); }
+.mcal-day.past:not(.today) .mcal-bars, .mcal-day.past:not(.today) .mcal-dots, .mcal-day.past:not(.today) .mcal-labels { opacity: 0.55; }
+.mcal-num { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; width: 24px; height: 24px; line-height: 24px; border-radius: 12px; text-align: center; }
+.mcal-day.today .mcal-num { background: var(--accent); color: #fff; }
+.mcal-day.sel { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.mcal-bars { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+.mcal-bar { height: 4px; border-radius: 2px; width: 100%; }
+.mcal-dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
+.mcal-labels { display: none; }
+@media (min-width: 760px) {
+  .mcal { padding: 10px; }
+  .mcal-grid { gap: 4px; }
+  .mcal-day { min-height: 104px; align-items: stretch; padding: 6px; }
+  .mcal-num { align-self: flex-start; }
+  .mcal-dots { display: none; }
+  .mcal-labels { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .mcal-label { display: block; font-size: 11px; line-height: 1.3; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); min-width: 0; }
+  .mcal-label .dot { display: inline-block; vertical-align: middle; margin: -1px 4px 0 0; }
+  .mcal-more { font-size: 11px; font-weight: 600; color: var(--muted); text-align: left; }
+}

@@ -109,13 +109,17 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     }
   }, [googleSave, say]);
 
+  // Bugün sayfasındaki aylık takvimin gösterdiği ay (ayın 1'i)
+  const [month, setMonth] = useState(() => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), 1); });
+
   const range = useMemo(() => {
     const today = startOfDay(now);
-    const a = weekStart(day) < today ? weekStart(day) : today;
-    const ws = addDays(weekStart(day), 7);
-    const b = ws > addDays(today, 4) ? ws : addDays(today, 4);
+    const gridA = weekStart(month);
+    const gridB = addDays(gridA, 42);
+    const a = [weekStart(day), today, gridA].reduce((x, y) => (y < x ? y : x));
+    const b = [addDays(weekStart(day), 7), addDays(today, 4), gridB].reduce((x, y) => (y > x ? y : x));
     return [a, b];
-  }, [day, now]);
+  }, [day, now, month]);
 
   const refreshEvents = useCallback(async () => {
     if (google !== 'ok') return;
@@ -478,7 +482,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} yarimHidden={yarimHidden} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'kampanya' && <CampaignsScreen data={data} actions={actions} />}
               {tab === 'notlar' && <NotesScreen data={data} now={now} actions={actions} />}
