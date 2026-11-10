@@ -17,6 +17,7 @@ const ORDER = {
 };
 
 // 03_yarim.sql henüz çalıştırılmadıysa kayıtlar yine de kaydedilsin
+const PAGE = 1000;
 const missingYarim = (e) => /for_yarim/.test((e && (e.message || '')) + ' ' + (e && (e.details || '')));
 
 export function createSupabaseStore() {
@@ -25,15 +26,54 @@ export function createSupabaseStore() {
       const out = {};
       await Promise.all(TABLES.map(async (t) => {
         const [col, asc] = ORDER[t];
-        let q = supabase.from(t).select('*').order(col, { ascending: asc, nullsFirst: false });
-        if (t === 'daily_notes') q = q.limit(120);
-        if (t === 'missed_calls') q = q.limit(100);
-        const { data, error } = await q;
-        if (error && OPTIONAL.has(t)) { out[t] = []; return; }
-        if (error) throw error;
-        out[t] = data || [];
+        const cap = t === 'daily_notes' ? 120 : t === 'missed_calls' ? 100 : Infinity;
+        // Supabase tek seferde en fazla 1000 satır döndürür: kayıtlar çoğaldıkça sayfa sayfa çek
+        const rows = [];
+        for (let from = 0; rows.length < cap; from += PAGE) {
+          const to = Math.min(from + PAGE, cap) - 1;
+          const { data, error } = await supabase.from(t).select('*').order(col, { ascending: asc, nullsFirst: false }).order('id').range(from, to);
+          if (error && OPTIONAL.has(t)) { out[t] = []; return; }
+          if (error) throw error;
+          rows.push(...(data || []));
+          if (!data || data.length < to - from + 1) break;
+        }
+        out[t] = rows;
       }));
       return out;
+    },
+    // Ciro: verilen günden itibaren (sayfalı)
+    async loadRevenue(fromDay) {
+      const rows = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase.from('revenue').select('*').gte('day', fromDay).order('day', { ascending: false }).order('id').range(from, from + PAGE - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+      return rows;
+    },
+    // Bir günün cirolarını kaydeder: dolu olanlar yazılır, boşaltılanlar silinir
+    async saveRevenueDay(day, entries) {
+      const { data: u } = await supabase.auth.getUser();
+      const keep = entries.filter((e) => e.amount > 0);
+      const drop = entries.filter((e) => !(e.amount > 0)).map((e) => e.marketplace);
+      if (keep.length) {
+        const { error } = await supabase.from('revenue').upsert(
+          keep.map((e) => ({ user_id: u.user.id, day, marketplace: e.marketplace, amount: e.amount, orders: e.orders ?? null, updated_at: new Date().toISOString() })),
+          { onConflict: 'user_id,day,marketplace' }
+        );
+        if (error) throw error;
+      }
+      if (drop.length) {
+        const { error } = await supabase.from('revenue').delete().eq('day', day).in('marketplace', drop);
+        if (error) throw error;
+      }
+      return this.loadRevenueDay(day);
+    },
+    async loadRevenueDay(day) {
+      const { data, error } = await supabase.from('revenue').select('*').eq('day', day);
+      if (error) throw error;
+      return data || [];
     },
     async insert(table, row) {
       let { data, error } = await supabase.from(table).insert(row).select().single();
@@ -158,6 +198,19 @@ export function createDemoStore() {
   try { db = JSON.parse(localStorage.getItem(DEMO_KEY)); } catch { db = null; }
   if (!db) db = seed();
   if (!db.missed_calls) db.missed_calls = [];
+  if (!db.revenue) {
+    // Örnek ciro: son 45 gün
+    const base = { Trendyol: 180000, Hepsiburada: 95000, MCLUB: 60000, Amazon: 42000, N11: 15000, Boyner: 9000 };
+    db.revenue = [];
+    const t0 = startOfDay(new Date());
+    for (let i = 1; i <= 45; i++) {
+      const d = toDateInput(addDays(t0, -i));
+      Object.entries(base).forEach(([mp, v], k) => {
+        const w = 0.7 + ((i * 7 + k * 13) % 11) / 18;
+        db.revenue.push({ id: uid(), day: d, marketplace: mp, amount: Math.round(v * w), orders: Math.round((v * w) / 650) });
+      });
+    }
+  }
   const save = () => { try { localStorage.setItem(DEMO_KEY, JSON.stringify(db)); } catch { /* yok say */ } };
   save();
   return {
@@ -176,6 +229,17 @@ export function createDemoStore() {
       const r = { id: uid(), note_date, body }; db.daily_notes.push(r); save(); return r;
     },
     async getSettings() { return db.settings || {}; },
+    async loadRevenue(fromDay) { return db.revenue.filter((r) => r.day >= fromDay); },
+    async loadRevenueDay(day) { return db.revenue.filter((r) => r.day === day); },
+    async saveRevenueDay(day, entries) {
+      for (const e of entries) {
+        const ex = db.revenue.find((r) => r.day === day && r.marketplace === e.marketplace);
+        if (e.amount > 0) { if (ex) { ex.amount = e.amount; ex.orders = e.orders ?? null; } else db.revenue.push({ id: uid(), day, marketplace: e.marketplace, amount: e.amount, orders: e.orders ?? null }); }
+        else if (ex) db.revenue = db.revenue.filter((r) => r !== ex);
+      }
+      save();
+      return db.revenue.filter((r) => r.day === day);
+    },
     async saveSettings(patch) { db.settings = { ...(db.settings || {}), ...patch }; save(); return db.settings; },
     async loveCount() { return db.love || 0; },
     async addLove() { db.love = (db.love || 0) + 1; save(); }

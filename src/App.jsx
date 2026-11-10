@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
 import { Sheet } from './ui.jsx';
+import { RevenueScreen, RevenueSheet, TargetSheet, marketplaceOrder } from './revenue.jsx';
 import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet } from './sheets.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES, DEFAULT_PREPS } from './constants.js';
@@ -72,6 +73,40 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   // ---------- Yarim: WhatsApp ayarları ve kalp sayacı ----------
   const [love, setLove] = useState({ phone: '', message: '', count: 0, token: '' });
 
+  // ---------- Ciro ----------
+  const [salesView, setSalesView] = useState(() => { try { return sessionStorage.getItem('ajanda-sales') || 'kampanya'; } catch { return 'kampanya'; } });
+  useEffect(() => { try { sessionStorage.setItem('ajanda-sales', salesView); } catch { /* yok say */ } }, [salesView]);
+  const [revenue, setRevenue] = useState([]);
+  const [revLoaded, setRevLoaded] = useState(false);
+  const [revError, setRevError] = useState('');
+  const [revTarget, setRevTarget] = useState(null);
+  const loadRevenue = useCallback(async () => {
+    try {
+      const rows = await store.loadRevenue(toDateInput(addDays(startOfDay(new Date()), -430)));
+      setRevenue(rows); setRevError('');
+    } catch (e) {
+      console.error(e);
+      setRevError(/revenue/.test((e && e.message) || '') ? 'Ciro takibi için Supabase\'de 09 numaralı SQL\'i çalıştırman gerekiyor.' : 'Ciro verileri yüklenemedi. İnternet bağlantını kontrol et.');
+    } finally { setRevLoaded(true); }
+  }, [store]);
+  useEffect(() => { loadRevenue(); }, [loadRevenue]);
+  const revOrder = useMemo(() => marketplaceOrder(revenue, now), [revenue, now]);
+  const saveRevenue = async (day, entries) => {
+    try {
+      const rows = await store.saveRevenueDay(day, entries);
+      setRevenue((r) => [...r.filter((x) => x.day !== day), ...rows]);
+      setSheet(null);
+      say('Ciro kaydedildi');
+    } catch (e) {
+      console.error(e);
+      say(/revenue/.test((e && e.message) || '') ? 'Kaydedilemedi: Supabase\'de 09 numaralı SQL\'i çalıştırman gerekiyor.' : 'Ciro kaydedilemedi. İnternet bağlantını kontrol et.');
+    }
+  };
+  const saveTarget = async (v) => {
+    try { const s2 = await store.saveSettings({ revenue_target: v }); setRevTarget(s2.revenue_target || null); setSheet(null); say(v ? 'Hedef kaydedildi' : 'Hedef kaldırıldı'); }
+    catch (e) { console.error(e); say('Hedef kaydedilemedi. Supabase\'de 09 numaralı SQL\'i çalıştırdın mı?'); }
+  };
+
   // Yarim alanı bu cihazda gizli mi? (cihaza özel; telefonda açık, iş bilgisayarında kapalı olabilir)
   const [yarimHidden, setYarimHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-yarim-hidden') === '1'; } catch { return false; } });
   const setYarimHidden = (v) => {
@@ -87,7 +122,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' });
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -377,6 +412,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openCampaign: (c) => setSheet({ kind: 'campaign', item: c }),
     newEventOn: (d) => setSheet({ kind: 'campaign', item: { start_date: toDateInput(d), end_date: toDateInput(d), kind: 'etkinlik' } }),
     openMarketplace: (name) => setSheet({ kind: 'mp', name }),
+    openRevenue: (day) => setSheet({ kind: 'revenue', day }),
+    openTarget: () => setSheet({ kind: 'target' }),
     newReminderFor: (name) => setSheet({ kind: 'item', item: { kind: 'reminder', marketplace: name } }),
     openNote: (n) => setSheet({ kind: 'note', item: n }),
     toggleTask, addTask, deleteTask, saveDaily
@@ -433,7 +470,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const head = {
     bugun: ['Bugün', fmtLong(today)],
     takvim: ['Takvim', rangeLabel(weekStart(day), addDays(weekStart(day), 6))],
-    kampanya: ['Kampanyalar', upcomingCamps + ' aktif / yaklaşan kampanya'],
+    kampanya: salesView === 'ciro' ? ['Ciro', 'Günlük ciro takibi'] : ['Kampanyalar', upcomingCamps + ' aktif / yaklaşan kampanya'],
     notlar: ['Notlar', 'Pazaryeri ve günlük notlar'],
     aramalar: ['Aramalar', openCalls + ' aranacak']
   }[tab];
@@ -498,7 +535,17 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
             <>
               {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} yarimHidden={yarimHidden} />}
-              {tab === 'kampanya' && <CampaignsScreen data={data} actions={actions} />}
+              {tab === 'kampanya' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div className="seg" role="group" aria-label="Görünüm" style={{ maxWidth: 420 }}>
+                    <button type="button" className={salesView === 'kampanya' ? 'on' : ''} onClick={() => setSalesView('kampanya')}>Kampanyalar</button>
+                    <button type="button" className={salesView === 'ciro' ? 'on' : ''} onClick={() => setSalesView('ciro')}>Ciro</button>
+                  </div>
+                  {salesView === 'ciro'
+                    ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} />
+                    : <CampaignsScreen data={data} actions={actions} />}
+                </div>
+              )}
               {tab === 'notlar' && <NotesScreen data={data} now={now} actions={actions} />}
               {tab === 'aramalar' && <CallsScreen data={viewData} now={now} actions={actions} missedConfigured={!!love.token} />}
             </>
@@ -524,6 +571,12 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <Sheet title="Yarim" onClose={() => setSheet(null)}>
           <YarimPanel data={data} now={now} actions={actions} love={love} />
         </Sheet>
+      )}
+      {sheet && sheet.kind === 'revenue' && (
+        <RevenueSheet initialDay={sheet.day} revenue={revenue} order={revOrder} onClose={() => setSheet(null)} onSave={saveRevenue} />
+      )}
+      {sheet && sheet.kind === 'target' && (
+        <TargetSheet value={revTarget} onClose={() => setSheet(null)} onSave={saveTarget} />
       )}
       {sheet && sheet.kind === 'mp' && (
         <Sheet title={sheet.name} onClose={() => setSheet(null)}>
