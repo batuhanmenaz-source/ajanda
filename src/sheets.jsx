@@ -27,19 +27,44 @@ function YarimToggle({ on, onClick }) {
   );
 }
 
-export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden }) {
-  const [q, setQ] = useState('');
+// Paylaşılan uzun metni tek satırlık başlığa indirger
+function condense(t) {
+  const clean = (t || '').replace(/[*_~]/g, '').trim();
+  // İlk satır, o da uzunsa ilk cümle; en fazla ~90 karakter
+  let first = clean.split(/\n+/)[0].trim();
+  if (first.length > 90) {
+    const m = first.match(/^.{20,90}?[.!?](\s|$)/);
+    first = m ? m[0].trim() : first.slice(0, 90).replace(/\s+\S*$/, '') + '…';
+  }
+  return first.replace(/\s+/g, ' ');
+}
+
+export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden, shared }) {
+  const [q, setQ] = useState(() => condense(shared));
+  const sharedLong = !!shared && condense(shared) !== (shared || '').trim();
   const [typeOverride, setTypeOverride] = useState(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef(null);
-  useEffect(() => { const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 50); return () => clearTimeout(t); }, []);
+  // Paylaşımda klavye hemen açılıp metni kapatmasın
+  useEffect(() => { if (shared) return undefined; const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 50); return () => clearTimeout(t); }, []);
 
   const [yarimOverride, setYarimOverride] = useState(defaultYarim ? true : null);
-  const p = useMemo(() => parseQuick(q), [q]);
+  const p = useMemo(() => {
+    const own = parseQuick(q);
+    if (!shared) return own;
+    // Başlıkta tarih/pazaryeri yoksa paylaşılan metnin tamamından al
+    const all = parseQuick(shared);
+    return {
+      ...own,
+      date: own.date || all.date, hasTime: own.date ? own.hasTime : all.hasTime, endDate: own.endDate || (own.date ? null : all.endDate),
+      mp: own.mp || all.mp, brand: own.brand || all.brand,
+      type: own.type !== 'Hatırlatma' ? own.type : (all.type === 'Not' ? 'Hatırlatma' : all.type)
+    };
+  }, [q, shared]);
   const type = typeOverride || p.type;
   const yarim = yarimHidden ? false : (yarimOverride !== null ? yarimOverride : p.yarim);
 
-  const build = () => ({ ...p, type, yarim });
+  const build = () => ({ ...p, type, yarim, shared: shared || '' });
 
   const submit = async (e) => {
     if (e) e.preventDefault();
@@ -51,8 +76,15 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden 
   return (
     <Sheet title="Hızlı ekle" onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {shared ? (
+          <div className="shared-box">
+            <span className="lbl">Paylaşılan metin</span>
+            <p>{shared.length > 400 ? shared.slice(0, 400) + '…' : shared}</p>
+            {sharedLong ? <span className="hint">Not olarak kaydedersen metnin tamamı nota eklenir.</span> : null}
+          </div>
+        ) : null}
         <div className="field">
-          <label htmlFor="quick">Yaz; tarih, saat, pazaryeri ve türü kendisi anlar.</label>
+          <label htmlFor="quick">{shared ? 'Başlığı düzenle, türünü seç; tarih ve saati metinden kendisi anlar.' : 'Yaz; tarih, saat, pazaryeri ve türü kendisi anlar.'}</label>
           <input id="quick" ref={inputRef} type="text" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ör. yarın 10:00 HB fiyat güncelle" enterKeyHint="done" />
         </div>
         <div className="typechips" role="group" aria-label="Tür">

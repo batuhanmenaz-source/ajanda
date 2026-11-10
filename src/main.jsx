@@ -10,6 +10,19 @@ import './styles.css';
 
 registerSW({ immediate: true });
 
+// Başka bir uygulamadan "Paylaş → Ajanda" ile gelindiyse metni sakla (giriş gerekirse kaybolmasın)
+(function captureShare() {
+  try {
+    if (window.location.pathname !== '/share') return;
+    const sp = new URLSearchParams(window.location.search);
+    const parts = [sp.get('title'), sp.get('text'), sp.get('url')].map((x) => (x || '').trim()).filter(Boolean);
+    const uniq = parts.filter((x, i) => !parts.slice(0, i).some((y) => y.includes(x) || x.includes(y)));
+    const text = uniq.join('\n').slice(0, 4000);
+    if (text) sessionStorage.setItem('ajanda-share', text);
+    window.history.replaceState({}, '', '/');
+  } catch { /* yok say */ }
+})();
+
 function Login({ error }) {
   const [busy, setBusy] = useState(false);
   return (

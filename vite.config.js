@@ -12,6 +12,12 @@ export default defineConfig({
         name: 'Ajanda',
         short_name: 'Ajanda',
         description: 'Takvim, hatırlatma, pazaryeri notları, kampanyalar ve aramalar tek yerde.',
+        // Android "Paylaş" menüsünde Ajanda görünsün (WhatsApp mesajı vb. → hızlı ekle)
+        share_target: {
+          action: '/share',
+          method: 'GET',
+          params: { title: 'title', text: 'text', url: 'url' }
+        },
         lang: 'tr',
         start_url: '/',
         scope: '/',

@@ -62,6 +62,13 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
   useEffect(() => { load(false); }, [load]);
 
+  // "Paylaş → Ajanda" ile gelen metni hızlı ekle penceresinde aç
+  useEffect(() => {
+    let text = '';
+    try { text = sessionStorage.getItem('ajanda-share') || ''; sessionStorage.removeItem('ajanda-share'); } catch { text = ''; }
+    if (text) { setTab('bugun'); setSheet({ kind: 'quick', shared: text }); }
+  }, []);
+
   // ---------- Yarim: WhatsApp ayarları ve kalp sayacı ----------
   const [love, setLove] = useState({ phone: '', message: '', count: 0, token: '' });
 
@@ -315,7 +322,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         p.type === 'Kampanya' ? DEFAULT_PREPS : null
       );
     } else if (p.type === 'Not') {
-      await saveNote({ marketplace: p.mp || null, brand: p.brand || null, title: p.title || 'Not', body: '' });
+      await saveNote({ marketplace: p.mp || null, brand: p.brand || null, title: p.title || 'Not', body: p.shared || '' });
       setTab('notlar');
     } else if (p.type === 'Arama') {
       await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due, for_yarim: !!p.yarim });
@@ -327,7 +334,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     if (p.type === 'Kampanya' || p.type === 'Etkinlik') {
       const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
       setSheet({ kind: 'campaign', item: { name: p.title, marketplace: p.mp, start_date: toDateInput(st), end_date: toDateInput(p.endDate ? startOfDay(p.endDate) : st), kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik' } });
-    } else if (p.type === 'Not') setSheet({ kind: 'note', item: { marketplace: p.mp, brand: p.brand, title: p.title } });
+    } else if (p.type === 'Not') setSheet({ kind: 'note', item: { marketplace: p.mp, brand: p.brand, title: p.title, body: p.shared || '' } });
     else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim } });
   };
 
@@ -509,7 +516,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         ))}
       </nav>
 
-      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} />}
+      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} shared={sheet.shared} />}
       {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} />}
