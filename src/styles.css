@@ -421,3 +421,8 @@ button.pill { min-height: 32px; }
 .locsug-empty { padding: 12px; font-size: 13px; color: var(--muted); }
 .mappin { height: 200px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #EEF0EA; z-index: 0; }
 .pin-icon span { display: block; width: 28px; height: 28px; border-radius: 50% 50% 50% 0; background: var(--accent); transform: rotate(-45deg); box-shadow: 0 2px 6px rgba(0,0,0,.35); border: 3px solid #fff; box-sizing: border-box; }
+
+/* Gün satırındaki konum bağlantısı (satır düğmesinin altında, ayrı dokunma alanı) */
+.ditem { display: flex; flex-direction: column; }
+.ditem > .loclink { align-self: flex-start; margin: -6px 14px 10px 82px; min-height: 32px; padding: 4px 8px; border-radius: 8px; background: var(--accent-soft); max-width: calc(100% - 96px); }
+.ditem.compact > .loclink { margin: -4px 12px 8px 76px; max-width: calc(100% - 88px); }

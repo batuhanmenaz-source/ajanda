@@ -3,7 +3,7 @@ import { Icon } from './Icons.jsx';
 import { Mp, Check, Section, Progress } from './ui.jsx';
 import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START } from './constants.js';
 import { whatsappLink, DEFAULT_LOVE_MESSAGE, prettyPhone, normalizePhone } from './whatsapp.js';
-import { mapsLink } from './location.js';
+import { mapsLink, mapsTarget } from './location.js';
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -11,7 +11,7 @@ const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="non
 function LocLink({ location, geo, small }) {
   if (!location) return null;
   return (
-    <a className={'loclink' + (small ? ' small' : '')} href={mapsLink(location, geo)} target="_blank" rel="noopener noreferrer" aria-label={location + ' haritada aç'}>
+    <a className={'loclink' + (small ? ' small' : '')} href={mapsLink(location, geo)} {...mapsTarget()} aria-label={location + ' haritada aç'}>
       <PinIcon /><span>{location}</span>
     </a>
   );
@@ -50,7 +50,7 @@ export function dayItems(day, { data, events }) {
     out.push({ key: 'g' + e.id + day.getDate(), time: e.allDay ? 'Tüm gün' : fmtTime(e.start), title: e.title, src: 'Google', color: SRC_COLORS.Google, sub: e.calendar })
   );
   data.reminders.filter((r) => r.due_at && sameDay(new Date(r.due_at), day)).forEach((r) =>
-    out.push({ key: 'r' + r.id, time: fmtTime(new Date(r.due_at)), title: r.title + (r.for_yarim ? ' ❤️' : ''), src: r.for_yarim ? 'Yarim' : 'Hatırlatma', color: r.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Hatırlatma'], sub: [r.marketplace, r.location ? '📍 ' + r.location : ''].filter(Boolean).join(' · '), done: r.done, item: r, kind: 'reminder' })
+    out.push({ key: 'r' + r.id, time: fmtTime(new Date(r.due_at)), title: r.title + (r.for_yarim ? ' ❤️' : ''), src: r.for_yarim ? 'Yarim' : 'Hatırlatma', color: r.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Hatırlatma'], sub: r.marketplace, loc: r.location, geo: r.location_geo, done: r.done, item: r, kind: 'reminder' })
   );
   data.calls.filter((c) => c.due_at && sameDay(new Date(c.due_at), day)).forEach((c) =>
     out.push({ key: 'c' + c.id, time: fmtTime(new Date(c.due_at)), title: c.who + (c.topic ? ' — ' + c.topic : '') + (c.for_yarim ? ' ❤️' : ''), src: c.for_yarim ? 'Yarim' : 'Arama', color: c.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS.Arama, sub: c.for_yarim ? 'Arama' : '', done: c.done, item: c, kind: 'call' })
@@ -65,7 +65,7 @@ export function dayItems(day, { data, events }) {
     if (day >= s && day <= e) out.push({
       key: 'k' + c.id, time: 'Tüm gün',
       title: c.name + (!multi ? '' : sameDay(day, s) ? ' başlıyor' : sameDay(day, e) ? ' son gün' : isEvent ? ' (' + nth + '/' + total + '. gün)' : ' aktif'),
-      src: isEvent ? 'Etkinlik' : 'Kampanya', color: isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, sub: [c.marketplace, multi ? rangeLabel(s, e) : '', c.location ? '📍 ' + c.location : ''].filter(Boolean).join(' · '), item: c, kind: 'campaign'
+      src: isEvent ? 'Etkinlik' : 'Kampanya', color: isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, sub: [c.marketplace, multi ? rangeLabel(s, e) : ''].filter(Boolean).join(' · '), loc: c.location, geo: c.location_geo, item: c, kind: 'campaign'
     });
     if (isEvent) return;
     const d = daysBetween(day, s);
@@ -92,7 +92,7 @@ function ReminderRow({ r, now, onToggle, onOpen, showDay }) {
           {r.location ? <span className="tag"><PinIcon />{r.location.length > 28 ? r.location.slice(0, 28) + '…' : r.location}</span> : null}
         </span>
       </button>
-      {r.location ? <a className="missed-btn" href={mapsLink(r.location, r.location_geo)} target="_blank" rel="noopener noreferrer" aria-label={r.location + ' haritada aç'}><PinIcon /></a> : null}
+      {r.location ? <a className="missed-btn" href={mapsLink(r.location, r.location_geo)} {...mapsTarget()} aria-label={r.location + ' haritada aç'}><PinIcon /></a> : null}
     </div>
   );
 }
@@ -476,14 +476,18 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
 // Takvimdeki tek satır (Takvim ekranı ve Yaklaşan günler ortak kullanır)
 function DayItemRow({ e, actions, compact }) {
   return (
-    <button type="button" className={'rowbtn row timeline' + (compact ? ' compact' : '')}
-      onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : null)}>
-      <span className="tcol">{e.time}</span>
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-        <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
-        <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.src}{e.sub ? ' · ' + e.sub : ''}</span>
-      </span>
-    </button>
+    <div className={'ditem' + (compact ? ' compact' : '')}>
+      <button type="button" className={'rowbtn row timeline' + (compact ? ' compact' : '')}
+        onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : null)}>
+        <span className="tcol">{e.time}</span>
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+          <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
+          <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.src}{e.sub ? ' · ' + e.sub : ''}</span>
+        </span>
+      </button>
+      {/* Konuma dokununca doğrudan Haritalar açılır */}
+      {e.loc ? <LocLink location={e.loc} geo={e.geo} small /> : null}
+    </div>
   );
 }
 

@@ -4,7 +4,7 @@ import { parseQuick } from './parse.js';
 import { MARKETPLACES, BRANDS, DEFAULT_PREPS, mpColor } from './constants.js';
 import { toDateInput, toTimeInput, combine, whenLabel, addDays, startOfDay, fromDateInput, rangeLabel } from './dates.js';
 import { normalizePhone, prettyPhone, DEFAULT_LOVE_MESSAGE } from './whatsapp.js';
-import { currentLocation, searchPlaces, parseGeo, geoText, mapsLink } from './location.js';
+import { currentLocation, searchPlaces, parseGeo, geoText, mapsLink, mapsTarget } from './location.js';
 const MapPin = lazy(() => import('./MapPin.jsx'));
 
 const EXAMPLES = ['yarın 10:00 HB fiyat güncelle', 'Cuma 15:00 kargo firmasını ara', 'not: Trendyol komisyon oranını kontrol et', '12-14 kasım Trendyol kampanyası'];
@@ -160,7 +160,7 @@ function LocationField({ id, value, onChange }) {
           <Suspense fallback={<div className="mappin" />}>
             <MapPin lat={geo.lat} lng={geo.lng} onMove={(la, ln) => onChange({ text: value.text, geo: geoText(la, ln) })} />
           </Suspense>
-          <span className="hint">Pin yanlış yerdeyse sürükle ya da haritada doğru yere dokun. <a href={mapsLink(value.text, value.geo)} target="_blank" rel="noopener noreferrer">Google Haritalar'da aç ↗</a></span>
+          <span className="hint">Pin yanlış yerdeyse sürükle ya da haritada doğru yere dokun. <a href={mapsLink(value.text, value.geo)} {...mapsTarget()}>Haritalar'da aç ↗</a></span>
         </>
       ) : value.text && !open ? <span className="hint">Listeden bir yer seçersen haritada tam konumu işaretlenir.</span> : null}
     </div>

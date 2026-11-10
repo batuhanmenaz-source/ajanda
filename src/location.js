@@ -13,11 +13,25 @@ export function geoText(lat, lng) {
   return lat.toFixed(6) + ',' + lng.toFixed(6);
 }
 
-// Koordinat varsa harita tam o noktayı açar; yoksa yazılan metni arar
+const IS_ANDROID = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+
+// Koordinat varsa harita tam o noktayı açar; yoksa yazılan metni arar.
+// Android'de geo: adresi doğrudan Haritalar uygulamasını açar (tarayıcı sekmesi açılmaz).
 export function mapsLink(location, geo) {
   const g = parseGeo(geo);
+  const name = (location || '').split(',')[0].replace(/[()]/g, '').trim();
+  if (IS_ANDROID) {
+    return g
+      ? 'geo:' + g.lat + ',' + g.lng + '?q=' + g.lat + ',' + g.lng + (name ? '(' + encodeURIComponent(name) + ')' : '')
+      : 'geo:0,0?q=' + encodeURIComponent(location || '');
+  }
   const q = g ? g.lat + ',' + g.lng : (location || '');
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+}
+
+// <a> için hedef: geo: bağlantıları aynı sekmede açılmalı (yoksa boş sekme kalır)
+export function mapsTarget() {
+  return IS_ANDROID ? {} : { target: '_blank', rel: 'noopener noreferrer' };
 }
 
 function label(p) {
