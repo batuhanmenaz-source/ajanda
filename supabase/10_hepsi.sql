@@ -94,12 +94,26 @@ create table if not exists public.habit_logs (
 create index if not exists habit_logs_user_day on public.habit_logs (user_id, day desc);
 
 -- ---------- Güvenlik: herkes yalnız kendi kayıtlarını görür ----------
-do $$
-declare t text;
-begin
-  foreach t in array array['contacts','collabs','special_dates','lists','list_items','habits','habit_logs'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists "sadece_kendi_kayitlarim" on public.%I', t);
-    execute format('create policy "sadece_kendi_kayitlarim" on public.%I for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid())', t);
-  end loop;
-end $$;
+alter table public.contacts enable row level security;
+alter table public.collabs enable row level security;
+alter table public.special_dates enable row level security;
+alter table public.lists enable row level security;
+alter table public.list_items enable row level security;
+alter table public.habits enable row level security;
+alter table public.habit_logs enable row level security;
+
+drop policy if exists "sadece_kendi_kayitlarim" on public.contacts;
+drop policy if exists "sadece_kendi_kayitlarim" on public.collabs;
+drop policy if exists "sadece_kendi_kayitlarim" on public.special_dates;
+drop policy if exists "sadece_kendi_kayitlarim" on public.lists;
+drop policy if exists "sadece_kendi_kayitlarim" on public.list_items;
+drop policy if exists "sadece_kendi_kayitlarim" on public.habits;
+drop policy if exists "sadece_kendi_kayitlarim" on public.habit_logs;
+
+create policy "sadece_kendi_kayitlarim" on public.contacts for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "sadece_kendi_kayitlarim" on public.collabs for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "sadece_kendi_kayitlarim" on public.special_dates for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "sadece_kendi_kayitlarim" on public.lists for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "sadece_kendi_kayitlarim" on public.list_items for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "sadece_kendi_kayitlarim" on public.habits for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "sadece_kendi_kayitlarim" on public.habit_logs for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
