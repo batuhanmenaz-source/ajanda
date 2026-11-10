@@ -8,11 +8,17 @@ Google Takvim, hatırlatmalar, pazaryeri notları, kampanya takvimi ve aramalar�
 - **Giriş:** Google hesabıyla yapılır.
 - **Google Takvim:** Takvimdeki etkinlikler uygulamada görünür. Hatırlatma, arama ve kampanyalar Google Takvim'de **"Ajanda"** adlı ayrı bir takvime yazılır; bildirimleri telefondaki Google Takvim gönderir.
 - **Kampanyalar:** Tüm gün etkinliği olarak eklenir. Başlangıçtan 3 gün ve 1 gün önce saat 09:00'da hazırlık hatırlatması gelir.
+- **Yedekleme:** Haftada bir Google Drive'daki "Ajanda Yedekleri" klasörüne otomatik yedek alınır (son 12 yedek tutulur). Hesap ekranından dosya olarak indirilebilir ve geri yüklenebilir.
+- **Tekrarlayan hatırlatmalar:** Her gün / hafta içi / her hafta / her ay / her yıl. Tamamlanınca sonraki tarihe kayar.
+- **Ciro ve kampanya sonucu:** Günlük ciro girişi; kampanya kartında kampanya günlerinin cirosu, öncesindeki aynı uzunluktaki döneme göre değişim.
+- **Haftalık özet:** Cuma–pazar Bugün sayfasında haftanın cirosu, işler, alışkanlıklar ve gelecek hafta.
+- **Rehber ve influencer:** Kişiler (arama eklerken isimden numara gelir, cevapsız çağrıda isim görünür), influencer iş birlikleri (yayın tarihi, ücret, durum).
+- **Özel günler, listeler, alışkanlıklar:** Her yıl tekrarlayan özel günler, işaretlenebilir listeler, günlük alışkanlık serileri.
 - **Hızlı ekle:** "yarın 10:00 HB fiyat güncelle", "Cuma 15:00 kargo firmasını ara", "not: Trendyol komisyon kontrolü" gibi yazılanları tarih, saat, pazaryeri ve türüne göre ayırır.
 
 ## Kurulum özeti
 
-1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`09` numaralı dosyaları sırayla çalıştır.
+1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`10` numaralı dosyaları sırayla çalıştır.
 2. Supabase > Authentication > Providers > Google: Google Cloud'daki istemci kimliği ve gizli anahtarı gir.
 3. Vercel'de bu depoyu içe aktar ve şu ortam değişkenlerini tanımla:
 

@@ -5,6 +5,10 @@ import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START } from './constants.js';
 import { whatsappLink, DEFAULT_LOVE_MESSAGE, prettyPhone, normalizePhone } from './whatsapp.js';
 import { mapsLink, mapsTarget } from './location.js';
 import { occursOn, ruleLabel } from './recur.js';
+import { specialOn, specialLabel, specialUpcoming, SPECIAL_ICON } from './special.js';
+import {
+  findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, ListsView, ContactsView, InfluencerView, SpecialDatesSection
+} from './life.jsx';
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -79,6 +83,14 @@ export function dayItems(day, { data, events }) {
     const d = daysBetween(day, s);
     if (d === 1 || d === 3) out.push({ key: 'kp' + c.id + d, time: '09:00', title: 'Hazırlık: ' + c.name + (d === 1 ? ' (yarın başlıyor)' : ' (3 gün kaldı)'), src: 'Kampanya', color: SRC_COLORS.Kampanya, sub: c.marketplace, item: c, kind: 'campaign' });
   });
+  (data.special_dates || []).filter((x) => specialOn(x, day)).forEach((x) =>
+    out.push({ key: 's' + x.id + day.getFullYear(), time: 'Tüm gün', title: (SPECIAL_ICON[x.kind] || '⭐') + ' ' + specialLabel(x, day) + (x.for_yarim ? ' ❤️' : ''), src: 'Özel gün', color: x.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Özel gün'], sub: x.for_yarim ? 'Yarim' : '', item: x, kind: 'special' })
+  );
+  const dk = toDateInput(day);
+  (data.collabs || []).filter((c) => c.publish_date === dk && c.status !== 'iptal').forEach((c) => {
+    const who = ((data.contacts || []).find((k) => k.id === c.contact_id) || {}).name || 'Influencer';
+    out.push({ key: 'i' + c.id, time: 'Tüm gün', title: '🎬 ' + who + (c.title ? ' — ' + c.title : ''), src: 'Influencer', color: SRC_COLORS.Influencer, sub: [c.brand, c.marketplace].filter(Boolean).join(' · '), done: c.status === 'yayinlandi' || c.status === 'odendi', item: c, kind: 'collab' });
+  });
   return out.sort((a, b) => {
     if (a.time === 'Tüm gün' && b.time !== 'Tüm gün') return -1;
     if (b.time === 'Tüm gün' && a.time !== 'Tüm gün') return 1;
@@ -124,7 +136,7 @@ function CallRow({ c, now, onToggle, onOpen, showDay }) {
   );
 }
 
-function CampaignMini({ c, tasks, onOpen }) {
+function CampaignMini({ c, tasks, onOpen, result }) {
   const isEvent = c.kind === 'etkinlik';
   const ts = tasksOf(tasks, c.id);
   const st = campaignStatus(c);
@@ -139,6 +151,7 @@ function CampaignMini({ c, tasks, onOpen }) {
         <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
       </div>
       {ts.length ? <Progress done={ts.filter((t) => t.done).length} total={ts.length} /> : null}
+      {result || null}
     </div>
   );
 }
@@ -229,6 +242,7 @@ export function YarimPanel({ data, now, actions, love }) {
         </div>
       </div>
       <YarimCounter now={now} />
+      <YarimSpecials data={data} now={now} actions={actions} />
       {items.length ? (
         <div className="list yarim-list">
           {items.map((x) => (x.kind === 'reminder'
@@ -238,6 +252,21 @@ export function YarimPanel({ data, now, actions, love }) {
       ) : <p className="yarim-empty">Önümüzdeki günlerde onunla ilgili bir şey yok. Özel günleri, sürprizleri, aranacakları buraya ekleyebilirsin.</p>}
       {openCount ? <span className="yarim-foot">{openCount} açık · önümüzdeki 7 gün</span> : null}
       <button type="button" className="linkbtn yarim-hide" onClick={actions.hideYarim}>Bu cihazda gizle</button>
+    </div>
+  );
+}
+
+function YarimSpecials({ data, now, actions }) {
+  const ups = specialUpcoming((data.special_dates || []).filter((x) => x.for_yarim), now);
+  return (
+    <div className="yarim-specials">
+      {ups.map(({ s, date, inDays }) => (
+        <button key={s.id} type="button" className="ysp" onClick={() => actions.openSpecial(s)}>
+          <span>{SPECIAL_ICON[s.kind] || '⭐'} {specialLabel(s, date)}</span>
+          <span className="w">{inDays === 0 ? 'Bugün' : inDays === 1 ? 'Yarın' : fmtShort(date) + ' · ' + inDays + ' gün'}</span>
+        </button>
+      ))}
+      <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => actions.openSpecial({ for_yarim: true })}>+ Özel gün (doğum günü, yıl dönümü…)</button>
     </div>
   );
 }
@@ -261,7 +290,10 @@ function YarimTile({ data, now, actions, love }) {
     when: x.due ? dayLabel(x.due, now) + ' ' + fmtTime(x.due) + (x.due < today ? ' · gecikti' : '') : 'Tarihsiz',
     late: x.due && x.due < now
   }));
-  const list = [...(anniv ? [anniv] : []), ...rows];
+  const specials = specialUpcoming((data.special_dates || []).filter((x) => x.for_yarim), now, 7).map(({ s, date, inDays }) => ({
+    key: 'sp' + s.id, title: specialLabel(s, date) + ' ' + (SPECIAL_ICON[s.kind] || '⭐'), when: inDays === 0 ? 'Bugün' : inDays === 1 ? 'Yarın' : inDays + ' gün sonra'
+  }));
+  const list = [...(anniv ? [anniv] : []), ...specials, ...rows];
   const shown = list.slice(0, 3);
   const more = list.length - shown.length;
   return (
@@ -291,7 +323,7 @@ const MissedIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /><path d="M16 3l5 5M21 3l-5 5" /></svg>
 );
 
-export function MissedCallsSection({ missed, now, actions, showEmpty, configured }) {
+export function MissedCallsSection({ missed, now, actions, showEmpty, configured, contacts }) {
   const open = (missed || []).filter((m) => !m.handled).sort((a, b) => b.missed_at.localeCompare(a.missed_at));
   if (!open.length && !showEmpty) return null;
   return (
@@ -302,6 +334,8 @@ export function MissedCallsSection({ missed, now, actions, showEmpty, configured
         {open.length ? open.map((m) => {
           const t = new Date(m.missed_at);
           const num = prettyPhone(m.phone);
+          const known = !m.name ? findContact(contacts, m.phone) : null;
+          if (known) m = { ...m, name: known.name };
           return (
             <div key={m.id} className="row missed-row">
               <span className="missed-icon"><MissedIcon /></span>
@@ -395,8 +429,11 @@ export function MarketplacePanel({ name, data, now, actions }) {
 }
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: allData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth }) {
-  const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} />;
+export function TodayScreen({ data: allData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue }) {
+  const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} contacts={allData.contacts} />;
+  const [sumHidden, setSumHidden] = useState(false);
+  const showSummary = !sumHidden && weeklySummaryVisible(now);
+  const hideSummary = () => { try { localStorage.setItem('ajanda-ozet-gizli', toDateInput(weekStart(now))); } catch { /* yok say */ } setSumHidden(true); };
   const today = startOfDay(now);
   const open = (arr) => arr.filter((x) => !x.done);
   // Yarim kayıtları kendi alanında takip edilir; iş listelerinde görünmez
@@ -438,6 +475,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
         </section>
         {yarimHidden ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
+    {showSummary ? <WeeklySummary data={allData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} /> : null}
     <div className="grid-2">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -455,6 +493,8 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
             {rem.length ? rem.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />) : <p className="empty">Bugün için hatırlatma yok.</p>}
           </div>
         </Section>
+
+        <HabitsCard data={allData} now={now} actions={actions} />
 
         {undated.length ? (
           <Section title="Tarihsiz işler" meta={undated.length + ' iş'}>
@@ -505,7 +545,7 @@ function DayItemRow({ e, actions, compact }) {
   return (
     <div className={'ditem' + (compact ? ' compact' : '')}>
       <button type="button" className={'rowbtn row timeline' + (compact ? ' compact' : '')}
-        onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : null)}>
+        onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : e.kind === 'special' ? actions.openSpecial(e.item) : e.kind === 'collab' ? actions.openCollab(e.item) : null)}>
         <span className="tcol">{e.time}</span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
@@ -663,12 +703,13 @@ export function CalendarScreen({ data, events, google, now, day, setDay, actions
           {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} />) : google !== 'checking' ? <p className="empty">Bu gün için kayıt yok.</p> : null}
         </div>
       </Section>
+      <SpecialDatesSection data={data} now={now} actions={actions} />
     </div>
   );
 }
 
 // ---------- KAMPANYALAR ----------
-function CampaignCard({ c, tasks, actions }) {
+function CampaignCard({ c, tasks, actions, revenue, now }) {
   const [newTask, setNewTask] = useState('');
   const ts = tasksOf(tasks, c.id);
   const st = campaignStatus(c);
@@ -690,6 +731,7 @@ function CampaignCard({ c, tasks, actions }) {
         <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
       </div>
       {ts.length ? <Progress done={ts.filter((t) => t.done).length} total={ts.length} /> : null}
+      {st.key === 'live' ? <CampaignResult c={c} revenue={revenue} now={now} actions={actions} /> : null}
       <div className="list" style={{ gap: 0 }}>
         {ts.map((t) => (
           <div key={t.id} className="task">
@@ -708,7 +750,7 @@ function CampaignCard({ c, tasks, actions }) {
   );
 }
 
-export function CampaignsScreen({ data, actions }) {
+export function CampaignsScreen({ data, actions, revenue, now = new Date() }) {
   const [showPast, setShowPast] = useState(false);
   const withSt = data.campaigns.filter((c) => c.kind !== 'etkinlik').map((c) => ({ c, st: campaignStatus(c) }));
   const current = withSt.filter((x) => x.st.key !== 'past').sort((a, b) => a.c.start_date.localeCompare(b.c.start_date));
@@ -720,11 +762,11 @@ export function CampaignsScreen({ data, actions }) {
         <button type="button" className="btn primary" onClick={() => actions.openCampaign({})}>+ Yeni kampanya</button>
       </div>
       <div className="notes-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
-        {current.length ? current.map(({ c }) => <CampaignCard key={c.id} c={c} tasks={data.campaign_tasks} actions={actions} />) : <div className="card"><p className="empty">Yaklaşan kampanya yok.</p></div>}
+        {current.length ? current.map(({ c }) => <CampaignCard key={c.id} c={c} tasks={data.campaign_tasks} actions={actions} revenue={revenue} now={now} />) : <div className="card"><p className="empty">Yaklaşan kampanya yok.</p></div>}
       </div>
       {past.length ? (
         <Section title="Biten kampanyalar" action={<button type="button" className="linkbtn" onClick={() => setShowPast(!showPast)}>{showPast ? 'Gizle' : 'Göster (' + past.length + ')'}</button>}>
-          {showPast ? <div className="notes-grid">{past.map(({ c }) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)}</div> : null}
+          {showPast ? <div className="notes-grid">{past.map(({ c }) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} result={<CampaignResult c={c} revenue={revenue} now={now} actions={actions} />} />)}</div> : null}
         </Section>
       ) : null}
     </div>
@@ -792,7 +834,8 @@ function DailyNotes({ data, now, actions }) {
 }
 
 export function NotesScreen({ data, now, actions }) {
-  const [seg, setSeg] = useState('pazaryeri');
+  const [seg, setSegState] = useState(() => { try { return sessionStorage.getItem('ajanda-notes-seg') || 'pazaryeri'; } catch { return 'pazaryeri'; } });
+  const setSeg = (v) => { setSegState(v); try { sessionStorage.setItem('ajanda-notes-seg', v); } catch { /* yok say */ } };
   const [mp, setMp] = useState('Tümü');
   const [q, setQ] = useState('');
   const used = useMemo(() => {
@@ -807,9 +850,10 @@ export function NotesScreen({ data, now, actions }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div className="seg" role="group" aria-label="Not türü" style={{ maxWidth: 420 }}>
+      <div className="seg three" role="group" aria-label="Not türü" style={{ maxWidth: 480 }}>
         <button type="button" className={seg === 'pazaryeri' ? 'on' : ''} onClick={() => setSeg('pazaryeri')}>Pazaryeri</button>
         <button type="button" className={seg === 'gunluk' ? 'on' : ''} onClick={() => setSeg('gunluk')}>Günlük</button>
+        <button type="button" className={seg === 'liste' ? 'on' : ''} onClick={() => setSeg('liste')}>Listeler</button>
       </div>
       {seg === 'pazaryeri' ? (
         <>
@@ -835,13 +879,30 @@ export function NotesScreen({ data, now, actions }) {
             )) : <div className="card"><p className="empty">{q ? 'Aramaya uyan not yok.' : 'Henüz not yok.'}</p></div>}
           </div>
         </>
-      ) : <DailyNotes data={data} now={now} actions={actions} />}
+      ) : seg === 'liste' ? <ListsView data={data} actions={actions} /> : <DailyNotes data={data} now={now} actions={actions} />}
     </div>
   );
 }
 
 // ---------- ARAMALAR ----------
-export function CallsScreen({ data, now, actions, missedConfigured }) {
+export function CallsScreen(props) {
+  const [seg, setSegState] = useState(() => { try { return sessionStorage.getItem('ajanda-calls-seg') || 'arama'; } catch { return 'arama'; } });
+  const setSeg = (v) => { setSegState(v); try { sessionStorage.setItem('ajanda-calls-seg', v); } catch { /* yok say */ } };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="seg three" role="group" aria-label="Görünüm" style={{ maxWidth: 480 }}>
+        <button type="button" className={seg === 'arama' ? 'on' : ''} onClick={() => setSeg('arama')}>Aramalar</button>
+        <button type="button" className={seg === 'rehber' ? 'on' : ''} onClick={() => setSeg('rehber')}>Rehber</button>
+        <button type="button" className={seg === 'infl' ? 'on' : ''} onClick={() => setSeg('infl')}>Influencer</button>
+      </div>
+      {seg === 'rehber' ? <ContactsView data={props.data} actions={props.actions} />
+        : seg === 'infl' ? <InfluencerView data={props.data} now={props.now} actions={props.actions} />
+          : <CallsList {...props} />}
+    </div>
+  );
+}
+
+function CallsList({ data, now, actions, missedConfigured }) {
   const open = data.calls.filter((c) => !c.done).sort((a, b) => (a.due_at || '9').localeCompare(b.due_at || '9'));
   const done = data.calls.filter((c) => c.done).sort((a, b) => (b.due_at || '').localeCompare(a.due_at || '')).slice(0, 20);
   const card = (c) => {
@@ -866,7 +927,7 @@ export function CallsScreen({ data, now, actions, missedConfigured }) {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <MissedCallsSection missed={data.missed_calls} now={now} actions={actions} showEmpty configured={missedConfigured} />
+      <MissedCallsSection missed={data.missed_calls} now={now} actions={actions} showEmpty configured={missedConfigured} contacts={data.contacts} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Aranacaklar</h2>
         <div style={{ display: 'flex', gap: 8 }}>

@@ -505,3 +505,74 @@ button.pill { min-height: 32px; }
 .rv-total { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 4px 0; font-size: 15px; }
 .rv-total b { font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; }
 @media (max-width: 380px) { .rv-amount { width: 118px; } .rv-orders { width: 64px; } }
+
+/* ---------- Üçlü sekme ---------- */
+.seg.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.seg.three button { padding: 0 4px; font-size: 13px; }
+.row3 { display: grid; grid-template-columns: 0.8fr 1.3fr 1fr; gap: 10px; }
+
+/* ---------- Kampanya sonucu ---------- */
+.cres { background: var(--bg); border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.cres.empty { flex-direction: row; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+.cres-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.cres-k { font-size: 12px; color: var(--muted); font-weight: 600; }
+.cres-num { font-family: var(--display); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cres-sub { font-size: 12px; color: var(--ink-2); }
+.cres-note { font-size: 12px; color: #9C5B00; }
+.cres-delta { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
+.cres-delta.up { background: var(--green-soft); color: #1F6B31; }
+.cres-delta.down { background: #FDECEC; color: var(--danger); }
+
+/* ---------- Haftalık özet ---------- */
+.wsum { padding: 16px; display: flex; flex-direction: column; gap: 14px; border-color: #C9D2F2; background: linear-gradient(180deg, #F3F5FD 0%, #FFFFFF 70%); }
+.wsum-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.wsum-k { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.wsum-h { margin: 2px 0 0; font-family: var(--display); font-size: 20px; }
+.wsum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.wsum-cell { display: flex; flex-direction: column; gap: 3px; padding: 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-2); min-width: 0; }
+.wsum-cell .l, .wsum-next .l { font-size: 12px; color: var(--muted); font-weight: 600; }
+.wsum-cell .v { font-family: var(--display); font-size: clamp(18px, 5vw, 22px); font-weight: 700; font-variant-numeric: tabular-nums; }
+.wsum-cell .v small { font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.wsum-cell .v.muted { color: var(--muted); }
+.wsum-cell .s, .wsum-next .s { font-size: 12px; color: var(--ink-2); }
+.wsum-cell b.up { color: #1F6B31; }
+.wsum-cell b.down { color: var(--danger); }
+.wsum-next { display: flex; flex-direction: column; gap: 6px; }
+.wsum-row { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.wsum-row .t { min-width: 0; overflow-wrap: anywhere; }
+.wsum-row .w { flex: 0 0 auto; color: var(--ink-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.wsum > .btn { align-self: flex-start; }
+
+/* ---------- Alışkanlıklar ---------- */
+.row.habit { padding-right: 12px; }
+.streak { font-weight: 600; color: #B35C00; }
+.hweek { display: flex; gap: 4px; flex: 0 0 auto; }
+.hd { width: 8px; height: 8px; border-radius: 4px; background: var(--track); }
+.hd.on { background: var(--accent); }
+.hd.today { outline: 1.5px solid var(--ink-2); outline-offset: 1px; }
+.chip.emoji { font-size: 18px; min-width: 44px; justify-content: center; }
+
+/* ---------- Rehber ---------- */
+.row.contact { padding: 4px 8px 4px 12px; gap: 10px; }
+.avatar { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 19px; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--accent-soft); color: var(--accent); }
+.avatar.infl { background: #E3F6F8; color: #0B6E7D; }
+.infl-tag { color: #0B6E7D; font-weight: 600; }
+.infl-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+
+/* ---------- İş birlikleri ---------- */
+.row.collab { padding: 10px 12px; gap: 12px; align-items: center; }
+.cdate { flex: 0 0 auto; width: 44px; display: flex; flex-direction: column; align-items: center; line-height: 1.1; color: var(--ink); }
+.cdate b { font-family: var(--display); font-size: 19px; }
+.cdate small { font-size: 11px; color: var(--muted); text-transform: uppercase; text-align: center; }
+.cstatus { flex: 0 0 auto; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 9px; background: var(--chip); color: var(--ink-2); white-space: nowrap; }
+.cstatus.s-anlasildi { background: var(--accent-soft); color: var(--accent); }
+.cstatus.s-yayinlandi { background: #FFF4DB; color: #8A5300; }
+.cstatus.s-odendi { background: var(--green-soft); color: #1F6B31; }
+.cstatus.s-iptal { text-decoration: line-through; }
+
+/* ---------- Özel günler ---------- */
+.row.special { padding: 10px 12px; gap: 12px; align-items: center; }
+.sp-icon { font-size: 22px; flex: 0 0 auto; width: 30px; text-align: center; }
+.yarim-specials { display: flex; flex-direction: column; gap: 6px; }
+.ysp { display: flex; justify-content: space-between; gap: 10px; border: 1px solid #F9C6D6; background: #fff; border-radius: 12px; padding: 10px 12px; font-size: 14px; color: #7A2342; text-align: left; }
+.ysp .w { flex: 0 0 auto; font-size: 13px; font-weight: 600; color: #A61E4D; }

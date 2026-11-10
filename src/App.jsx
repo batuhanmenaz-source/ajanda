@@ -3,14 +3,15 @@ import { Icon } from './Icons.jsx';
 import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
 import { Sheet } from './ui.jsx';
 import { RevenueScreen, RevenueSheet, TargetSheet, marketplaceOrder } from './revenue.jsx';
-import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet } from './sheets.jsx';
+import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet, YarimToggle } from './sheets.jsx';
+import { HabitSheet, ListSheet, ContactSheet, CollabSheet, SpecialDateSheet, findContact, nextFriday17, SUMMARY_TITLE } from './life.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES, DEFAULT_PREPS } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, whenLabel } from './dates.js';
 import { nextOccurrence } from './recur.js';
-import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError } from './google.js';
+import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent } from './google.js';
 import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
-import { syncReminder, syncCall, syncCampaign, unsyncCampaign } from './sync.js';
+import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab } from './sync.js';
 
 const TABS = [
   { id: 'bugun', label: 'Bugün', icon: Icon.Today },
@@ -20,7 +21,7 @@ const TABS = [
   { id: 'aramalar', label: 'Aramalar', icon: Icon.Phone }
 ];
 
-const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [] };
+const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [] };
 
 export default function App({ store, demo, email, onSignOut, onReconnect, googleSave }) {
   const [data, setData] = useState(EMPTY);
@@ -119,7 +120,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
   // Gizliyken Yarim kayıtları hiçbir listede görünmez
   const viewData = useMemo(() => (yarimHidden
-    ? { ...data, reminders: data.reminders.filter((r) => !r.for_yarim), calls: data.calls.filter((c) => !c.for_yarim) }
+    ? { ...data, reminders: data.reminders.filter((r) => !r.for_yarim), calls: data.calls.filter((c) => !c.for_yarim), special_dates: data.special_dates.filter((x) => !x.for_yarim) }
     : data), [data, yarimHidden]);
   useEffect(() => {
     let alive = true;
@@ -216,6 +217,14 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         const ids = await gsync(() => syncCampaign(c));
         if (ids) { await store.update('campaigns', c.id, ids); patchLocal('campaigns', c.id, ids); }
       }
+      for (const x of data.special_dates.filter((y) => !y.google_event_id)) {
+        const id = await gsync(() => syncSpecialDate(x));
+        if (id) { await store.update('special_dates', x.id, { google_event_id: id }); patchLocal('special_dates', x.id, { google_event_id: id }); }
+      }
+      for (const x of data.collabs.filter((y) => !y.google_event_id && y.publish_date && y.publish_date >= toDateInput(t) && y.status !== 'iptal')) {
+        const id = await gsync(() => syncCollab(x, (data.contacts.find((k) => k.id === x.contact_id) || {}).name));
+        if (id) { await store.update('collabs', x.id, { google_event_id: id }); patchLocal('collabs', x.id, { google_event_id: id }); }
+      }
     })().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [google, loading]);
@@ -223,13 +232,22 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   // ---------- Yerel durum yardımcıları ----------
   const patchLocal = (table, id, patch) => setData((d) => ({ ...d, [table]: d[table].map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
   const addLocal = (table, rows) => setData((d) => ({ ...d, [table]: [...d[table], ...rows] }));
-  const removeLocal = (table, id) => setData((d) => ({ ...d, [table]: d[table].filter((r) => r.id !== id), ...(table === 'campaigns' ? { campaign_tasks: d.campaign_tasks.filter((t) => t.campaign_id !== id) } : {}) }));
+  const removeLocal = (table, id) => setData((d) => ({
+    ...d,
+    [table]: d[table].filter((r) => r.id !== id),
+    ...(table === 'campaigns' ? { campaign_tasks: d.campaign_tasks.filter((t) => t.campaign_id !== id) } : {}),
+    ...(table === 'lists' ? { list_items: d.list_items.filter((t) => t.list_id !== id) } : {}),
+    ...(table === 'habits' ? { habit_logs: d.habit_logs.filter((t) => t.habit_id !== id) } : {}),
+    ...(table === 'contacts' ? { collabs: d.collabs.filter((t) => t.contact_id !== id) } : {})
+  }));
+  const replaceLocal = (table, id, row) => setData((d) => ({ ...d, [table]: d[table].map((r) => (r.id === id ? row : r)) }));
 
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/location_geo/.test(msg)) say('Kaydedilemedi: Harita konumu için Supabase\'de 08 numaralı SQL\'i çalıştırman gerekiyor.');
-    if (/location/.test(msg)) say('Kaydedilemedi: Konum için Supabase\'de 07 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/contacts|collabs|special_dates|list_items|lists|habits|habit_logs/.test(msg) && /schema cache|does not exist|relation/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 10 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/location_geo/.test(msg)) say('Kaydedilemedi: Harita konumu için Supabase\'de 08 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/location/.test(msg)) say('Kaydedilemedi: Konum için Supabase\'de 07 numaralı SQL\'i çalıştırman gerekiyor.');
     else say('İşlem yapılamadı. İnternet bağlantını kontrol edip tekrar dene.');
   };
 
@@ -366,6 +384,66 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     try { await store.remove('campaign_tasks', t.id); removeLocal('campaign_tasks', t.id); } catch (e) { fail(e); }
   };
 
+  // ---------- Rehber, iş birlikleri, özel günler, listeler, alışkanlıklar ----------
+  const contactName = (id) => (data.contacts.find((k) => k.id === id) || {}).name;
+  const saveRow = async (table, fields, okMsg) => {
+    try {
+      let row;
+      if (fields.id) { row = await store.update(table, fields.id, fields); patchLocal(table, row.id, row); }
+      else { const { id: _drop, ...rest } = fields; row = await store.insert(table, rest); addLocal(table, [row]); }
+      let id;
+      if (table === 'special_dates') id = await gsync(() => syncSpecialDate(row));
+      if (table === 'collabs') id = await gsync(() => syncCollab(row, contactName(row.contact_id)));
+      if (id !== undefined && id !== row.google_event_id) { await store.update(table, row.id, { google_event_id: id }); patchLocal(table, row.id, { google_event_id: id }); }
+      setSheet(null);
+      if (okMsg) say(okMsg);
+      return row;
+    } catch (e) { fail(e); return null; }
+  };
+  const deleteRow = async (table, row, question) => {
+    if (question && !window.confirm(question)) return;
+    try {
+      if (row.google_event_id) await gsync(() => deleteEvent(row.google_event_id));
+      if (table === 'contacts') for (const c of data.collabs.filter((x) => x.contact_id === row.id && x.google_event_id)) await gsync(() => deleteEvent(c.google_event_id));
+      await store.remove(table, row.id);
+      removeLocal(table, row.id);
+      setSheet(null);
+      say('Silindi');
+    } catch (e) { fail(e); }
+  };
+  const toggleHabit = async (h, day) => {
+    const ex = data.habit_logs.find((l) => l.habit_id === h.id && l.day === day);
+    if (ex) {
+      removeLocal('habit_logs', ex.id);
+      try { await store.remove('habit_logs', ex.id); } catch (e) { addLocal('habit_logs', [ex]); fail(e); }
+      return;
+    }
+    const tmp = { id: 'tmp-' + Date.now(), habit_id: h.id, day };
+    addLocal('habit_logs', [tmp]);
+    try { const row = await store.insert('habit_logs', { habit_id: h.id, day }); replaceLocal('habit_logs', tmp.id, row); }
+    catch (e) { removeLocal('habit_logs', tmp.id); fail(e); }
+  };
+  const addListItems = async (list, labels, start) => {
+    try {
+      const rows = await store.insertMany('list_items', labels.map((label, i) => ({ list_id: list.id, label, done: false, sort: start + i })));
+      addLocal('list_items', rows);
+    } catch (e) { fail(e); }
+  };
+  const toggleListItem = async (t) => {
+    patchLocal('list_items', t.id, { done: !t.done });
+    try { await store.update('list_items', t.id, { done: !t.done }); } catch (e) { patchLocal('list_items', t.id, { done: t.done }); fail(e); }
+  };
+  const deleteListItem = async (t) => {
+    removeLocal('list_items', t.id);
+    try { await store.remove('list_items', t.id); } catch (e) { addLocal('list_items', [t]); fail(e); }
+  };
+  const clearListDone = async (list) => {
+    const done = data.list_items.filter((t) => t.list_id === list.id && t.done);
+    setData((d) => ({ ...d, list_items: d.list_items.filter((t) => !done.includes(t)) }));
+    try { for (const t of done) await store.remove('list_items', t.id); } catch (e) { fail(e); load(true); }
+  };
+  const addWeeklySummaryReminder = () => saveItem('reminders', { title: SUMMARY_TITLE, marketplace: null, due_at: nextFriday17().toISOString(), for_yarim: false, repeat_rule: 'weekly' });
+
   // ---------- Hızlı ekle ----------
   const quickSave = async (p) => {
     const due = p.date ? p.date.toISOString() : null;
@@ -416,7 +494,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     missedLater: (m) => {
       const due = new Date(Date.now() + 60 * 60000);
       due.setMinutes(due.getMinutes() < 30 ? 30 : 60, 0, 0);
-      setSheet({ kind: 'item', item: { kind: 'call', title: m.name || prettyPhone(m.phone) || 'Cevapsız arama', phone: m.phone ? '+' + normalizePhone(m.phone) : '', topic: 'Cevapsız arama', due_at: due.toISOString(), missedId: m.id } });
+      const known = !m.name ? findContact(data.contacts, m.phone) : null;
+      setSheet({ kind: 'item', item: { kind: 'call', title: m.name || (known && known.name) || prettyPhone(m.phone) || 'Cevapsız arama', phone: m.phone ? '+' + normalizePhone(m.phone) : '', topic: 'Cevapsız arama', due_at: due.toISOString(), missedId: m.id } });
     },
     loveTapped: (e) => {
       const el = e && e.currentTarget;
@@ -436,6 +515,12 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openTarget: () => setSheet({ kind: 'target' }),
     newReminderFor: (name) => setSheet({ kind: 'item', item: { kind: 'reminder', marketplace: name } }),
     openNote: (n) => setSheet({ kind: 'note', item: n }),
+    openSpecial: (x) => setSheet({ kind: 'special', item: x }),
+    openCollab: (x) => setSheet({ kind: 'collab', item: x }),
+    openContact: (x) => setSheet({ kind: 'contact', item: x }),
+    openHabit: (x) => setSheet({ kind: 'habit', item: x.id ? x : { ...x, sort: data.habits.length } }),
+    openList: (x) => setSheet({ kind: 'list', item: x }),
+    toggleHabit, addListItems, toggleListItem, deleteListItem, clearListDone, addWeeklySummaryReminder,
     toggleTask, addTask, deleteTask, saveDaily
   };
 
@@ -600,7 +685,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'kampanya' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -610,7 +695,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
                   </div>
                   {salesView === 'ciro'
                     ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} />
-                    : <CampaignsScreen data={data} actions={actions} />}
+                    : <CampaignsScreen data={data} actions={actions} revenue={revenue} now={now} />}
                 </div>
               )}
               {tab === 'notlar' && <NotesScreen data={data} now={now} actions={actions} />}
@@ -631,7 +716,20 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       </nav>
 
       {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} shared={sheet.shared} />}
-      {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} />}
+      {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} contacts={data.contacts} />}
+      {sheet && sheet.kind === 'special' && <SpecialDateSheet initial={sheet.item} yarimHidden={yarimHidden} YarimToggle={YarimToggle} onClose={() => setSheet(null)}
+        onSave={(f) => saveRow('special_dates', f, 'Özel gün kaydedildi')} onDelete={(x) => deleteRow('special_dates', x, '"' + x.title + '" silinsin mi?')} />}
+      {sheet && sheet.kind === 'collab' && <CollabSheet initial={sheet.item} contacts={data.contacts} onClose={() => setSheet(null)}
+        onSave={(f) => saveRow('collabs', f, 'İş birliği kaydedildi')} onDelete={(x) => deleteRow('collabs', x, 'Bu iş birliği silinsin mi?')} />}
+      {sheet && sheet.kind === 'contact' && <ContactSheet initial={sheet.item} onClose={() => setSheet(null)}
+        onSave={(f) => saveRow('contacts', f, 'Kişi kaydedildi')}
+        onDelete={(x) => deleteRow('contacts', x, '"' + x.name + '" rehberden silinsin mi?' + (data.collabs.some((c) => c.contact_id === x.id) ? ' İş birlikleri de silinir.' : ''))}
+        onCall={(k) => setSheet({ kind: 'item', item: { kind: 'call', title: k.name, phone: k.phone ? prettyPhone(k.phone) : '' } })}
+        onCollab={(k) => setSheet({ kind: 'collab', item: { contact_id: k.id } })} />}
+      {sheet && sheet.kind === 'habit' && <HabitSheet initial={sheet.item} onClose={() => setSheet(null)}
+        onSave={(f) => saveRow('habits', f, 'Alışkanlık kaydedildi')} onDelete={(x) => deleteRow('habits', x, '"' + x.name + '" ve tüm geçmişi silinsin mi?')} />}
+      {sheet && sheet.kind === 'list' && <ListSheet initial={sheet.item} onClose={() => setSheet(null)}
+        onSave={(f) => saveRow('lists', f, 'Liste kaydedildi')} onDelete={(x) => deleteRow('lists', x, '"' + x.title + '" listesi ve içindekiler silinsin mi?')} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} />}
       {sheet && sheet.kind === 'yarim' && (

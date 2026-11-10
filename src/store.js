@@ -2,9 +2,10 @@
 import { supabase } from './supabase.js';
 import { addDays, startOfDay, toDateInput } from './dates.js';
 
-export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls'];
+export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs'];
+export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls', ...NEW_TABLES];
 // SQL'i henüz çalıştırılmamış olabilecek tablolar: hata verirse boş sayılır
-const OPTIONAL = new Set(['missed_calls']);
+const OPTIONAL = new Set(['missed_calls', ...NEW_TABLES]);
 
 const ORDER = {
   reminders: ['due_at', true],
@@ -13,7 +14,14 @@ const ORDER = {
   daily_notes: ['note_date', false],
   campaigns: ['start_date', true],
   campaign_tasks: ['sort', true],
-  missed_calls: ['missed_at', false]
+  missed_calls: ['missed_at', false],
+  contacts: ['name', true],
+  collabs: ['publish_date', true],
+  special_dates: ['month', true],
+  lists: ['sort', true],
+  list_items: ['sort', true],
+  habits: ['sort', true],
+  habit_logs: ['day', false]
 };
 
 // 03_yarim.sql henüz çalıştırılmadıysa kayıtlar yine de kaydedilsin
@@ -26,7 +34,7 @@ export function createSupabaseStore() {
       const out = {};
       await Promise.all(TABLES.map(async (t) => {
         const [col, asc] = ORDER[t];
-        const cap = t === 'daily_notes' ? 120 : t === 'missed_calls' ? 100 : Infinity;
+        const cap = t === 'daily_notes' ? 120 : t === 'missed_calls' ? 100 : t === 'habit_logs' ? 3000 : Infinity;
         // Supabase tek seferde en fazla 1000 satır döndürür: kayıtlar çoğaldıkça sayfa sayfa çek
         const rows = [];
         for (let from = 0; rows.length < cap; from += PAGE) {
@@ -207,7 +215,8 @@ function seed() {
     campaigns: [
       { id: c1, name: 'Örnek kampanya', marketplace: 'Trendyol', start_date: toDateInput(addDays(t, 1)), end_date: toDateInput(addDays(t, 3)), prep_event_ids: [] },
       { id: c2, name: 'Kasım indirimleri', marketplace: 'Hepsiburada', start_date: toDateInput(addDays(t, 7)), end_date: toDateInput(addDays(t, 13)), prep_event_ids: [] },
-      { id: c3, name: 'Black Friday', marketplace: 'MCLUB', start_date: toDateInput(addDays(t, 18)), end_date: toDateInput(addDays(t, 21)), prep_event_ids: [] }
+      { id: c3, name: 'Black Friday', marketplace: 'MCLUB', start_date: toDateInput(addDays(t, 18)), end_date: toDateInput(addDays(t, 21)), prep_event_ids: [] },
+      { id: uid(), name: 'Ekim fırsatları', marketplace: 'Trendyol', start_date: toDateInput(addDays(t, -20)), end_date: toDateInput(addDays(t, -17)), prep_event_ids: [] }
     ],
     campaign_tasks: [
       { id: uid(), campaign_id: c1, label: 'Fiyat listesi', done: true, sort: 0 },
@@ -222,11 +231,50 @@ function seed() {
   };
 }
 
+function seedLife() {
+  const t = startOfDay(new Date());
+  const k1 = uid(), k2 = uid(), l1 = uid(), h1 = uid(), h2 = uid();
+  const d = (n) => toDateInput(addDays(t, n));
+  const md = (n) => { const x = addDays(t, n); return { month: x.getMonth() + 1, day: x.getDate() }; };
+  return {
+    contacts: [
+      { id: uid(), name: 'Ajans', phone: '+905321112233', company: 'Dijital ajans', is_influencer: false },
+      { id: uid(), name: 'Kategori yöneticisi', phone: '+905339998877', company: 'Trendyol', is_influencer: false },
+      { id: k1, name: 'Elif Güzellik', phone: '', company: '', is_influencer: true, handle: '@elifguzellik' },
+      { id: k2, name: 'Cilt Bakım Günlüğü', phone: '', company: '', is_influencer: true, handle: '@ciltbakimgunlugu' }
+    ],
+    collabs: [
+      { id: uid(), contact_id: k1, title: 'Reels: serum incelemesi', brand: 'Missha', marketplace: 'Trendyol', publish_date: d(2), fee: 15000, status: 'anlasildi' },
+      { id: uid(), contact_id: k2, title: 'Story serisi', brand: 'DERMA:B', marketplace: 'Hepsiburada', publish_date: d(9), fee: 8000, status: 'planlandi' },
+      { id: uid(), contact_id: k1, title: 'Kasım kampanyası paylaşımı', brand: 'Missha', marketplace: 'Trendyol', publish_date: d(-12), fee: 12000, status: 'odendi' }
+    ],
+    special_dates: [
+      { id: uid(), title: 'Annemin doğum günü', kind: 'dogum', ...md(5), year: null, remind_days: 3, for_yarim: false },
+      { id: uid(), title: 'Şirket kuruluş yıl dönümü', kind: 'yildonumu', ...md(40), year: 2019, remind_days: 1, for_yarim: false }
+    ],
+    lists: [{ id: l1, title: 'Market', sort: 0 }],
+    list_items: [
+      { id: uid(), list_id: l1, label: 'Süt', done: false, sort: 0 },
+      { id: uid(), list_id: l1, label: 'Kahve', done: true, sort: 1 },
+      { id: uid(), list_id: l1, label: 'Meyve', done: false, sort: 2 }
+    ],
+    habits: [
+      { id: h1, name: 'Su iç (2 L)', emoji: '💧', sort: 0 },
+      { id: h2, name: 'Yürüyüş', emoji: '🚶', sort: 1 }
+    ],
+    habit_logs: [
+      ...[1, 2, 3, 4].map((n) => ({ id: uid(), habit_id: h1, day: d(-n) })),
+      ...[1, 3].map((n) => ({ id: uid(), habit_id: h2, day: d(-n) }))
+    ]
+  };
+}
+
 export function createDemoStore() {
   let db;
   try { db = JSON.parse(localStorage.getItem(DEMO_KEY)); } catch { db = null; }
   if (!db) db = seed();
   if (!db.missed_calls) db.missed_calls = [];
+  if (!db.contacts) Object.assign(db, seedLife());
   if (!db.revenue) {
     // Örnek ciro: son 45 gün
     const base = { Trendyol: 180000, Hepsiburada: 95000, MCLUB: 60000, Amazon: 42000, N11: 15000, Boyner: 9000 };
@@ -244,12 +292,15 @@ export function createDemoStore() {
   save();
   return {
     async loadAll() { return JSON.parse(JSON.stringify(db)); },
-    async insert(table, row) { const r = { id: uid(), created_at: new Date().toISOString(), ...row }; db[table].push(r); save(); return r; },
+    async insert(table, row) { const r = { id: uid(), created_at: new Date().toISOString(), ...row }; (db[table] = db[table] || []).push(r); save(); return r; },
     async insertMany(table, rows) { const out = rows.map((row) => ({ id: uid(), ...row })); db[table].push(...out); save(); return out; },
     async update(table, id, patch) { db[table] = db[table].map((r) => (r.id === id ? { ...r, ...patch } : r)); save(); return db[table].find((r) => r.id === id); },
     async remove(table, id) {
       db[table] = db[table].filter((r) => r.id !== id);
       if (table === 'campaigns') db.campaign_tasks = db.campaign_tasks.filter((r) => r.campaign_id !== id);
+      if (table === 'lists') db.list_items = db.list_items.filter((r) => r.list_id !== id);
+      if (table === 'habits') db.habit_logs = db.habit_logs.filter((r) => r.habit_id !== id);
+      if (table === 'contacts') db.collabs = db.collabs.filter((r) => r.contact_id !== id);
       save();
     },
     async upsertDaily(note_date, body) {

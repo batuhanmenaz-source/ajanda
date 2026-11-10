@@ -2,6 +2,7 @@
 import { saveTimed, saveAllDay, deleteEvent } from './google.js';
 import { addDays, fromDateInput, startOfDay } from './dates.js';
 import { rrule } from './recur.js';
+import { specialNext, SPECIAL_ICON } from './special.js';
 
 const mpPrefix = (mp) => (mp ? '[' + mp + '] ' : '');
 const heart = (x) => (x.for_yarim ? ' ❤️' : '');
@@ -63,6 +64,36 @@ export async function syncCampaign(c) {
     prepIds.push(id);
   }
   return { google_event_id: mainId, prep_event_ids: prepIds };
+}
+
+// Özel gün: her yıl tekrarlayan tüm gün etkinliği; N gün önce saat 09:00'da bildirim
+export async function syncSpecialDate(s) {
+  const first = specialNext(s, startOfDay(new Date()));
+  const n = Number(s.remind_days) || 0;
+  return saveAllDay(s.google_event_id, {
+    summary: (SPECIAL_ICON[s.kind] || '⭐') + ' ' + s.title + heart(s),
+    description: s.for_yarim ? 'Yarim ❤️' : 'Ajanda özel günü',
+    startDate: first,
+    endDate: first,
+    recurrence: 'RRULE:FREQ=YEARLY',
+    remindMinutes: Math.max(1, n) * 1440 - 9 * 60
+  });
+}
+
+// İş birliği: yayın günü tüm gün etkinliği, bir gün önce 09:00 bildirim
+export async function syncCollab(c, who) {
+  if (!c.publish_date || c.status === 'iptal') {
+    if (c.google_event_id) await deleteEvent(c.google_event_id);
+    return null;
+  }
+  const d = fromDateInput(c.publish_date);
+  return saveAllDay(c.google_event_id, {
+    summary: '🎬 ' + (who || 'Influencer') + (c.brand ? ' · ' + c.brand : '') + (c.title ? ' — ' + c.title : ''),
+    description: [c.marketplace ? 'Pazaryeri: ' + c.marketplace : '', c.link || '', 'Ajanda iş birliği'].filter(Boolean).join('\n'),
+    startDate: d,
+    endDate: d,
+    remindMinutes: 15 * 60
+  });
 }
 
 export async function unsyncCampaign(c) {

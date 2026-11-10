@@ -20,7 +20,7 @@ function MpSelect({ value, onChange, id, emptyLabel = 'Yok' }) {
 }
 
 // ---------- Hızlı ekle ----------
-function YarimToggle({ on, onClick }) {
+export function YarimToggle({ on, onClick }) {
   return (
     <button type="button" className={'chip yarim-chip' + (on ? ' on' : '')} onClick={onClick} aria-pressed={on}>
       {on ? '❤️' : '🤍'} Yarim
@@ -220,7 +220,7 @@ function LocationField({ id, value, onChange }) {
 }
 
 // ---------- Hatırlatma / Arama ----------
-export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
+export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, contacts = [] }) {
   const isEdit = !!(initial && initial.id);
   const [kind, setKind] = useState(initial.kind || 'reminder');
   const d0 = initial.due_at ? new Date(initial.due_at) : null;
@@ -234,6 +234,11 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
   const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const [repeat, setRepeat] = useState(initial.repeat_rule || '');
   const [busy, setBusy] = useState(false);
+  // Arama eklerken rehberden öneriler (yazdıkça)
+  const tq = title.trim().toLocaleLowerCase('tr-TR');
+  const suggestions = kind === 'call' && tq.length >= 1
+    ? contacts.filter((c) => c.name.toLocaleLowerCase('tr-TR').includes(tq) && c.name.toLocaleLowerCase('tr-TR') !== tq).slice(0, 4)
+    : [];
 
   const submit = async (e) => {
     e.preventDefault();
@@ -259,7 +264,25 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
         )}
         <div className="field">
           <label htmlFor="f-title">{kind === 'reminder' ? 'Ne hatırlatılsın?' : 'Kim aranacak?'}</label>
-          <input id="f-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <input id="f-title" type="text" value={title} required autoComplete="off"
+            onChange={(e) => {
+              const v = e.target.value;
+              setTitle(v);
+              // Rehberdeki bir isim seçilince numara otomatik gelir
+              if (kind === 'call') {
+                const k = contacts.find((c) => c.name.toLocaleLowerCase('tr-TR') === v.trim().toLocaleLowerCase('tr-TR'));
+                if (k && k.phone && !phone.trim()) setPhone(prettyPhone(k.phone));
+              }
+            }} />
+          {kind === 'call' && suggestions.length ? (
+            <div className="typechips" aria-label="Rehberden">
+              {suggestions.map((c) => (
+                <button key={c.id} type="button" className="chip" onClick={() => { setTitle(c.name); if (c.phone) setPhone(prettyPhone(c.phone)); }}>
+                  👤 {c.name}{c.phone ? '' : ' (numara yok)'}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         {kind === 'call' && (
           <>

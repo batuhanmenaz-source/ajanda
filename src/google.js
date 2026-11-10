@@ -217,15 +217,17 @@ export function timedEvent({ summary, description, start, minutes = 15, location
   };
 }
 
-export function allDayEvent({ summary, description, startDate, endDate, location }) {
+// remindMinutes: tüm gün etkinliğinde gün başından (00:00) kaç dakika önce bildirim gelsin
+export function allDayEvent({ summary, description, startDate, endDate, location, recurrence, remindMinutes }) {
   return {
     summary,
     description: description || '',
     ...(location ? { location } : {}),
+    ...(recurrence ? { recurrence: [recurrence] } : {}),
     start: { date: toDateInput(startDate) },
     end: { date: toDateInput(addDays(endDate, 1)) },
     transparency: 'transparent',
-    reminders: { useDefault: false, overrides: [] }
+    reminders: { useDefault: false, overrides: remindMinutes != null ? [{ method: 'popup', minutes: remindMinutes }] : [] }
   };
 }
 
