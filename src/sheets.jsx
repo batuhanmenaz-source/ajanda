@@ -4,6 +4,7 @@ import { parseQuick } from './parse.js';
 import { MARKETPLACES, BRANDS, DEFAULT_PREPS, mpColor } from './constants.js';
 import { toDateInput, toTimeInput, combine, whenLabel, addDays, startOfDay, fromDateInput, rangeLabel } from './dates.js';
 import { normalizePhone, prettyPhone, DEFAULT_LOVE_MESSAGE } from './whatsapp.js';
+import { currentLocationText, mapsLink } from './location.js';
 
 const EXAMPLES = ['yarın 10:00 HB fiyat güncelle', 'Cuma 15:00 kargo firmasını ara', 'not: Trendyol komisyon oranını kontrol et', '12-14 kasım Trendyol kampanyası'];
 
@@ -80,6 +81,30 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden 
   );
 }
 
+// ---------- Konum alanı ----------
+function LocationField({ id, value, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const useMine = async () => {
+    setBusy(true); setErr('');
+    try { onChange(await currentLocationText()); } catch (e) { setErr(e.message || 'Konum alınamadı.'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="field">
+      <label htmlFor={id}>Konum (isteğe bağlı)</label>
+      <div className="locrow">
+        <input id={id} type="text" autoComplete="off" placeholder="Yer adı ya da adres" value={value} onChange={(e) => onChange(e.target.value)} />
+        <button type="button" className="btn locbtn" onClick={useMine} disabled={busy} aria-label="Şu anki konumumu kullan">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
+          <span>{busy ? 'Bulunuyor…' : 'Konumum'}</span>
+        </button>
+      </div>
+      {err ? <span className="hint" style={{ color: 'var(--danger)' }}>{err}</span> : null}
+      {value && !err ? <a className="hint" href={mapsLink(value)} target="_blank" rel="noopener noreferrer">Haritada kontrol et ↗</a> : null}
+    </div>
+  );
+}
+
 // ---------- Hatırlatma / Arama ----------
 export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
   const isEdit = !!(initial && initial.id);
@@ -92,6 +117,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
   const [date, setDate] = useState(d0 ? toDateInput(d0) : '');
   const [time, setTime] = useState(d0 ? toTimeInput(d0) : '09:00');
   const [yarim, setYarim] = useState(!!initial.for_yarim);
+  const [loc, setLoc] = useState(initial.location || '');
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -100,7 +126,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
     setBusy(true);
     const due = date ? combine(date, time).toISOString() : null;
     try {
-      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim });
+      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...(loc.trim() || initial.location ? { location: loc.trim() || null } : {}) });
       else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim, missedId: initial.missedId });
     } finally { setBusy(false); }
   };
@@ -160,6 +186,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
             <MpSelect id="f-mp" value={mp} onChange={setMp} />
           </div>
         )}
+        {kind === 'reminder' && <LocationField id="f-loc" value={loc} onChange={setLoc} />}
         <p className="hint" style={{ margin: 0 }}>Tarih ve saat verilirse Google Takvim'deki "Ajanda" takvimine eklenir; bildirim telefonuna o saatte gelir.</p>
         <div className="actions">
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(kind === 'reminder' ? 'reminders' : 'calls', initial)}>Sil</button>}
@@ -232,6 +259,7 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
   const [notes, setNotes] = useState(initial.notes || '');
   const [preps, setPreps] = useState(DEFAULT_PREPS.join('\n'));
   const [kind, setKind] = useState(initial.kind === 'etkinlik' ? 'etkinlik' : 'kampanya');
+  const [loc, setLoc] = useState(initial.location || '');
   const isEvent = kind === 'etkinlik';
   const [busy, setBusy] = useState(false);
   const invalid = !name.trim() || !start || !end || end < start;
@@ -244,7 +272,7 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
     setBusy(true);
     try {
       await onSave(
-        { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind },
+        { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind, ...(loc.trim() || initial.location ? { location: loc.trim() || null } : {}) },
         isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
       );
     } finally { setBusy(false); }
@@ -289,6 +317,7 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
             <textarea id="c-preps" value={preps} onChange={(e) => setPreps(e.target.value)} />
           </div>
         )}
+        <LocationField id="c-loc" value={loc} onChange={setLoc} />
         <div className="field">
           <label htmlFor="c-notes">Not (isteğe bağlı)</label>
           <input id="c-notes" type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />

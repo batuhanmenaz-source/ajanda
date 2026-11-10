@@ -179,7 +179,12 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const addLocal = (table, rows) => setData((d) => ({ ...d, [table]: [...d[table], ...rows] }));
   const removeLocal = (table, id) => setData((d) => ({ ...d, [table]: d[table].filter((r) => r.id !== id), ...(table === 'campaigns' ? { campaign_tasks: d.campaign_tasks.filter((t) => t.campaign_id !== id) } : {}) }));
 
-  const fail = (e) => { console.error(e); say('İşlem yapılamadı. İnternet bağlantını kontrol edip tekrar dene.'); };
+  const fail = (e) => {
+    console.error(e);
+    const msg = (e && e.message) || '';
+    if (/location/.test(msg)) say('Kaydedilemedi: Konum için Supabase\'de 07 numaralı SQL\'i çalıştırman gerekiyor.');
+    else say('İşlem yapılamadı. İnternet bağlantını kontrol edip tekrar dene.');
+  };
 
   // ---------- Hatırlatma & arama ----------
   const saveItem = async (table, input) => {
@@ -272,7 +277,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       setSheet(null);
       say(row.kind === 'etkinlik' ? 'Etkinlik kaydedildi' : 'Kampanya kaydedildi');
     } catch (e) {
-      if (/kind/.test((e && e.message) || '')) { console.error(e); say('Kaydedilemedi: Supabase\'de 06 numaralı SQL\'i (etkinlik) çalıştırman gerekiyor.'); }
+      if (/location/.test((e && e.message) || '')) { console.error(e); say('Kaydedilemedi: Konum için Supabase\'de 07 numaralı SQL\'i çalıştırman gerekiyor.'); }
+      else if (/kind/.test((e && e.message) || '')) { console.error(e); say('Kaydedilemedi: Supabase\'de 06 numaralı SQL\'i (etkinlik) çalıştırman gerekiyor.'); }
       else fail(e);
     }
   };

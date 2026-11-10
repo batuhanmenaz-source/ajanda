@@ -14,7 +14,8 @@ export async function syncReminder(r) {
   return saveTimed(r.google_event_id, {
     summary: '🔔 ' + mpPrefix(r.marketplace) + r.title + heart(r),
     description: r.for_yarim ? 'Yarim ❤️' : 'Ajanda hatırlatması',
-    start: new Date(r.due_at)
+    start: new Date(r.due_at),
+    location: r.location || undefined
   });
 }
 
@@ -39,7 +40,8 @@ export async function syncCampaign(c) {
     summary: (isEvent ? '📅 ' : '📣 ') + (c.marketplace ? c.marketplace + ' · ' : '') + c.name,
     description: c.notes || (isEvent ? 'Ajanda etkinliği' : 'Ajanda kampanyası'),
     startDate: start,
-    endDate: end
+    endDate: end,
+    location: c.location || undefined
   });
 
   for (const id of c.prep_event_ids || []) await deleteEvent(id);

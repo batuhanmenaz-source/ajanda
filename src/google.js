@@ -184,21 +184,23 @@ export async function deleteEvent(id) {
   }
 }
 
-export function timedEvent({ summary, description, start, minutes = 15 }) {
+export function timedEvent({ summary, description, start, minutes = 15, location }) {
   const end = new Date(start.getTime() + minutes * 60000);
   return {
     summary,
     description: description || '',
+    ...(location ? { location } : {}),
     start: { dateTime: start.toISOString(), timeZone: TZ },
     end: { dateTime: end.toISOString(), timeZone: TZ },
     reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
   };
 }
 
-export function allDayEvent({ summary, description, startDate, endDate }) {
+export function allDayEvent({ summary, description, startDate, endDate, location }) {
   return {
     summary,
     description: description || '',
+    ...(location ? { location } : {}),
     start: { date: toDateInput(startDate) },
     end: { date: toDateInput(addDays(endDate, 1)) },
     transparency: 'transparent',

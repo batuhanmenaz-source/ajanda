@@ -401,3 +401,12 @@ button.pill { min-height: 32px; }
   .mcal-label .dot { display: inline-block; vertical-align: middle; margin: -1px 4px 0 0; }
   .mcal-more { font-size: 11px; font-weight: 600; color: var(--muted); text-align: left; }
 }
+
+/* Konum */
+.locrow { display: flex; gap: 8px; }
+.locrow input { flex: 1 1 auto; min-width: 0; }
+.locbtn { display: inline-flex; align-items: center; gap: 6px; border-radius: 12px; min-height: 48px; padding: 0 12px; flex: 0 0 auto; color: var(--accent); }
+.loclink { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--accent); text-decoration: none; max-width: 100%; }
+.loclink span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loclink.small { font-size: 12px; }
+.loclink:hover span { text-decoration: underline; }
