@@ -41,6 +41,34 @@ export function createSupabaseStore() {
       }));
       return out;
     },
+    // Yedek için bir tablonun tamamı (sayfalı)
+    async dumpTable(t) {
+      const rows = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase.from(t).select('*').order(t === 'app_settings' ? 'user_id' : 'id').range(from, from + PAGE - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+      return rows;
+    },
+    // Yedekten geri yükleme: kayıtlar bu hesaba yazılır, aynı kimlikli olanlar güncellenir
+    async restoreTable(t, rows) {
+      if (!rows || !rows.length) return 0;
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u.user.id;
+      let clean = rows.map((r) => ({ ...r, user_id: uid }));
+      let conflict = 'id';
+      if (t === 'app_settings') { conflict = 'user_id'; clean = clean.slice(0, 1); }
+      if (t === 'revenue') { conflict = 'user_id,day,marketplace'; clean = clean.map(({ id: _i, ...r }) => r); }
+      if (t === 'daily_notes') { conflict = 'user_id,note_date'; clean = clean.map(({ id: _i, ...r }) => r); }
+      if (t === 'habit_logs') { conflict = 'habit_id,day'; }
+      for (let i = 0; i < clean.length; i += 500) {
+        const { error } = await supabase.from(t).upsert(clean.slice(i, i + 500), { onConflict: conflict });
+        if (error) throw error;
+      }
+      return clean.length;
+    },
     // Ciro: verilen günden itibaren (sayfalı)
     async loadRevenue(fromDay) {
       const rows = [];
@@ -230,6 +258,14 @@ export function createDemoStore() {
       const r = { id: uid(), note_date, body }; db.daily_notes.push(r); save(); return r;
     },
     async getSettings() { return db.settings || {}; },
+    async dumpTable(t) { if (t === 'app_settings') return db.settings ? [db.settings] : []; return JSON.parse(JSON.stringify(db[t] || [])); },
+    async restoreTable(t, rows) {
+      if (t === 'app_settings') { db.settings = { ...(db.settings || {}), ...(rows[0] || {}) }; save(); return rows.length ? 1 : 0; }
+      const cur = db[t] || [];
+      const byId = new Map(cur.map((r) => [r.id, r]));
+      rows.forEach((r) => byId.set(r.id, { ...byId.get(r.id), ...r }));
+      db[t] = [...byId.values()]; save(); return rows.length;
+    },
     async loadRevenue(fromDay) { return db.revenue.filter((r) => r.day >= fromDay); },
     async loadRevenueDay(day) { return db.revenue.filter((r) => r.day === day); },
     async saveRevenueDay(day, entries) {

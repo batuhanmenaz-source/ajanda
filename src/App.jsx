@@ -8,7 +8,8 @@ import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES, DEFAULT_PREPS } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, whenLabel } from './dates.js';
 import { nextOccurrence } from './recur.js';
-import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason } from './google.js';
+import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError } from './google.js';
+import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign } from './sync.js';
 
 const TABS = [
@@ -81,6 +82,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const [revLoaded, setRevLoaded] = useState(false);
   const [revError, setRevError] = useState('');
   const [revTarget, setRevTarget] = useState(null);
+  // ---------- Yedekleme ----------
+  const [backup, setBackup] = useState({ last: null, status: 'idle', msg: '', loaded: false });
   const loadRevenue = useCallback(async () => {
     try {
       const rows = await store.loadRevenue(toDateInput(addDays(startOfDay(new Date()), -430)));
@@ -123,7 +126,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); }
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -466,6 +469,53 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     }
   };
 
+  const runDriveBackup = useCallback(async (silent) => {
+    setBackup((b) => ({ ...b, status: 'running', msg: '' }));
+    try {
+      const obj = await collectBackup(store, email);
+      await uploadToDrive(obj);
+      const at = new Date().toISOString();
+      try { await store.saveSettings({ last_backup_at: at }); } catch { /* sütun yoksa sadece bu cihazda */ }
+      try { localStorage.setItem('ajanda-last-backup', at); } catch { /* yok say */ }
+      setBackup((b) => ({ ...b, last: at, status: 'ok' }));
+      if (!silent) say('Google Drive\'a yedeklendi ✓');
+    } catch (e) {
+      console.error(e);
+      const status = e instanceof DriveScopeError ? 'needs_consent' : e.code === 'drive_api_disabled' ? 'api_disabled' : 'error';
+      setBackup((b) => ({ ...b, status, msg: e.message || '' }));
+      if (!silent) say(status === 'needs_consent' ? 'Drive yedeği için Google\'ı yeniden bağlaman gerekiyor.' : status === 'api_disabled' ? 'Google Cloud\'da Drive API kapalı.' : 'Yedekleme başarısız oldu.');
+    }
+  }, [store, email, say]);
+
+  // Haftada bir otomatik yedek (Google bağlıyken, uygulama açıldığında)
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (demo || google !== 'ok' || !backup.loaded || autoTried.current) return;
+    autoTried.current = true;
+    let last = backup.last;
+    try { const l = localStorage.getItem('ajanda-last-backup'); if (l && (!last || l > last)) last = l; } catch { /* yok say */ }
+    if (!last || Date.now() - new Date(last).getTime() > 7 * 86400000) runDriveBackup(true);
+  }, [demo, google, backup.loaded, backup.last, runDriveBackup]);
+
+  const downloadBackup = async () => {
+    try { const obj = await collectBackup(store, email); downloadJSON(obj, backupName()); say('Yedek dosyası indirildi'); }
+    catch (e) { console.error(e); say('Yedek dosyası oluşturulamadı.'); }
+  };
+  const restoreBackup = async (file) => {
+    let b;
+    try { b = parseBackup(await file.text()); } catch (e) { say(e.message && e.message.includes('Ajanda') ? e.message : 'Dosya okunamadı.'); return; }
+    if (!window.confirm('Bu yedek geri yüklensin mi?\n\n' + new Date(b.exported_at).toLocaleString('tr-TR') + ' tarihli yedek\n' + summarize(b) + '\n\nMevcut kayıtların silinmez; yedekteki kayıtlar eklenir, aynı olanlar yedektekiyle güncellenir.')) return;
+    setSheet(null);
+    say('Geri yükleniyor…');
+    let n = 0; const failed = [];
+    for (const t of BACKUP_TABLES) {
+      if (!b.tables[t]) continue;
+      try { n += await store.restoreTable(t, b.tables[t]); } catch (e) { console.error(t, e); failed.push(t); }
+    }
+    await load(true); await loadRevenue();
+    say(failed.length ? n + ' kayıt yüklendi; yüklenemeyen: ' + failed.join(', ') : n + ' kayıt geri yüklendi ✓');
+  };
+
   const saveYarimSettings = async (patch) => {
     try {
       const s = await store.saveSettings(patch);
@@ -608,6 +658,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       )}
       {sheet && sheet.kind === 'account' && (
         <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
+          backup={backup} onBackupNow={() => runDriveBackup(false)} onDownload={downloadBackup} onRestore={restoreBackup}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}
 

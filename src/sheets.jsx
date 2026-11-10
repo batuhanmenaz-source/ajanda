@@ -532,8 +532,37 @@ export function MissedSetupSheet({ token, onClose, onCreateToken, onTest }) {
   );
 }
 
+// ---------- Yedekleme ----------
+function BackupSection({ demo, backup, onBackupNow, onDownload, onRestore, onReconnect }) {
+  const fileRef = useRef(null);
+  const last = backup.last ? new Date(backup.last) : null;
+  const msg = {
+    running: 'Yedekleniyor…',
+    ok: 'Yedeklendi ✓',
+    needs_consent: 'Drive izni yok. Aşağıdaki "Google\'ı yeniden bağla" ile bir kez izin ver.',
+    api_disabled: 'Google Cloud\'da "Google Drive API" kapalı. Açılınca otomatik yedek başlar.',
+    error: 'Yedekleme başarısız: ' + (backup.msg || '')
+  }[backup.status];
+  return (
+    <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+        <b style={{ fontSize: 15 }}>Yedekleme</b>
+        <span className="hint">{last ? 'Son: ' + whenLabel(last) : 'Henüz yedek yok'}</span>
+      </div>
+      <p className="hint" style={{ margin: 0 }}>{demo ? 'Örnek modda Drive yedeği kapalı; dosya olarak indirebilirsin.' : 'Tüm verilerin haftada bir kendiliğinden Google Drive\'ındaki "Ajanda Yedekleri" klasörüne kaydedilir (son 12 yedek tutulur).'}</p>
+      {msg ? <p className="hint" style={{ margin: 0, color: backup.status === 'ok' ? 'var(--green)' : backup.status === 'running' ? 'var(--ink-2)' : 'var(--danger)' }}>{msg}</p> : null}
+      <div className="typechips">
+        {!demo && <button type="button" className="btn" disabled={backup.status === 'running'} onClick={backup.status === 'needs_consent' ? onReconnect : onBackupNow}>{backup.status === 'needs_consent' ? 'Google\'ı yeniden bağla' : 'Şimdi Drive\'a yedekle'}</button>}
+        <button type="button" className="btn" onClick={onDownload}>Dosya olarak indir</button>
+        <button type="button" className="btn" onClick={() => fileRef.current && fileRef.current.click()}>Yedekten geri yükle</button>
+        <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) onRestore(f); }} />
+      </div>
+    </div>
+  );
+}
+
 // ---------- Hesap ----------
-export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, yarimHidden, onToggleYarim }) {
+export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
   const gText = { ok: 'Bağlı', checking: 'Kontrol ediliyor…', needs_login: 'Yeniden bağlanmalı', error: 'Ulaşılamıyor', off: 'Örnek modda kapalı' }[google] || google;
   return (
     <Sheet title="Hesap" onClose={onClose}>
@@ -541,6 +570,7 @@ export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefr
         <div className="row timeline"><span className="tcol">Hesap</span><span>{demo ? 'Örnek veri (demo)' : email}</span></div>
         <div className="row timeline"><span className="tcol">Google</span><span>{gText}</span></div>
       </div>
+      <BackupSection demo={demo} backup={backup} onBackupNow={onBackupNow} onDownload={onDownload} onRestore={onRestore} onReconnect={onReconnect} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!demo && <button type="button" className="btn big" onClick={onReconnect}>Google Takvim'i yeniden bağla</button>}
         <button type="button" className="btn big" onClick={onMissedSetup}>Telefon bağlantısı (cevapsız çağrılar)</button>

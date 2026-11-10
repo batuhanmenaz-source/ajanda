@@ -94,6 +94,26 @@ async function gfetch(path, opts = {}, retried = false) {
   return j;
 }
 
+// Drive gibi diğer Google API'leri için (tam adresle). Yetki eksikse DriveScopeError fırlatır.
+export class DriveScopeError extends Error {}
+export async function googleRaw(url, opts = {}, retried = false) {
+  const token = await accessToken(retried);
+  const r = await fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + token, ...(opts.headers || {}) } });
+  if (r.status === 401 && !retried) return googleRaw(url, opts, true);
+  if (r.status === 401) throw new GoogleAuthError('unauthorized');
+  if (r.status === 403) {
+    const j = await r.json().catch(() => ({}));
+    const reasons = JSON.stringify(j.error || {});
+    if (/insufficient|SCOPE_INSUFFICIENT|insufficientPermissions|ACCESS_TOKEN_SCOPE/i.test(reasons)) throw new DriveScopeError('drive_scope');
+    if (/accessNotConfigured|SERVICE_DISABLED|has not been used|is disabled/i.test(reasons)) { const e = new Error('drive_api_disabled'); e.code = 'drive_api_disabled'; throw e; }
+    throw new Error((j.error && j.error.message) || 'forbidden');
+  }
+  if (r.status === 204) return null;
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error((j.error && j.error.message) || 'google_error'); e.status = r.status; throw e; }
+  return j;
+}
+
 // Bağlantıyı ve takvim iznini birlikte kontrol eder
 export async function checkGoogle() {
   await accessToken();

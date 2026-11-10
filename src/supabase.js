@@ -12,7 +12,8 @@ export const supabase = configured
     })
   : null;
 
-export const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar';
+// Takvim + yalnız uygulamanın kendi oluşturduğu Drive dosyaları (yedekler için)
+export const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file';
 
 export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
