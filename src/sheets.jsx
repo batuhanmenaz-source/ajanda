@@ -25,7 +25,7 @@ function YarimToggle({ on, onClick }) {
   );
 }
 
-export function QuickAdd({ onClose, onSave, onDetail, defaultYarim }) {
+export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden }) {
   const [q, setQ] = useState('');
   const [typeOverride, setTypeOverride] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +35,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim }) {
   const [yarimOverride, setYarimOverride] = useState(defaultYarim ? true : null);
   const p = useMemo(() => parseQuick(q), [q]);
   const type = typeOverride || p.type;
-  const yarim = yarimOverride !== null ? yarimOverride : p.yarim;
+  const yarim = yarimHidden ? false : (yarimOverride !== null ? yarimOverride : p.yarim);
 
   const build = () => ({ ...p, type, yarim });
 
@@ -57,7 +57,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim }) {
           {['Hatırlatma', 'Arama', 'Not'].map((t) => (
             <button key={t} type="button" className={'chip' + (type === t ? ' on' : '')} onClick={() => setTypeOverride(t)} aria-pressed={type === t}>{t}</button>
           ))}
-          {type !== 'Not' && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
+          {type !== 'Not' && !yarimHidden && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
         </div>
         {q.trim() ? (
           <div className="parsed">
@@ -81,7 +81,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim }) {
 }
 
 // ---------- Hatırlatma / Arama ----------
-export function ItemSheet({ initial, onClose, onSave, onDelete }) {
+export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
   const isEdit = !!(initial && initial.id);
   const [kind, setKind] = useState(initial.kind || 'reminder');
   const d0 = initial.due_at ? new Date(initial.due_at) : null;
@@ -148,10 +148,12 @@ export function ItemSheet({ initial, onClose, onSave, onDelete }) {
           ))}
           <button type="button" className="chip" onClick={() => setDate('')}>Tarihsiz</button>
         </div>
+        {yarimHidden && !yarim ? null : (
         <div className="typechips">
           <YarimToggle on={yarim} onClick={() => setYarim(!yarim)} />
           <span className="hint" style={{ alignSelf: 'center' }}>{yarim ? 'Yarim alanında görünür, bildirimin sonunda ❤️ olur' : 'Yarim ile ilgiliyse işaretle'}</span>
         </div>
+        )}
         {kind === 'reminder' && !yarim && (
           <div className="field">
             <label htmlFor="f-mp">Pazaryeri</label>
@@ -360,7 +362,7 @@ export function MissedSetupSheet({ token, onClose, onCreateToken, onTest }) {
 }
 
 // ---------- Hesap ----------
-export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup }) {
+export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, yarimHidden, onToggleYarim }) {
   const gText = { ok: 'Bağlı', checking: 'Kontrol ediliyor…', needs_login: 'Yeniden bağlanmalı', error: 'Ulaşılamıyor', off: 'Örnek modda kapalı' }[google] || google;
   return (
     <Sheet title="Hesap" onClose={onClose}>
@@ -371,6 +373,7 @@ export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefr
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!demo && <button type="button" className="btn big" onClick={onReconnect}>Google Takvim'i yeniden bağla</button>}
         <button type="button" className="btn big" onClick={onMissedSetup}>Telefon bağlantısı (cevapsız çağrılar)</button>
+        <button type="button" className="btn big" onClick={onToggleYarim} aria-pressed={!yarimHidden}>{yarimHidden ? 'Yarim alanını göster' : 'Yarim alanını bu cihazda gizle'}</button>
         <button type="button" className="btn big" onClick={onRefresh}>Verileri yenile</button>
         {!demo && <button type="button" className="btn big danger" onClick={onSignOut}>Çıkış yap</button>}
       </div>

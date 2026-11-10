@@ -64,6 +64,17 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
   // ---------- Yarim: WhatsApp ayarları ve kalp sayacı ----------
   const [love, setLove] = useState({ phone: '', message: '', count: 0, token: '' });
+
+  // Yarim alanı bu cihazda gizli mi? (cihaza özel; telefonda açık, iş bilgisayarında kapalı olabilir)
+  const [yarimHidden, setYarimHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-yarim-hidden') === '1'; } catch { return false; } });
+  const setYarimHidden = (v) => {
+    setYarimHiddenState(v);
+    try { if (v) localStorage.setItem('ajanda-yarim-hidden', '1'); else localStorage.removeItem('ajanda-yarim-hidden'); } catch { /* yok say */ }
+  };
+  // Gizliyken Yarim kayıtları hiçbir listede görünmez
+  const viewData = useMemo(() => (yarimHidden
+    ? { ...data, reminders: data.reminders.filter((r) => !r.for_yarim), calls: data.calls.filter((c) => !c.for_yarim) }
+    : data), [data, yarimHidden]);
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -305,6 +316,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     newYarim: () => setSheet({ kind: 'quick', yarim: true }),
     openYarimSettings: () => setSheet({ kind: 'yarimSettings' }),
     openYarim: () => setSheet({ kind: 'yarim' }),
+    hideYarim: () => { setYarimHidden(true); setSheet(null); say('Yarim alanı bu cihazda gizlendi. Geri açmak için: sağ üstteki etiket › Hesap'); },
     openMissedSetup: () => setSheet({ kind: 'missedSetup' }),
     missedDone: async (m) => {
       patchLocal('missed_calls', m.id, { handled: true });
@@ -445,11 +457,11 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={data} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} />}
-              {tab === 'takvim' && <CalendarScreen data={data} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} yarimHidden={yarimHidden} />}
+              {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'kampanya' && <CampaignsScreen data={data} actions={actions} />}
               {tab === 'notlar' && <NotesScreen data={data} now={now} actions={actions} />}
-              {tab === 'aramalar' && <CallsScreen data={data} now={now} actions={actions} missedConfigured={!!love.token} />}
+              {tab === 'aramalar' && <CallsScreen data={viewData} now={now} actions={actions} missedConfigured={!!love.token} />}
             </>
           )}
         </main>
@@ -465,8 +477,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         ))}
       </nav>
 
-      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} />}
-      {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} />}
+      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} />}
+      {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} />}
       {sheet && sheet.kind === 'yarim' && (
@@ -481,7 +493,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
       )}
       {sheet && sheet.kind === 'account' && (
-        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })}
+        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}
 

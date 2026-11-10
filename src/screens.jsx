@@ -202,6 +202,7 @@ export function YarimPanel({ data, now, actions, love }) {
         </div>
       ) : <p className="yarim-empty">Önümüzdeki günlerde onunla ilgili bir şey yok. Özel günleri, sürprizleri, aranacakları buraya ekleyebilirsin.</p>}
       {openCount ? <span className="yarim-foot">{openCount} açık · önümüzdeki 7 gün</span> : null}
+      <button type="button" className="linkbtn yarim-hide" onClick={actions.hideYarim}>Bu cihazda gizle</button>
     </div>
   );
 }
@@ -276,7 +277,7 @@ export function MissedCallsSection({ missed, now, actions, showEmpty, configured
 }
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: allData, events, google, now, actions, goTab, love }) {
+export function TodayScreen({ data: allData, events, google, now, actions, goTab, love, yarimHidden }) {
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} />;
   const today = startOfDay(now);
   const open = (arr) => arr.filter((x) => !x.done);
@@ -302,7 +303,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-    <div className="today-top">
+    <div className={'today-top' + (yarimHidden ? ' solo' : '')}>
         <section className="hero">
           <span className="k">Sıradaki</span>
           {next ? (
@@ -317,7 +318,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
             </>
           )}
         </section>
-        <YarimTile data={allData} now={now} actions={actions} love={love} />
+        {yarimHidden ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
     <div className="grid-2">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -422,7 +423,7 @@ function UpcomingDays({ data, events, google, now, actions, count = 3 }) {
 }
 
 // ---------- TAKVİM ----------
-export function CalendarScreen({ data, events, google, now, day, setDay, actions }) {
+export function CalendarScreen({ data, events, google, now, day, setDay, actions, yarimHidden }) {
   const ws = weekStart(day);
   const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
   const items = dayItems(day, { data, events });
@@ -450,7 +451,7 @@ export function CalendarScreen({ data, events, google, now, day, setDay, actions
         })}
       </div>
       <div className="legend">
-        {Object.entries(SRC_COLORS).map(([k, c]) => <span key={k} className="tag"><span className="dot" style={{ background: c }} />{k}</span>)}
+        {Object.entries(SRC_COLORS).filter(([k]) => !(yarimHidden && k === 'Yarim')).map(([k, c]) => <span key={k} className="tag"><span className="dot" style={{ background: c }} />{k}</span>)}
       </div>
       <Section title={dayLabel(day, now) === fmtShort(day) ? fmtLong(day) : dayLabel(day, now) + ' · ' + fmtShort(day)} action={<button type="button" className="linkbtn" onClick={() => actions.newItemOn(day)}>+ Bu güne ekle</button>}>
         <div className="card list">
