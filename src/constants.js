@@ -12,7 +12,8 @@ export const MARKETPLACES = [
 
 export const BRANDS = ['Missha', 'ATOPALM', 'ZEROID', 'REAL BARRIER', 'DERMA:B', 'DumiDang', 'Orjena', 'Skin79', 'Neoparm'];
 
-export const DEFAULT_PREPS = ['Fiyat listesi', 'Ürün görselleri', 'Stok kontrolü', 'Reklam bütçesi'];
+// Standart kampanya hazırlık adımları (her yeni kampanyaya otomatik eklenir)
+export const DEFAULT_PREPS = ['Fiyat listesi oluştur', 'Ürün kurgularını kur', 'Mağaza reklamlarını kur', 'Influencer reklamlarını kur', 'Mağaza tasarımını güncelle'];
 
 export const SRC_COLORS = {
   Google: '#1971C2',
