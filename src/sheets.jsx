@@ -39,8 +39,11 @@ function condense(t) {
   return first.replace(/\s+/g, ' ');
 }
 
-export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden, shared }) {
-  const [q, setQ] = useState(() => condense(shared));
+export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden, shared: sharedProp }) {
+  // Paylaşılan ya da panodan yapıştırılan metin
+  const [shared, setShared] = useState(sharedProp || '');
+  const [clipErr, setClipErr] = useState('');
+  const [q, setQ] = useState(() => condense(sharedProp));
   const sharedLong = !!shared && condense(shared) !== (shared || '').trim();
   const [typeOverride, setTypeOverride] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -85,7 +88,8 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
         ) : null}
         <div className="field">
           <label htmlFor="quick">{shared ? 'Başlığı düzenle, türünü seç; tarih ve saati metinden kendisi anlar.' : 'Yaz; tarih, saat, pazaryeri ve türü kendisi anlar.'}</label>
-          <input id="quick" ref={inputRef} type="text" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ör. yarın 10:00 HB fiyat güncelle" enterKeyHint="done" />
+          <input id="quick" ref={inputRef} type="text" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)}
+            onPaste={(e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; if (!shared && (t.length > 90 || /\n/.test(t))) { e.preventDefault(); setShared(t.trim().slice(0, 4000)); setQ(condense(t)); } }} placeholder="ör. yarın 10:00 HB fiyat güncelle" enterKeyHint="done" />
         </div>
         <div className="typechips" role="group" aria-label="Tür">
           {['Hatırlatma', 'Arama', 'Not', 'Kampanya', 'Etkinlik'].map((t) => (
@@ -101,6 +105,20 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
           </div>
         ) : (
           <div className="examples">
+            <button type="button" className="paste-btn" onClick={async () => {
+              setClipErr('');
+              try {
+                const t = ((await navigator.clipboard.readText()) || '').trim();
+                if (!t) { setClipErr('Panoda metin yok. Önce mesajı kopyala.'); return; }
+                setShared(t.slice(0, 4000)); setQ(condense(t));
+              } catch {
+                setClipErr('Panoya erişilemedi. Yazı kutusuna uzun basıp "Yapıştır" diyebilirsin.');
+              }
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /></svg>
+              Kopyaladığım mesajı yapıştır
+            </button>
+            {clipErr ? <span className="hint" style={{ color: 'var(--danger)' }}>{clipErr}</span> : null}
             <span className="hint">Örnekler</span>
             {EXAMPLES.map((x) => <button key={x} type="button" onClick={() => setQ(x)}>{x}</button>)}
           </div>

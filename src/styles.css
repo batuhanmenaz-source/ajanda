@@ -448,3 +448,5 @@ button.pill { min-height: 32px; }
 .shared-box { background: #F4F3EF; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
 .shared-box .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); }
 .shared-box p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 140px; overflow-y: auto; }
+
+.examples .paste-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 12px; border: 1px dashed #B9C3EC; background: var(--accent-soft); color: var(--accent); font-size: 15px; font-weight: 600; cursor: pointer; }
