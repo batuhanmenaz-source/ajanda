@@ -34,15 +34,18 @@ export async function syncCall(c) {
 export async function syncCampaign(c) {
   const start = fromDateInput(c.start_date);
   const end = fromDateInput(c.end_date);
+  const isEvent = c.kind === 'etkinlik';
   const mainId = await saveAllDay(c.google_event_id, {
-    summary: '📣 ' + (c.marketplace ? c.marketplace + ' · ' : '') + c.name,
-    description: c.notes || 'Ajanda kampanyası',
+    summary: (isEvent ? '📅 ' : '📣 ') + (c.marketplace ? c.marketplace + ' · ' : '') + c.name,
+    description: c.notes || (isEvent ? 'Ajanda etkinliği' : 'Ajanda kampanyası'),
     startDate: start,
     endDate: end
   });
 
   for (const id of c.prep_event_ids || []) await deleteEvent(id);
   const prepIds = [];
+  // Etkinliklerde hazırlık hatırlatması yok
+  if (isEvent) return { google_event_id: mainId, prep_event_ids: [] };
   const today = startOfDay(new Date());
   for (const n of [3, 1]) {
     const day = addDays(start, -n);

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
-import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen, YarimPanel } from './screens.jsx';
+import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
 import { Sheet } from './ui.jsx';
 import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet } from './sheets.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
-import { MARKETPLACES } from './constants.js';
+import { MARKETPLACES, DEFAULT_PREPS } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput } from './dates.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason } from './google.js';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign } from './sync.js';
@@ -266,17 +266,20 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       const ids = await gsync(() => syncCampaign(row));
       if (ids) { await store.update('campaigns', row.id, ids); patchLocal('campaigns', row.id, ids); }
       setSheet(null);
-      say('Kampanya kaydedildi');
-    } catch (e) { fail(e); }
+      say(row.kind === 'etkinlik' ? 'Etkinlik kaydedildi' : 'Kampanya kaydedildi');
+    } catch (e) {
+      if (/kind/.test((e && e.message) || '')) { console.error(e); say('Kaydedilemedi: Supabase\'de 06 numaralı SQL\'i (etkinlik) çalıştırman gerekiyor.'); }
+      else fail(e);
+    }
   };
   const deleteCampaign = async (c) => {
-    if (!window.confirm('"' + c.name + '" kampanyası ve hazırlık adımları silinsin mi?')) return;
+    if (!window.confirm('"' + c.name + '" ' + (c.kind === 'etkinlik' ? 'etkinliği' : 'kampanyası ve hazırlık adımları') + ' silinsin mi?')) return;
     try {
       await gsync(() => unsyncCampaign(c));
       await store.remove('campaigns', c.id);
       removeLocal('campaigns', c.id);
       setSheet(null);
-      say('Kampanya silindi');
+      say(c.kind === 'etkinlik' ? 'Etkinlik silindi' : 'Kampanya silindi');
     } catch (e) { fail(e); }
   };
   const toggleTask = async (t) => {
@@ -293,7 +296,14 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   // ---------- Hızlı ekle ----------
   const quickSave = async (p) => {
     const due = p.date ? p.date.toISOString() : null;
-    if (p.type === 'Not') {
+    if (p.type === 'Kampanya' || p.type === 'Etkinlik') {
+      const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
+      const en = p.endDate ? startOfDay(p.endDate) : st;
+      await saveCampaign(
+        { name: p.title || (p.type === 'Kampanya' ? 'Kampanya' : 'Etkinlik'), marketplace: p.mp || null, start_date: toDateInput(st), end_date: toDateInput(en), notes: null, kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik' },
+        p.type === 'Kampanya' ? DEFAULT_PREPS : null
+      );
+    } else if (p.type === 'Not') {
       await saveNote({ marketplace: p.mp || null, brand: p.brand || null, title: p.title || 'Not', body: '' });
       setTab('notlar');
     } else if (p.type === 'Arama') {
@@ -303,7 +313,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     }
   };
   const quickDetail = (p) => {
-    if (p.type === 'Not') setSheet({ kind: 'note', item: { marketplace: p.mp, brand: p.brand, title: p.title } });
+    if (p.type === 'Kampanya' || p.type === 'Etkinlik') {
+      const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
+      setSheet({ kind: 'campaign', item: { name: p.title, marketplace: p.mp, start_date: toDateInput(st), end_date: toDateInput(p.endDate ? startOfDay(p.endDate) : st), kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik' } });
+    } else if (p.type === 'Not') setSheet({ kind: 'note', item: { marketplace: p.mp, brand: p.brand, title: p.title } });
     else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim } });
   };
 
@@ -344,6 +357,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     },
     newItemOn: (d) => { const x = new Date(d); x.setHours(9, 0, 0, 0); setSheet({ kind: 'item', item: { kind: 'reminder', due_at: x.toISOString() } }); },
     openCampaign: (c) => setSheet({ kind: 'campaign', item: c }),
+    newEventOn: (d) => setSheet({ kind: 'campaign', item: { start_date: toDateInput(d), end_date: toDateInput(d), kind: 'etkinlik' } }),
+    openMarketplace: (name) => setSheet({ kind: 'mp', name }),
+    newReminderFor: (name) => setSheet({ kind: 'item', item: { kind: 'reminder', marketplace: name } }),
     openNote: (n) => setSheet({ kind: 'note', item: n }),
     toggleTask, addTask, deleteTask, saveDaily
   };
@@ -412,6 +428,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     off: { text: 'Örnek mod', color: '#B8B5AD' }
   }[google];
 
+  const mpCounts = marketplaceCounts(viewData, now);
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -427,7 +445,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <div>
           <div className="side-label">Pazaryerleri</div>
           {MARKETPLACES.map((m) => (
-            <div key={m.name} className="side-mp"><span className="dot" style={{ background: m.color, width: 9, height: 9 }} />{m.name}</div>
+            <button key={m.name} type="button" className="side-mp" onClick={() => setSheet({ kind: 'mp', name: m.name })}>
+              <span className="dot" style={{ background: m.color, width: 9, height: 9 }} /><span style={{ flex: '1 1 auto' }}>{m.name}</span>
+              {mpCounts[m.name] ? <span className="mp-count">{mpCounts[m.name]}</span> : null}
+            </button>
           ))}
         </div>
         <button type="button" className={'pill' + (google === 'needs_login' ? ' warn' : '')} style={{ marginTop: 'auto', justifyContent: 'flex-start' }} onClick={() => setSheet({ kind: 'account' })}>
@@ -484,6 +505,11 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'yarim' && (
         <Sheet title="Yarim" onClose={() => setSheet(null)}>
           <YarimPanel data={data} now={now} actions={actions} love={love} />
+        </Sheet>
+      )}
+      {sheet && sheet.kind === 'mp' && (
+        <Sheet title={sheet.name} onClose={() => setSheet(null)}>
+          <MarketplacePanel name={sheet.name} data={viewData} now={now} actions={actions} />
         </Sheet>
       )}
       {sheet && sheet.kind === 'missedSetup' && (

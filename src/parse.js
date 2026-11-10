@@ -37,8 +37,28 @@ export function parseQuick(text, now = new Date()) {
 
   // Tarih
   let day = null;
+  let endDay = null;
   const today = startOfDay(now);
-  if (hasWord(s, 'bugün')) { day = today; removals.push(/bugün/i); }
+  const MW = '(' + MONTH_WORDS.join('|') + ")[a-zçğıöşü']*";
+  // Aralık: "10-12 kasım", "10 kasım - 2 aralık", "10.11-12.11"
+  const rSame = s.match(new RegExp('\\s(\\d{1,2})\\s*[-–]\\s*(\\d{1,2})\\s+' + MW));
+  const rTwo = s.match(new RegExp('\\s(\\d{1,2})\\s+' + MW + '\\s*[-–]\\s*(\\d{1,2})\\s+' + MW));
+  const rNum = s.match(/\s(\d{1,2})[./](\d{1,2})\s*[-–]\s*(\d{1,2})[./](\d{1,2})(?=[\s,]|$)/);
+  const mk = (d, mo) => { let x = new Date(today.getFullYear(), mo, d); if (x < addDays(today, -30)) x = new Date(today.getFullYear() + 1, mo, d); return x; };
+  if (rTwo) {
+    day = mk(+rTwo[1], MONTH_WORDS.indexOf(rTwo[2])); endDay = mk(+rTwo[3], MONTH_WORDS.indexOf(rTwo[4]));
+    removals.push(rTwo[0].trim());
+  } else if (rSame) {
+    const mo = MONTH_WORDS.indexOf(rSame[3]);
+    day = mk(+rSame[1], mo); endDay = mk(+rSame[2], mo);
+    removals.push(rSame[0].trim());
+  } else if (rNum) {
+    day = mk(+rNum[1], +rNum[2] - 1); endDay = mk(+rNum[3], +rNum[4] - 1);
+    removals.push(rNum[0].trim());
+  }
+  if (endDay && endDay < day) endDay = new Date(endDay.getFullYear() + 1, endDay.getMonth(), endDay.getDate());
+  if (day) { /* aralık bulundu */ }
+  else if (hasWord(s, 'bugün')) { day = today; removals.push(/bugün/i); }
   else if (hasWord(s, 'yarından sonra') || hasWord(s, 'öbür gün')) { day = addDays(today, 2); removals.push(/yarından sonra|öbür gün/i); }
   else if (hasWord(s, 'yarın')) { day = addDays(today, 1); removals.push(/yarın/i); }
   else {
@@ -98,6 +118,18 @@ export function parseQuick(text, now = new Date()) {
     date.setHours(hasTime ? hour : 9, hasTime ? minute : 0, 0, 0);
   }
 
+  // Süre: "3 gün", "3 günlük"
+  const dur = s.match(/\s(\d{1,2})\s*gün(lük)?(?=[\s,.]|$)/);
+  if (dur && !endDay && +dur[1] >= 2) {
+    const st = day || addDays(today, 0);
+    day = st; endDay = addDays(st, +dur[1] - 1);
+    removals.push(new RegExp(dur[1] + '\\s*gün(lük)?', 'i'));
+  }
+  if (endDay) {
+    type = /kampanya/.test(s) ? 'Kampanya' : 'Etkinlik';
+    date = new Date(day); date.setHours(9, 0, 0, 0);
+  }
+
   // Pazaryeri
   let mp = '';
   for (const [w, name] of MP_WORDS) {
@@ -122,5 +154,5 @@ export function parseQuick(text, now = new Date()) {
   title = title.replace(/\s+/g, ' ').replace(/^[\s,.;:-]+|[\s,;:-]+$/g, '').trim();
   if (title) title = title.charAt(0).toLocaleUpperCase('tr-TR') + title.slice(1);
 
-  return { type, date, hasTime, mp, brand, title, yarim };
+  return { type, date, hasTime, mp, brand, title, yarim, endDate: endDay };
 }

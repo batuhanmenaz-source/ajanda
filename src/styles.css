@@ -360,3 +360,12 @@ button.pill { min-height: 32px; }
 /* Yarim gizlenince üst sıra tek sütun */
 .today-top.solo { grid-template-columns: minmax(0, 1fr); }
 .yarim-hide { align-self: center; color: #7A2342; font-size: 13px; }
+
+/* Pazaryerleri */
+.mp-count { font-size: 11px; font-weight: 700; background: var(--chip); color: var(--ink-2); border-radius: 999px; padding: 1px 7px; margin-left: 2px; font-variant-numeric: tabular-nums; }
+.chip .mp-count { background: var(--track); }
+@media (min-width: 960px) {
+  .sidenav + div .side-mp, .side-mp { width: 100%; border: 0; background: transparent; border-radius: 8px; padding: 0 8px; margin: 0 -8px; min-height: 34px; cursor: pointer; text-align: left; font-size: 14px; color: var(--ink); width: calc(100% + 16px); }
+  .side-mp:hover { background: var(--chip); }
+  .mp-strip { display: none; }
+}

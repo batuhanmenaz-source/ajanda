@@ -45,7 +45,16 @@ export function dayItems(day, { data, events }) {
   data.campaigns.forEach((c) => {
     const s = fromDateInput(c.start_date);
     const e = fromDateInput(c.end_date);
-    if (day >= s && day <= e) out.push({ key: 'k' + c.id, time: 'Tüm gün', title: c.name + (sameDay(day, s) ? ' başlıyor' : sameDay(day, e) ? ' son gün' : ' aktif'), src: 'Kampanya', color: SRC_COLORS.Kampanya, sub: c.marketplace, item: c, kind: 'campaign' });
+    const isEvent = c.kind === 'etkinlik';
+    const multi = !sameDay(s, e);
+    const total = daysBetween(s, e) + 1;
+    const nth = daysBetween(s, day) + 1;
+    if (day >= s && day <= e) out.push({
+      key: 'k' + c.id, time: 'Tüm gün',
+      title: c.name + (!multi ? '' : sameDay(day, s) ? ' başlıyor' : sameDay(day, e) ? ' son gün' : isEvent ? ' (' + nth + '/' + total + '. gün)' : ' aktif'),
+      src: isEvent ? 'Etkinlik' : 'Kampanya', color: isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, sub: (c.marketplace || '') + (multi ? (c.marketplace ? ' · ' : '') + rangeLabel(s, e) : ''), item: c, kind: 'campaign'
+    });
+    if (isEvent) return;
     const d = daysBetween(day, s);
     if (d === 1 || d === 3) out.push({ key: 'kp' + c.id + d, time: '09:00', title: 'Hazırlık: ' + c.name + (d === 1 ? ' (yarın başlıyor)' : ' (3 gün kaldı)'), src: 'Kampanya', color: SRC_COLORS.Kampanya, sub: c.marketplace, item: c, kind: 'campaign' });
   });
@@ -92,13 +101,14 @@ function CallRow({ c, now, onToggle, onOpen, showDay }) {
 }
 
 function CampaignMini({ c, tasks, onOpen }) {
+  const isEvent = c.kind === 'etkinlik';
   const ts = tasksOf(tasks, c.id);
   const st = campaignStatus(c);
   return (
     <div className="card camp">
       <div className="camp-head">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-          <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: mpColor(c.marketplace) }} />{c.marketplace || 'Genel'} · {rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date))}</span>
+          <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: mpColor(c.marketplace) }} />{isEvent ? 'Etkinlik · ' : ''}{c.marketplace || (isEvent ? '' : 'Genel')}{c.marketplace || !isEvent ? ' · ' : ''}{rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date))}</span>
           <button type="button" className="name" onClick={() => onOpen(c)}>{c.name}</button>
         </div>
         <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
@@ -276,6 +286,71 @@ export function MissedCallsSection({ missed, now, actions, showEmpty, configured
   );
 }
 
+// ---------- PAZARYERİ ----------
+export function marketplaceCounts(data, now) {
+  const today = toDateInput(startOfDay(now));
+  const out = {};
+  for (const m of MARKETPLACES) out[m.name] = 0;
+  data.reminders.forEach((r) => { if (!r.done && r.marketplace && out[r.marketplace] !== undefined) out[r.marketplace]++; });
+  data.campaigns.forEach((c) => { if (c.end_date >= today && c.marketplace && out[c.marketplace] !== undefined) out[c.marketplace]++; });
+  return out;
+}
+
+export function MarketplaceStrip({ data, now, actions }) {
+  const counts = marketplaceCounts(data, now);
+  return (
+    <section className="section mp-strip">
+      <div className="section-head"><h2>Pazaryerleri</h2></div>
+      <div className="chips" style={{ flexWrap: 'wrap' }}>
+        {MARKETPLACES.map((m) => (
+          <button key={m.name} type="button" className="chip" onClick={() => actions.openMarketplace(m.name)}>
+            <span className="dot" style={{ background: m.color }} />{m.name}{counts[m.name] ? <span className="mp-count">{counts[m.name]}</span> : null}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function MarketplacePanel({ name, data, now, actions }) {
+  const today = toDateInput(startOfDay(now));
+  const camps = data.campaigns.filter((c) => c.marketplace === name && c.end_date >= today).sort((a, b) => a.start_date.localeCompare(b.start_date));
+  const rems = data.reminders.filter((r) => r.marketplace === name && !r.done).sort((a, b) => (a.due_at || '9').localeCompare(b.due_at || '9'));
+  const notes = data.notes.filter((n) => n.marketplace === name).sort((a, b) => (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || '')).slice(0, 6);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div className="typechips">
+        <button type="button" className="chip" onClick={() => actions.newReminderFor(name)}>+ Hatırlatma</button>
+        <button type="button" className="chip" onClick={() => actions.openCampaign({ marketplace: name })}>+ Kampanya / etkinlik</button>
+        <button type="button" className="chip" onClick={() => actions.openNote({ marketplace: name })}>+ Not</button>
+      </div>
+      <Section title="Kampanya ve etkinlikler" meta={camps.length ? camps.length + ' adet' : ''}>
+        {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)
+          : <div className="card"><p className="empty">Yaklaşan kampanya ya da etkinlik yok.</p></div>}
+      </Section>
+      <Section title="Hatırlatmalar" meta={rems.length ? rems.length + ' açık' : ''}>
+        <div className="card list">
+          {rems.length ? rems.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />)
+            : <p className="empty">Açık hatırlatma yok.</p>}
+        </div>
+      </Section>
+      <Section title="Notlar" meta={notes.length ? 'son ' + notes.length : ''}>
+        {notes.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {notes.map((n) => (
+              <button type="button" key={n.id} className="note" onClick={() => actions.openNote(n)}>
+                <span className="top"><span>{n.brand || ''}</span><span>{fmtShort(new Date(n.updated_at || n.created_at))}</span></span>
+                <span className="h">{n.title}</span>
+                {n.body ? <span className="b">{n.body.length > 180 ? n.body.slice(0, 180) + '…' : n.body}</span> : null}
+              </button>
+            ))}
+          </div>
+        ) : <div className="card"><p className="empty">Bu pazaryeri için not yok.</p></div>}
+      </Section>
+    </div>
+  );
+}
+
 // ---------- BUGÜN ----------
 export function TodayScreen({ data: allData, events, google, now, actions, goTab, love, yarimHidden }) {
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} />;
@@ -290,7 +365,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
   const undated = open(data.reminders).filter((r) => !r.due_at);
   const yarimToday = [...allData.reminders, ...allData.calls].filter((x) => x.for_yarim && !x.done && x.due_at && sameDay(new Date(x.due_at), today));
   const gToday = (events || []).filter((e) => (e.allDay ? today >= startOfDay(e.start) && today <= startOfDay(e.end) : sameDay(e.start, today)));
-  const camps = data.campaigns.filter((c) => { const s = campaignStatus(c, now); return s.key === 'live' || (s.key === 'soon' && daysBetween(today, fromDateInput(c.start_date)) <= 14); }).slice(0, 4);
+  const camps = data.campaigns.filter((c) => c.kind !== 'etkinlik').filter((c) => { const s = campaignStatus(c, now); return s.key === 'live' || (s.key === 'soon' && daysBetween(today, fromDateInput(c.start_date)) <= 14); }).slice(0, 4);
 
   const upcoming = [
     ...open(rem).map((r) => ({ t: new Date(r.due_at), title: r.title, meta: r.marketplace })),
@@ -376,6 +451,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
       </div>
     </div>
     <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} />
+    <MarketplaceStrip data={allData} now={now} actions={actions} />
     </div>
   );
 }
@@ -453,7 +529,7 @@ export function CalendarScreen({ data, events, google, now, day, setDay, actions
       <div className="legend">
         {Object.entries(SRC_COLORS).filter(([k]) => !(yarimHidden && k === 'Yarim')).map(([k, c]) => <span key={k} className="tag"><span className="dot" style={{ background: c }} />{k}</span>)}
       </div>
-      <Section title={dayLabel(day, now) === fmtShort(day) ? fmtLong(day) : dayLabel(day, now) + ' · ' + fmtShort(day)} action={<button type="button" className="linkbtn" onClick={() => actions.newItemOn(day)}>+ Bu güne ekle</button>}>
+      <Section title={dayLabel(day, now) === fmtShort(day) ? fmtLong(day) : dayLabel(day, now) + ' · ' + fmtShort(day)} action={<span style={{ display: 'flex', gap: 14 }}><button type="button" className="linkbtn" onClick={() => actions.newEventOn(day)}>+ Etkinlik</button><button type="button" className="linkbtn" onClick={() => actions.newItemOn(day)}>+ Hatırlatma</button></span>}>
         <div className="card list">
           {google === 'checking' ? <p className="empty">Google Takvim yükleniyor…</p> : null}
           {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} />) : google !== 'checking' ? <p className="empty">Bu gün için kayıt yok.</p> : null}
@@ -505,7 +581,7 @@ function CampaignCard({ c, tasks, actions }) {
 
 export function CampaignsScreen({ data, actions }) {
   const [showPast, setShowPast] = useState(false);
-  const withSt = data.campaigns.map((c) => ({ c, st: campaignStatus(c) }));
+  const withSt = data.campaigns.filter((c) => c.kind !== 'etkinlik').map((c) => ({ c, st: campaignStatus(c) }));
   const current = withSt.filter((x) => x.st.key !== 'past').sort((a, b) => a.c.start_date.localeCompare(b.c.start_date));
   const past = withSt.filter((x) => x.st.key === 'past').sort((a, b) => b.c.end_date.localeCompare(a.c.end_date));
   return (

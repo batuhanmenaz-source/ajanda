@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from './ui.jsx';
 import { parseQuick } from './parse.js';
 import { MARKETPLACES, BRANDS, DEFAULT_PREPS, mpColor } from './constants.js';
-import { toDateInput, toTimeInput, combine, whenLabel, addDays, startOfDay } from './dates.js';
+import { toDateInput, toTimeInput, combine, whenLabel, addDays, startOfDay, fromDateInput, rangeLabel } from './dates.js';
 import { normalizePhone, prettyPhone, DEFAULT_LOVE_MESSAGE } from './whatsapp.js';
 
-const EXAMPLES = ['yarın 10:00 HB fiyat güncelle', 'Cuma 15:00 kargo firmasını ara', 'not: Trendyol komisyon oranını kontrol et'];
+const EXAMPLES = ['yarın 10:00 HB fiyat güncelle', 'Cuma 15:00 kargo firmasını ara', 'not: Trendyol komisyon oranını kontrol et', '12-14 kasım Trendyol kampanyası'];
 
 function MpSelect({ value, onChange, id, emptyLabel = 'Yok' }) {
   return (
@@ -54,14 +54,14 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden 
           <input id="quick" ref={inputRef} type="text" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ör. yarın 10:00 HB fiyat güncelle" enterKeyHint="done" />
         </div>
         <div className="typechips" role="group" aria-label="Tür">
-          {['Hatırlatma', 'Arama', 'Not'].map((t) => (
+          {['Hatırlatma', 'Arama', 'Not', 'Kampanya', 'Etkinlik'].map((t) => (
             <button key={t} type="button" className={'chip' + (type === t ? ' on' : '')} onClick={() => setTypeOverride(t)} aria-pressed={type === t}>{t}</button>
           ))}
-          {type !== 'Not' && !yarimHidden && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
+          {type !== 'Not' && type !== 'Etkinlik' && type !== 'Kampanya' && !yarimHidden && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
         </div>
         {q.trim() ? (
           <div className="parsed">
-            <span>Zaman: {type === 'Not' ? '—' : p.date ? whenLabel(p.date) + (p.hasTime ? '' : ' (varsayılan saat)') : 'Tarihsiz'}</span>
+            <span>Zaman: {type === 'Not' ? '—' : (type === 'Etkinlik' || type === 'Kampanya') ? (p.date ? (p.endDate ? rangeLabel(p.date, p.endDate) : rangeLabel(p.date, p.date)) + (p.endDate ? ' · ' + (Math.round((p.endDate - startOfDay(p.date)) / 86400000) + 1) + ' gün' : '') : 'Bugün') : p.date ? whenLabel(p.date) + (p.hasTime ? '' : ' (varsayılan saat)') : 'Tarihsiz'}</span>
             {!yarim || type === 'Not' ? <span><span className="dot" style={{ background: p.mp ? mpColor(p.mp) : '#C9C6BE' }} />{p.mp || 'Pazaryeri yok'}</span> : null}
             {p.brand ? <span>Marka: {p.brand}</span> : null}
           </div>
@@ -231,8 +231,12 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
   const [end, setEnd] = useState(initial.end_date || today);
   const [notes, setNotes] = useState(initial.notes || '');
   const [preps, setPreps] = useState(DEFAULT_PREPS.join('\n'));
+  const [kind, setKind] = useState(initial.kind === 'etkinlik' ? 'etkinlik' : 'kampanya');
+  const isEvent = kind === 'etkinlik';
   const [busy, setBusy] = useState(false);
   const invalid = !name.trim() || !start || !end || end < start;
+  const days = start && end && end >= start ? Math.round((fromDateInput(end) - fromDateInput(start)) / 86400000) + 1 : 0;
+  const setLen = (n) => { if (!start) return; setEnd(toDateInput(addDays(fromDateInput(start), n - 1))); };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -240,17 +244,23 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
     setBusy(true);
     try {
       await onSave(
-        { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null },
-        isEdit ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
+        { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind },
+        isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
       );
     } finally { setBusy(false); }
   };
 
   return (
-    <Sheet title={isEdit ? 'Kampanyayı düzenle' : 'Yeni kampanya'} onClose={onClose}>
+    <Sheet title={isEdit ? (isEvent ? 'Etkinliği düzenle' : 'Kampanyayı düzenle') : (isEvent ? 'Yeni etkinlik' : 'Yeni kampanya')} onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!isEdit && (
+          <div className="seg" role="group" aria-label="Tür">
+            <button type="button" className={!isEvent ? 'on' : ''} onClick={() => setKind('kampanya')}>Kampanya</button>
+            <button type="button" className={isEvent ? 'on' : ''} onClick={() => setKind('etkinlik')}>Etkinlik</button>
+          </div>
+        )}
         <div className="field">
-          <label htmlFor="c-name">Kampanya adı</label>
+          <label htmlFor="c-name">{isEvent ? 'Etkinlik adı' : 'Kampanya adı'}</label>
           <input id="c-name" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <div className="field">
@@ -267,7 +277,13 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
             <input id="c-end" type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} required />
           </div>
         </div>
-        {!isEdit && (
+        <div className="typechips" role="group" aria-label="Süre">
+          {[1, 2, 3, 5, 7].map((n) => (
+            <button key={n} type="button" className={'chip' + (days === n ? ' on' : '')} onClick={() => setLen(n)} aria-pressed={days === n}>{n === 1 ? '1 gün' : n + ' gün'}</button>
+          ))}
+          {days > 0 && ![1, 2, 3, 5, 7].includes(days) ? <span className="hint" style={{ alignSelf: 'center' }}>{days} gün</span> : null}
+        </div>
+        {!isEdit && !isEvent && (
           <div className="field">
             <label htmlFor="c-preps">Hazırlık adımları (her satıra bir tane)</label>
             <textarea id="c-preps" value={preps} onChange={(e) => setPreps(e.target.value)} />
@@ -277,7 +293,9 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
           <label htmlFor="c-notes">Not (isteğe bağlı)</label>
           <input id="c-notes" type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
-        <p className="hint" style={{ margin: 0 }}>Kampanya Google Takvim'e tüm gün etkinliği olarak eklenir. Başlangıçtan 3 gün ve 1 gün önce saat 09:00'da hazırlık hatırlatması gelir.</p>
+        <p className="hint" style={{ margin: 0 }}>{isEvent
+          ? 'Etkinlik Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir.'
+          : 'Kampanya Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir. Başlangıçtan 3 gün ve 1 gün önce saat 09:00\'da hazırlık hatırlatması gelir.'}</p>
         <div className="actions">
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(initial)}>Sil</button>}
           <button type="submit" className="btn big primary" disabled={busy || invalid}>Kaydet</button>
