@@ -270,7 +270,8 @@ function YarimTile({ data, now, actions, love }) {
             <span className={'w' + (r.late ? ' late' : '')}>{r.when}</span>
           </div>
         )) : <span className="ytile-empty">Yaklaşan bir şey yok. Eklemek için dokun.</span>}
-        {more > 0 ? <span className="ytile-more">+{more} daha</span> : null}
+        {list.length > 2 ? <span className="ytile-more m-more">+{list.length - 2} daha</span> : null}
+        {more > 0 ? <span className="ytile-more d-more">+{more} daha</span> : null}
       </div>
     </div>
   );
