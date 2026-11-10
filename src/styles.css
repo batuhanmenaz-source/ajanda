@@ -141,28 +141,37 @@ button.pill { min-height: 32px; }
 .yarim-list { background: #FFFFFF; border: 1px solid #F9C6D6; border-radius: 14px; }
 .yarim-list > * + * { border-top-color: #FCE1EA; }
 .yarim .check.on span { background: #D6336C; border-color: #D6336C; }
-/* Üst sıra: Sıradaki + Yarim karesi */
-.today-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: stretch; }
-.today-top .hero { justify-content: center; min-width: 0; }
+/* Üst sıra: Sıradaki + Yarim kartı */
+.today-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+.today-top.solo { grid-template-columns: minmax(0, 1fr); }
+.today-top .hero { justify-content: flex-start; min-width: 0; padding: 16px; }
+.today-top .hero .t { font-size: 19px; overflow-wrap: anywhere; }
 .ytile {
-  position: relative; width: 156px; aspect-ratio: 1 / 1; box-sizing: border-box;
-  background: #FFE8EF; border: 1px solid #F9C6D6; border-radius: 20px; padding: 10px 12px 12px;
-  display: flex; flex-direction: column; justify-content: space-between; color: #A61E4D;
+  position: relative; min-width: 0; box-sizing: border-box; min-height: 172px;
+  background: #FFE8EF; border: 1px solid #F9C6D6; border-radius: 20px; padding: 8px 12px 12px;
+  display: flex; flex-direction: column; gap: 6px; color: #A61E4D;
 }
 .ytile-open { position: absolute; inset: 0; border: 0; background: transparent; border-radius: 20px; cursor: pointer; z-index: 0; }
 .ytile-open:hover { background: rgba(214, 51, 108, 0.05); }
 .ytile-top { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
 .ytile-top .love-btn { pointer-events: auto; margin-right: -8px; }
-.ytile-name { font-family: var(--display); font-size: 16px; font-weight: 700; }
-.ytile-mid { position: relative; z-index: 1; display: flex; flex-direction: column; pointer-events: none; }
-.ytile-days { font-family: var(--display); font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
-.ytile-unit { font-size: 13px; font-weight: 600; margin-top: 2px; }
-.ytile-foot { position: relative; z-index: 1; font-size: 12px; font-weight: 600; color: #7A2342; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.today-top .hero .t { font-size: 20px; }
+.ytile-name { font-family: var(--display); font-size: 17px; font-weight: 700; }
+.ytile-count { position: relative; z-index: 1; pointer-events: none; font-size: 12px; font-weight: 600; color: #7A2342; margin-top: -6px; font-variant-numeric: tabular-nums; }
+.ytile-count b { font-family: var(--display); font-size: 15px; color: #A61E4D; }
+.ytile-list { position: relative; z-index: 1; pointer-events: none; display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid #F9C6D6; }
+.ytile-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ytile-item .t { font-size: 13px; font-weight: 600; color: #4A1428; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ytile-item .w { font-size: 11px; font-weight: 600; color: #7A2342; }
+.ytile-item .w.late { color: #C92A2A; }
+.ytile-empty { font-size: 12px; color: #7A2342; line-height: 1.4; }
+.ytile-more { font-size: 11px; font-weight: 700; color: #A61E4D; }
 @media (min-width: 760px) {
-  .ytile { width: 200px; padding: 14px 16px 16px; }
-  .ytile-days { font-size: 52px; }
+  .today-top { grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; }
+  .today-top .hero { padding: 18px; justify-content: center; }
   .today-top .hero .t { font-size: 22px; }
+  .ytile { padding: 12px 16px 16px; }
+  .ytile-item { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .ytile-item .w { flex: 0 0 auto; }
 }
 .yarim-panel { background: transparent; border: 0; padding: 0; }
 
@@ -357,8 +366,7 @@ button.pill { min-height: 32px; }
 .copybox { display: flex; gap: 8px; align-items: center; }
 .copybox code { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; background: #F4F3EF; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
 
-/* Yarim gizlenince üst sıra tek sütun */
-.today-top.solo { grid-template-columns: minmax(0, 1fr); }
+/* Yarim gizlenince üst sıra tek sütun: yukarıda */
 .yarim-hide { align-self: center; color: #7A2342; font-size: 13px; }
 
 /* Pazaryerleri */

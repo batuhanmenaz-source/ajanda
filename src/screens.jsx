@@ -238,23 +238,40 @@ function YarimTile({ data, now, actions, love }) {
   const diff = Math.max(0, now - YARIM_START);
   const days = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
+  const today = startOfDay(now);
+  // Yaklaşan Yarim kayıtları (gecikenler dahil, tarihsizler en sonda)
   const items = yarimItems(data, now).filter((x) => !x.item.done);
   const next = nextMonthiversary(YARIM_START, now);
   const nd = next ? daysBetween(now, next.date) : 99;
-  let foot = items.length ? items.length + ' açık' : 'Liste boş';
-  if (next && nd <= 3) foot = (nd === 0 ? 'Bugün ' : nd === 1 ? 'Yarın ' : nd + ' gün sonra ') + (next.months % 12 === 0 ? (next.months / 12) + '. yıl 💐' : next.months + '. ay 💐');
+  const anniv = next && nd <= 7
+    ? { key: 'anniv', title: (next.months % 12 === 0 ? (next.months / 12) + '. yıl dönümü' : next.months + '. ay dönümü') + ' 💐', when: nd === 0 ? 'Bugün' : nd === 1 ? 'Yarın' : nd + ' gün sonra' }
+    : null;
+  const rows = items.map((x) => ({
+    key: x.kind + x.item.id,
+    title: x.kind === 'call' ? x.item.who + ' ara' : x.item.title,
+    when: x.due ? dayLabel(x.due, now) + ' ' + fmtTime(x.due) + (x.due < today ? ' · gecikti' : '') : 'Tarihsiz',
+    late: x.due && x.due < now
+  }));
+  const list = [...(anniv ? [anniv] : []), ...rows];
+  const shown = list.slice(0, 3);
+  const more = list.length - shown.length;
   return (
     <div className="ytile">
-      <button type="button" className="ytile-open" onClick={actions.openYarim} aria-label={'Yarim alanını aç. ' + days + ' gün ' + hours + ' saattir birlikte. ' + foot} />
+      <button type="button" className="ytile-open" onClick={actions.openYarim} aria-label={'Yarim alanını aç. ' + days + ' gün ' + hours + ' saattir birlikte. ' + (rows.length ? rows.length + ' yaklaşan kayıt' : 'Yaklaşan kayıt yok')} />
       <div className="ytile-top">
         <span className="ytile-name">Yarim</span>
         <LoveButton love={love} actions={actions} />
       </div>
-      <div className="ytile-mid" aria-hidden="true">
-        <span className="ytile-days">{days.toLocaleString('tr-TR')}</span>
-        <span className="ytile-unit">gün {hours} saat</span>
+      <div className="ytile-count" aria-hidden="true"><b>{days.toLocaleString('tr-TR')}</b> gün <b>{hours}</b> saat</div>
+      <div className="ytile-list" aria-hidden="true">
+        {shown.length ? shown.map((r) => (
+          <div key={r.key} className="ytile-item">
+            <span className="t">{r.title}</span>
+            <span className={'w' + (r.late ? ' late' : '')}>{r.when}</span>
+          </div>
+        )) : <span className="ytile-empty">Yaklaşan bir şey yok. Eklemek için dokun.</span>}
+        {more > 0 ? <span className="ytile-more">+{more} daha</span> : null}
       </div>
-      <div className="ytile-foot" aria-hidden="true">{foot}</div>
     </div>
   );
 }
