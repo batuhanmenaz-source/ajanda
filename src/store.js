@@ -141,7 +141,7 @@ export function createSupabaseStore() {
 }
 
 // ---------- Örnek veri (demo) ----------
-const DEMO_KEY = 'ajanda-demo-v3';
+const DEMO_KEY = 'ajanda-demo-v4';
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
 
 function seed() {
@@ -155,6 +155,7 @@ function seed() {
       { id: uid(), title: 'Haftalık reklam raporunu hazırla', due_at: at(0, 17, 30), marketplace: 'Amazon', done: false },
       { id: uid(), title: 'Banner görsellerini iste', due_at: at(1, 9, 30), marketplace: 'MCLUB', done: false },
       { id: uid(), title: 'Ürün açıklamalarını güncelle', due_at: null, marketplace: 'N11', done: false },
+      { id: uid(), title: 'Haftalık reklam raporu', due_at: at(((8 - t.getDay()) % 7) || 7, 10), marketplace: null, done: false, repeat_rule: 'weekly' },
       { id: uid(), title: 'Akşam yemeği rezervasyonu', due_at: at(0, 18), marketplace: null, done: false, for_yarim: true },
       { id: uid(), title: 'Çiçek siparişi ver', due_at: at(3, 10), marketplace: null, done: false, for_yarim: true }
     ],

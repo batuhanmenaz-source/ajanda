@@ -4,6 +4,7 @@ import { Mp, Check, Section, Progress } from './ui.jsx';
 import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START } from './constants.js';
 import { whatsappLink, DEFAULT_LOVE_MESSAGE, prettyPhone, normalizePhone } from './whatsapp.js';
 import { mapsLink, mapsTarget } from './location.js';
+import { occursOn, ruleLabel } from './recur.js';
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -52,6 +53,13 @@ export function dayItems(day, { data, events }) {
   data.reminders.filter((r) => r.due_at && sameDay(new Date(r.due_at), day)).forEach((r) =>
     out.push({ key: 'r' + r.id, time: fmtTime(new Date(r.due_at)), title: r.title + (r.for_yarim ? ' ❤️' : ''), src: r.for_yarim ? 'Yarim' : 'Hatırlatma', color: r.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Hatırlatma'], sub: r.marketplace, loc: r.location, geo: r.location_geo, done: r.done, item: r, kind: 'reminder' })
   );
+  // Tekrarlayan hatırlatmaların ileriki tekrarları (yalnız görüntü)
+  data.reminders.filter((r) => r.repeat_rule && r.due_at && !r.done).forEach((r) => {
+    const due = new Date(r.due_at);
+    if (day > startOfDay(due) && occursOn(due, r.repeat_rule, day)) {
+      out.push({ key: 'rr' + r.id + day.getTime(), time: fmtTime(due), title: r.title + (r.for_yarim ? ' ❤️' : ''), src: r.for_yarim ? 'Yarim' : 'Hatırlatma', color: r.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Hatırlatma'], sub: ['↻ ' + ruleLabel(r.repeat_rule, r.due_at), r.marketplace].filter(Boolean).join(' · '), loc: r.location, geo: r.location_geo, item: r, kind: 'reminder' });
+    }
+  });
   data.calls.filter((c) => c.due_at && sameDay(new Date(c.due_at), day)).forEach((c) =>
     out.push({ key: 'c' + c.id, time: fmtTime(new Date(c.due_at)), title: c.who + (c.topic ? ' — ' + c.topic : '') + (c.for_yarim ? ' ❤️' : ''), src: c.for_yarim ? 'Yarim' : 'Arama', color: c.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS.Arama, sub: c.for_yarim ? 'Arama' : '', done: c.done, item: c, kind: 'call' })
   );
@@ -89,6 +97,7 @@ function ReminderRow({ r, now, onToggle, onOpen, showDay }) {
         <span className="meta">
           {d ? <span className={'time' + (late ? ' late' : '')}>{showDay || late ? whenLabel(d, now) : fmtTime(d)}</span> : null}
           <Mp name={r.marketplace} />
+          {r.repeat_rule ? <span className="tag" title="Tekrarlayan">↻ {ruleLabel(r.repeat_rule, r.due_at)}</span> : null}
           {r.location ? <span className="tag"><PinIcon />{r.location.length > 28 ? r.location.slice(0, 28) + '…' : r.location}</span> : null}
         </span>
       </button>

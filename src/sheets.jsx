@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { RULES, ruleLabel } from './recur.js';
 import { Sheet } from './ui.jsx';
 import { parseQuick } from './parse.js';
 import { MARKETPLACES, BRANDS, DEFAULT_PREPS, mpColor } from './constants.js';
@@ -100,6 +101,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
         {q.trim() ? (
           <div className="parsed">
             <span>Zaman: {type === 'Not' ? '—' : (type === 'Etkinlik' || type === 'Kampanya') ? (p.date ? (p.endDate ? rangeLabel(p.date, p.endDate) : rangeLabel(p.date, p.date)) + (p.endDate ? ' · ' + (Math.round((p.endDate - startOfDay(p.date)) / 86400000) + 1) + ' gün' : '') : 'Bugün') : p.date ? whenLabel(p.date) + (p.hasTime ? '' : ' (varsayılan saat)') : 'Tarihsiz'}</span>
+            {p.repeat && type === 'Hatırlatma' ? <span>↻ {ruleLabel(p.repeat, p.date)}</span> : null}
             {!yarim || type === 'Not' ? <span><span className="dot" style={{ background: p.mp ? mpColor(p.mp) : '#C9C6BE' }} />{p.mp || 'Pazaryeri yok'}</span> : null}
             {p.brand ? <span>Marka: {p.brand}</span> : null}
           </div>
@@ -230,6 +232,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
   const [time, setTime] = useState(d0 ? toTimeInput(d0) : '09:00');
   const [yarim, setYarim] = useState(!!initial.for_yarim);
   const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
+  const [repeat, setRepeat] = useState(initial.repeat_rule || '');
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -238,7 +241,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
     setBusy(true);
     const due = date ? combine(date, time).toISOString() : null;
     try {
-      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) });
+      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...(repeat || initial.repeat_rule ? { repeat_rule: due ? (repeat || null) : null } : {}), ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) });
       else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim, missedId: initial.missedId });
     } finally { setBusy(false); }
   };
@@ -298,6 +301,15 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
             <MpSelect id="f-mp" value={mp} onChange={setMp} />
           </div>
         )}
+        {kind === 'reminder' && date ? (
+          <div className="field">
+            <label htmlFor="f-rep">Tekrar</label>
+            <select id="f-rep" value={repeat} onChange={(e) => setRepeat(e.target.value)}>
+              {RULES.map(([v, l]) => <option key={v} value={v}>{v ? ruleLabel(v, combine(date, time)) : l}</option>)}
+            </select>
+            {repeat ? <span className="hint">Tamamladığında bir sonraki tarihe kayar; Google Takvim'de her tekrarda bildirim gelir.</span> : null}
+          </div>
+        ) : null}
         {kind === 'reminder' && <LocationField id="f-loc" value={loc} onChange={setLoc} />}
         <p className="hint" style={{ margin: 0 }}>Tarih ve saat verilirse Google Takvim'deki "Ajanda" takvimine eklenir; bildirim telefonuna o saatte gelir.</p>
         <div className="actions">

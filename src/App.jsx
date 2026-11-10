@@ -6,7 +6,8 @@ import { RevenueScreen, RevenueSheet, TargetSheet, marketplaceOrder } from './re
 import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet } from './sheets.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES, DEFAULT_PREPS } from './constants.js';
-import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput } from './dates.js';
+import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, whenLabel } from './dates.js';
+import { nextOccurrence } from './recur.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason } from './google.js';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign } from './sync.js';
 
@@ -269,6 +270,22 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
 
   const toggle = async (table, item) => {
+    // Tekrarlayan hatırlatma: tamamlanınca bir sonraki tarihe kayar
+    if (table === 'reminders' && item.repeat_rule && item.due_at && !item.done) {
+      const due = new Date(item.due_at);
+      const next = nextOccurrence(due, item.repeat_rule, due > new Date() ? due : new Date());
+      if (next) {
+        const patch = { due_at: next.toISOString() };
+        patchLocal('reminders', item.id, patch);
+        try {
+          await store.update('reminders', item.id, patch);
+          const id = await gsync(() => syncReminder({ ...item, ...patch }));
+          if (id !== undefined && id !== item.google_event_id) { await store.update('reminders', item.id, { google_event_id: id }); patchLocal('reminders', item.id, { google_event_id: id }); }
+          say('Tamamlandı ✓ Sonraki: ' + whenLabel(next));
+        } catch (e) { patchLocal('reminders', item.id, { due_at: item.due_at }); fail(e); }
+        return;
+      }
+    }
     const done = !item.done;
     patchLocal(table, item.id, { done });
     try {
@@ -362,7 +379,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     } else if (p.type === 'Arama') {
       await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due, for_yarim: !!p.yarim });
     } else {
-      await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.yarim ? null : (p.mp || null), due_at: due, for_yarim: !!p.yarim });
+      await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.yarim ? null : (p.mp || null), due_at: due, for_yarim: !!p.yarim, ...(p.repeat ? { repeat_rule: p.repeat } : {}) });
     }
   };
   const quickDetail = (p) => {
@@ -370,7 +387,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
       setSheet({ kind: 'campaign', item: { name: p.title, marketplace: p.mp, start_date: toDateInput(st), end_date: toDateInput(p.endDate ? startOfDay(p.endDate) : st), kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik' } });
     } else if (p.type === 'Not') setSheet({ kind: 'note', item: { marketplace: p.mp, brand: p.brand, title: p.title, body: p.shared || '' } });
-    else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim } });
+    else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim, repeat_rule: p.repeat || '' } });
   };
 
   const actions = {

@@ -184,12 +184,13 @@ export async function deleteEvent(id) {
   }
 }
 
-export function timedEvent({ summary, description, start, minutes = 15, location }) {
+export function timedEvent({ summary, description, start, minutes = 15, location, recurrence }) {
   const end = new Date(start.getTime() + minutes * 60000);
   return {
     summary,
     description: description || '',
     ...(location ? { location } : {}),
+    ...(recurrence ? { recurrence: [recurrence] } : {}),
     start: { dateTime: start.toISOString(), timeZone: TZ },
     end: { dateTime: end.toISOString(), timeZone: TZ },
     reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }

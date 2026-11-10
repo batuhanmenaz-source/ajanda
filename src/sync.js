@@ -1,6 +1,7 @@
 // Kayıtları Google Takvim'deki "Ajanda" takvimine yansıtır.
 import { saveTimed, saveAllDay, deleteEvent } from './google.js';
 import { addDays, fromDateInput, startOfDay } from './dates.js';
+import { rrule } from './recur.js';
 
 const mpPrefix = (mp) => (mp ? '[' + mp + '] ' : '');
 const heart = (x) => (x.for_yarim ? ' ❤️' : '');
@@ -15,7 +16,8 @@ export async function syncReminder(r) {
     summary: '🔔 ' + mpPrefix(r.marketplace) + r.title + heart(r),
     description: r.for_yarim ? 'Yarim ❤️' : 'Ajanda hatırlatması',
     start: new Date(r.due_at),
-    location: r.location || undefined
+    location: r.location || undefined,
+    recurrence: r.repeat_rule ? rrule(r.repeat_rule, r.due_at) : undefined
   });
 }
 

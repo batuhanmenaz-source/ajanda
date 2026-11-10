@@ -1,5 +1,6 @@
 import { addDays, startOfDay } from './dates.js';
 import { BRANDS } from './constants.js';
+import { parseRepeat, nextOccurrence } from './recur.js';
 
 const DAY_WORDS = [
   ['pazartesi', 1], ['salı', 2], ['çarşamba', 3], ['perşembe', 4], ['cumartesi', 6], ['cuma', 5], ['pazar', 0]
@@ -34,6 +35,10 @@ export function parseQuick(text, now = new Date()) {
   const noteMatch = raw.match(/^\s*not\s*[:\-]\s*/i);
   if (noteMatch) { type = 'Not'; removals.push(noteMatch[0]); }
   else if (/\s(ara|arama|aranacak|aransın)[\s.,!]/.test(s) || s.includes('geri ara') || s.includes('telefon et')) type = 'Arama';
+
+  // Tekrar: "her pazartesi", "her gün", "hafta içi", "her ayın 1'i", "her yıl"
+  const rep = parseRepeat(s);
+  removals.push(...rep.removals);
 
   // Tarih
   let day = null;
@@ -111,6 +116,14 @@ export function parseQuick(text, now = new Date()) {
   }
   if (hour !== null && (hour > 23 || minute > 59)) hour = null;
 
+  // Aylık tekrar "her ayın 5'i": bir sonraki ayın o günü
+  if (rep.rule === 'monthly' && rep.monthDay && !day) {
+    const t = startOfDay(now);
+    let x = new Date(t.getFullYear(), t.getMonth(), rep.monthDay);
+    if (x < t || (sameDayLocal(x, t) && hour !== null && (hour < now.getHours() || (hour === now.getHours() && minute <= now.getMinutes())))) x = new Date(t.getFullYear(), t.getMonth() + 1, rep.monthDay);
+    day = x;
+  }
+  if (rep.rule && !day) day = startOfDay(now);
   let date = null;
   const hasTime = hour !== null;
   if (day || hasTime) {
@@ -154,5 +167,12 @@ export function parseQuick(text, now = new Date()) {
   title = title.replace(/\s+/g, ' ').replace(/^[\s,.;:-]+|[\s,;:-]+$/g, '').trim();
   if (title) title = title.charAt(0).toLocaleUpperCase('tr-TR') + title.slice(1);
 
-  return { type, date, hasTime, mp, brand, title, yarim, endDate: endDay };
+  if (rep.rule && type !== 'Not') {
+    // Tekrarlayanlar hatırlatma olarak kaydedilir; geçmişte kalan ilk tarih bir sonrakine kayar
+    type = 'Hatırlatma'; endDay = null;
+    if (date && date <= now) date = nextOccurrence(date, rep.rule, now) || date;
+  }
+  return { type, date, hasTime, mp, brand, title, yarim, endDate: endDay, repeat: rep.rule };
 }
+
+function sameDayLocal(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
