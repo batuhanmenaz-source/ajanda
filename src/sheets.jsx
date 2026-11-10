@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from './ui.jsx';
 import { parseQuick } from './parse.js';
 import { MARKETPLACES, BRANDS, DEFAULT_PREPS, mpColor } from './constants.js';
 import { toDateInput, toTimeInput, combine, whenLabel, addDays, startOfDay, fromDateInput, rangeLabel } from './dates.js';
 import { normalizePhone, prettyPhone, DEFAULT_LOVE_MESSAGE } from './whatsapp.js';
-import { currentLocationText, mapsLink } from './location.js';
+import { currentLocation, searchPlaces, parseGeo, geoText, mapsLink } from './location.js';
+const MapPin = lazy(() => import('./MapPin.jsx'));
 
 const EXAMPLES = ['yarın 10:00 HB fiyat güncelle', 'Cuma 15:00 kargo firmasını ara', 'not: Trendyol komisyon oranını kontrol et', '12-14 kasım Trendyol kampanyası'];
 
@@ -82,25 +83,86 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden 
 }
 
 // ---------- Konum alanı ----------
+// loc = { text, geo }  (geo = "lat,lng" ya da '')
 function LocationField({ id, value, onChange }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const useMine = async () => {
-    setBusy(true); setErr('');
-    try { onChange(await currentLocationText()); } catch (e) { setErr(e.message || 'Konum alınamadı.'); } finally { setBusy(false); }
+  const [sugs, setSugs] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const timer = useRef(null);
+  const ctrl = useRef(null);
+  const bias = useRef(null);
+  const geo = parseGeo(value.geo);
+
+  useEffect(() => () => { clearTimeout(timer.current); if (ctrl.current) ctrl.current.abort(); }, []);
+
+  const onType = (text) => {
+    onChange({ text, geo: '' });
+    setErr('');
+    clearTimeout(timer.current);
+    if (ctrl.current) ctrl.current.abort();
+    if (text.trim().length < 3) { setSugs([]); setOpen(false); setSearching(false); return; }
+    setSearching(true); setOpen(true);
+    timer.current = setTimeout(async () => {
+      const c = new AbortController(); ctrl.current = c;
+      try {
+        const res = await searchPlaces(text, c.signal, bias.current);
+        if (!c.signal.aborted) { setSugs(res); setSearching(false); }
+      } catch (e) {
+        if (!c.signal.aborted) { setSugs([]); setSearching(false); }
+      }
+    }, 350);
   };
+
+  const pick = (sg) => {
+    onChange({ text: sg.text, geo: geoText(sg.lat, sg.lng) });
+    setSugs([]); setOpen(false);
+  };
+
+  const useMine = async () => {
+    setBusy(true); setErr(''); setOpen(false);
+    try {
+      const r = await currentLocation();
+      bias.current = { lat: r.lat, lng: r.lng };
+      onChange({ text: r.text, geo: geoText(r.lat, r.lng) });
+    } catch (e) { setErr(e.message || 'Konum alınamadı.'); } finally { setBusy(false); }
+  };
+
   return (
     <div className="field">
       <label htmlFor={id}>Konum (isteğe bağlı)</label>
       <div className="locrow">
-        <input id={id} type="text" autoComplete="off" placeholder="Yer adı ya da adres" value={value} onChange={(e) => onChange(e.target.value)} />
+        <input id={id} type="text" autoComplete="off" placeholder="Yer ara: ör. İstanbul Fuar Merkezi" value={value.text}
+          onChange={(e) => onType(e.target.value)} onFocus={() => { if (sugs.length) setOpen(true); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); if (e.key === 'Enter' && open && sugs[0]) { e.preventDefault(); pick(sugs[0]); } }}
+          aria-autocomplete="list" aria-expanded={open} aria-controls={id + '-list'} />
         <button type="button" className="btn locbtn" onClick={useMine} disabled={busy} aria-label="Şu anki konumumu kullan">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
           <span>{busy ? 'Bulunuyor…' : 'Konumum'}</span>
         </button>
       </div>
+      {open ? (
+        <div className="locsugs" id={id + '-list'} role="listbox" aria-label="Yer önerileri">
+          {searching && !sugs.length ? <span className="locsug-empty">Aranıyor…</span> : null}
+          {!searching && !sugs.length ? <span className="locsug-empty">Sonuç bulunamadı. Adresi elle yazabilir ya da "Konumum"u kullanabilirsin.</span> : null}
+          {sugs.map((sg, k) => (
+            <button key={k} type="button" role="option" aria-selected="false" className="locsug" onClick={() => pick(sg)}>
+              <span className="n">{sg.name}</span>
+              {sg.detail ? <span className="d">{sg.detail}</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {err ? <span className="hint" style={{ color: 'var(--danger)' }}>{err}</span> : null}
-      {value && !err ? <a className="hint" href={mapsLink(value)} target="_blank" rel="noopener noreferrer">Haritada kontrol et ↗</a> : null}
+      {geo ? (
+        <>
+          <Suspense fallback={<div className="mappin" />}>
+            <MapPin lat={geo.lat} lng={geo.lng} onMove={(la, ln) => onChange({ text: value.text, geo: geoText(la, ln) })} />
+          </Suspense>
+          <span className="hint">Pin yanlış yerdeyse sürükle ya da haritada doğru yere dokun. <a href={mapsLink(value.text, value.geo)} target="_blank" rel="noopener noreferrer">Google Haritalar'da aç ↗</a></span>
+        </>
+      ) : value.text && !open ? <span className="hint">Listeden bir yer seçersen haritada tam konumu işaretlenir.</span> : null}
     </div>
   );
 }
@@ -117,7 +179,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
   const [date, setDate] = useState(d0 ? toDateInput(d0) : '');
   const [time, setTime] = useState(d0 ? toTimeInput(d0) : '09:00');
   const [yarim, setYarim] = useState(!!initial.for_yarim);
-  const [loc, setLoc] = useState(initial.location || '');
+  const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -126,7 +188,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden }) {
     setBusy(true);
     const due = date ? combine(date, time).toISOString() : null;
     try {
-      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...(loc.trim() || initial.location ? { location: loc.trim() || null } : {}) });
+      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) });
       else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim, missedId: initial.missedId });
     } finally { setBusy(false); }
   };
@@ -259,7 +321,7 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
   const [notes, setNotes] = useState(initial.notes || '');
   const [preps, setPreps] = useState(DEFAULT_PREPS.join('\n'));
   const [kind, setKind] = useState(initial.kind === 'etkinlik' ? 'etkinlik' : 'kampanya');
-  const [loc, setLoc] = useState(initial.location || '');
+  const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const isEvent = kind === 'etkinlik';
   const [busy, setBusy] = useState(false);
   const invalid = !name.trim() || !start || !end || end < start;
@@ -272,7 +334,7 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
     setBusy(true);
     try {
       await onSave(
-        { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind, ...(loc.trim() || initial.location ? { location: loc.trim() || null } : {}) },
+        { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
         isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
       );
     } finally { setBusy(false); }

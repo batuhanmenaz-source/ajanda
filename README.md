@@ -12,7 +12,7 @@ Google Takvim, hatırlatmalar, pazaryeri notları, kampanya takvimi ve aramalar�
 
 ## Kurulum özeti
 
-1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`07` numaralı dosyaları sırayla çalıştır.
+1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`08` numaralı dosyaları sırayla çalıştır.
 2. Supabase > Authentication > Providers > Google: Google Cloud'daki istemci kimliği ve gizli anahtarı gir.
 3. Vercel'de bu depoyu içe aktar ve şu ortam değişkenlerini tanımla:
 

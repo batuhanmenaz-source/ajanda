@@ -8,10 +8,10 @@ import { mapsLink } from './location.js';
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
 // Konuma dokununca Google Haritalar açılır
-function LocLink({ location, small }) {
+function LocLink({ location, geo, small }) {
   if (!location) return null;
   return (
-    <a className={'loclink' + (small ? ' small' : '')} href={mapsLink(location)} target="_blank" rel="noopener noreferrer" aria-label={location + ' haritada aç'}>
+    <a className={'loclink' + (small ? ' small' : '')} href={mapsLink(location, geo)} target="_blank" rel="noopener noreferrer" aria-label={location + ' haritada aç'}>
       <PinIcon /><span>{location}</span>
     </a>
   );
@@ -92,7 +92,7 @@ function ReminderRow({ r, now, onToggle, onOpen, showDay }) {
           {r.location ? <span className="tag"><PinIcon />{r.location.length > 28 ? r.location.slice(0, 28) + '…' : r.location}</span> : null}
         </span>
       </button>
-      {r.location ? <a className="missed-btn" href={mapsLink(r.location)} target="_blank" rel="noopener noreferrer" aria-label={r.location + ' haritada aç'}><PinIcon /></a> : null}
+      {r.location ? <a className="missed-btn" href={mapsLink(r.location, r.location_geo)} target="_blank" rel="noopener noreferrer" aria-label={r.location + ' haritada aç'}><PinIcon /></a> : null}
     </div>
   );
 }
@@ -125,7 +125,7 @@ function CampaignMini({ c, tasks, onOpen }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: mpColor(c.marketplace) }} />{isEvent ? 'Etkinlik · ' : ''}{c.marketplace || (isEvent ? '' : 'Genel')}{c.marketplace || !isEvent ? ' · ' : ''}{rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date))}</span>
           <button type="button" className="name" onClick={() => onOpen(c)}>{c.name}</button>
-          <LocLink location={c.location} small />
+          <LocLink location={c.location} geo={c.location_geo} small />
         </div>
         <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
       </div>
@@ -654,7 +654,7 @@ function CampaignCard({ c, tasks, actions }) {
           <Mp name={c.marketplace || 'Genel'} />
           <button type="button" className="name big" onClick={() => actions.openCampaign(c)}>{c.name}</button>
           <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date))}{c.notes ? ' · ' + c.notes : ''}</span>
-          <LocLink location={c.location} />
+          <LocLink location={c.location} geo={c.location_geo} />
         </div>
         <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
       </div>

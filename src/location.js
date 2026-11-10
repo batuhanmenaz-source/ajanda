@@ -1,7 +1,60 @@
-// Konum yardımcıları: telefonun konumunu alır, adrese çevirir, harita bağlantısı üretir.
+// Konum yardımcıları: yer arama (öneriler), telefon konumu, harita bağlantısı.
+// Arama: Photon (OpenStreetMap verisi, anahtar gerektirmez). Ters adres: Nominatim.
 
-export function mapsLink(location) {
-  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(location || '');
+const TR_BBOX = '25.6,35.8,44.8,42.2'; // Türkiye sınırları (önce burada aranır)
+
+// "lat,lng" metnini sayıya çevirir
+export function parseGeo(geo) {
+  if (!geo) return null;
+  const [a, b] = String(geo).split(',').map(Number);
+  return Number.isFinite(a) && Number.isFinite(b) ? { lat: a, lng: b } : null;
+}
+export function geoText(lat, lng) {
+  return lat.toFixed(6) + ',' + lng.toFixed(6);
+}
+
+// Koordinat varsa harita tam o noktayı açar; yoksa yazılan metni arar
+export function mapsLink(location, geo) {
+  const g = parseGeo(geo);
+  const q = g ? g.lat + ',' + g.lng : (location || '');
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+}
+
+function label(p) {
+  const street = [p.street, p.housenumber].filter(Boolean).join(' No:');
+  const area = p.district || p.locality || '';
+  const city = p.city || p.county || '';
+  const prov = p.state || '';
+  const name = p.name || street;
+  const detail = [p.name ? street : '', area, city, prov !== city ? prov : '', p.countrycode && p.countrycode !== 'TR' ? p.country : '']
+    .filter(Boolean).filter((x, i, arr) => arr.indexOf(x) === i && x !== name).join(', ');
+  return { name: name || detail, detail: name ? detail : '' };
+}
+
+async function photon(q, bbox, signal, bias) {
+  const u = new URL('https://photon.komoot.io/api/');
+  u.searchParams.set('q', q);
+  u.searchParams.set('limit', '7');
+  if (bbox) u.searchParams.set('bbox', bbox);
+  if (bias) { u.searchParams.set('lat', bias.lat); u.searchParams.set('lon', bias.lng); }
+  const r = await fetch(u, { signal });
+  if (!r.ok) throw new Error('search_failed');
+  const j = await r.json();
+  return (j.features || []).map((f) => {
+    const l = label(f.properties || {});
+    const [lng, lat] = f.geometry.coordinates;
+    return { name: l.name, detail: l.detail, text: [l.name, l.detail].filter(Boolean).join(', '), lat, lng };
+  }).filter((x) => x.name);
+}
+
+// Yazdıkça çağrılır: önce Türkiye içinde, sonuç yoksa her yerde arar
+export async function searchPlaces(q, signal, bias) {
+  const query = (q || '').trim();
+  if (query.length < 3) return [];
+  let res = await photon(query, TR_BBOX, signal, bias);
+  if (!res.length) res = await photon(query, null, signal, bias);
+  const seen = new Set();
+  return res.filter((x) => { const k = x.text.toLocaleLowerCase('tr-TR'); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
 }
 
 function getPosition() {
@@ -16,8 +69,8 @@ function getPosition() {
 }
 
 // Koordinatı okunabilir adrese çevirir (OpenStreetMap). Olmazsa koordinatları döndürür.
-async function reverseGeocode(lat, lon) {
-  const coords = lat.toFixed(6) + ',' + lon.toFixed(6);
+export async function reverseGeocode(lat, lon) {
+  const coords = lat.toFixed(5) + ', ' + lon.toFixed(5);
   try {
     const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=tr&lat=' + lat + '&lon=' + lon);
     if (!r.ok) return coords;
@@ -35,7 +88,9 @@ async function reverseGeocode(lat, lon) {
   }
 }
 
-export async function currentLocationText() {
+// Telefonun şu anki konumu: { text, lat, lng }
+export async function currentLocation() {
   const pos = await getPosition();
-  return reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+  const { latitude: lat, longitude: lng } = pos.coords;
+  return { text: await reverseGeocode(lat, lng), lat, lng };
 }
