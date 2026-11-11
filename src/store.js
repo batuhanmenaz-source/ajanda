@@ -2,7 +2,7 @@
 import { supabase } from './supabase.js';
 import { addDays, startOfDay, toDateInput } from './dates.js';
 
-export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs'];
+export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed'];
 export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls', ...NEW_TABLES];
 // SQL'i henüz çalıştırılmamış olabilecek tablolar: hata verirse boş sayılır
 const OPTIONAL = new Set(['missed_calls', ...NEW_TABLES]);
@@ -21,8 +21,12 @@ const ORDER = {
   lists: ['sort', true],
   list_items: ['sort', true],
   habits: ['sort', true],
-  habit_logs: ['day', false]
+  habit_logs: ['day', false],
+  money: ['day', false],
+  money_fixed: ['day_of_month', true]
 };
+// Açılışta yalnız son ~14 ayın harcamaları yüklenir (hepsi yedekte durur)
+const SINCE = { money: ['day', 430] };
 
 // 03_yarim.sql henüz çalıştırılmadıysa kayıtlar yine de kaydedilsin
 const PAGE = 1000;
@@ -39,7 +43,9 @@ export function createSupabaseStore() {
         const rows = [];
         for (let from = 0; rows.length < cap; from += PAGE) {
           const to = Math.min(from + PAGE, cap) - 1;
-          const { data, error } = await supabase.from(t).select('*').order(col, { ascending: asc, nullsFirst: false }).order('id').range(from, to);
+          let qy = supabase.from(t).select('*');
+          if (SINCE[t]) qy = qy.gte(SINCE[t][0], toDateInput(addDays(startOfDay(new Date()), -SINCE[t][1])));
+          const { data, error } = await qy.order(col, { ascending: asc, nullsFirst: false }).order('id').range(from, to);
           if (error && OPTIONAL.has(t)) { out[t] = []; return; }
           if (error) throw error;
           rows.push(...(data || []));
@@ -231,6 +237,39 @@ function seed() {
   };
 }
 
+function seedMoney() {
+  const t = startOfDay(new Date());
+  const f1 = uid(), f2 = uid(), f3 = uid(), f4 = uid();
+  const money = [];
+  const add = (n, kind, amount, category, note, method, fixed_id) => money.push({ id: uid(), day: toDateInput(addDays(t, -n)), kind, amount, category, note, method, fixed_id: fixed_id || null, created_at: addDays(t, -n).toISOString() });
+  const pick = [['market', 'Migros', 'kart', 650], ['yemek', 'Kahve', 'kart', 120], ['ulasim', 'Benzin', 'kart', 1800], ['yemek', 'Öğle yemeği', 'kart', 380], ['market', 'Manav', 'nakit', 240], ['eglence', 'Sinema', 'kart', 400], ['giyim', '', 'kart', 1500], ['yarim', 'Akşam yemeği', 'kart', 1400], ['saglik', 'Eczane', 'nakit', 310]];
+  for (let n = 0; n < 50; n++) {
+    const k = (n * 7 + 3) % pick.length;
+    const [c, note, m, a] = pick[k];
+    if (n % 3 !== 2) add(n, 'gider', Math.round(a * (0.7 + ((n * 13) % 7) / 10)), c, note || null, m);
+    if (n % 4 === 1) add(n, 'gider', 95 + (n % 5) * 40, 'yemek', 'Kahve', 'kart');
+  }
+  const ms = new Date(t.getFullYear(), t.getMonth(), 1);
+  const pm = new Date(t.getFullYear(), t.getMonth() - 1, 1);
+  const dayIn = (m, d) => toDateInput(new Date(m.getFullYear(), m.getMonth(), d));
+  money.push(
+    { id: uid(), day: dayIn(pm, 1), kind: 'gelir', amount: 85000, category: 'maas', note: 'Maaş', method: null, fixed_id: f4 },
+    { id: uid(), day: dayIn(ms, 1), kind: 'gelir', amount: 85000, category: 'maas', note: 'Maaş', method: null, fixed_id: f4 },
+    { id: uid(), day: dayIn(pm, 5), kind: 'gider', amount: 25000, category: 'ev', note: 'Kira', method: null, fixed_id: f1 },
+    { id: uid(), day: dayIn(ms, 5), kind: 'gider', amount: 25000, category: 'ev', note: 'Kira', method: null, fixed_id: f1 }
+  );
+  return {
+    money,
+    money_fixed: [
+      { id: f1, title: 'Kira', kind: 'gider', amount: 25000, category: 'ev', day_of_month: 5, method: null, remind: true, active: true },
+      { id: f2, title: 'İnternet', kind: 'gider', amount: 450, category: 'fatura', day_of_month: 15, method: 'kart', remind: true, active: true },
+      { id: f3, title: 'Netflix', kind: 'gider', amount: 230, category: 'abonelik', day_of_month: 22, method: 'kart', remind: false, active: true },
+      { id: f4, title: 'Maaş', kind: 'gelir', amount: 85000, category: 'maas', day_of_month: 1, method: null, remind: false, active: true }
+    ],
+    budgets: { yemek: 6000, market: 8000, eglence: 2500 }
+  };
+}
+
 function seedLife() {
   const t = startOfDay(new Date());
   const k1 = uid(), k2 = uid(), l1 = uid(), h1 = uid(), h2 = uid();
@@ -275,6 +314,7 @@ export function createDemoStore() {
   if (!db) db = seed();
   if (!db.missed_calls) db.missed_calls = [];
   if (!db.contacts) Object.assign(db, seedLife());
+  if (!db.money) { const sm = seedMoney(); db.money = sm.money; db.money_fixed = sm.money_fixed; db.settings = { ...(db.settings || {}), budgets: sm.budgets }; }
   if (!db.revenue) {
     // Örnek ciro: son 45 gün
     const base = { Trendyol: 180000, Hepsiburada: 95000, MCLUB: 60000, Amazon: 42000, N11: 15000, Boyner: 9000 };

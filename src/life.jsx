@@ -7,6 +7,8 @@ import { MARKETPLACES, BRANDS, mpColor } from './constants.js';
 import { normalizePhone, prettyPhone } from './whatsapp.js';
 import { tl, tlShort, parseTL } from './revenue.jsx';
 import { SPECIAL_KINDS, SPECIAL_ICON, specialNext, specialLabel, specialUpcoming } from './special.js';
+import { budgetStatus, catOf, sumBy } from './money.js';
+import { inScope } from './scope.js';
 import {
   addDays, startOfDay, sameDay, weekStart, daysBetween, toDateInput, fromDateInput, fmtShort, fmtLong, rangeLabel, MONTHS, WEEKDAYS
 } from './dates.js';
@@ -102,7 +104,7 @@ export function weeklySummaryVisible(now) {
   try { return localStorage.getItem('ajanda-ozet-gizli') !== toDateInput(weekStart(now)); } catch { return true; }
 }
 
-export function WeeklySummary({ data, revenue, now, actions, onHide }) {
+export function WeeklySummary({ data, revenue, now, actions, onHide, budgets, scope = 'tum' }) {
   const today = startOfDay(now);
   const ws = weekStart(today);
   const we = addDays(ws, 7);
@@ -119,7 +121,7 @@ export function WeeklySummary({ data, revenue, now, actions, onHide }) {
   const top = Object.entries(byMp).sort((a, b) => b[1] - a[1])[0];
 
   const inWeek = (x) => x.due_at && new Date(x.due_at) >= ws && new Date(x.due_at) < we;
-  const items = [...data.reminders, ...data.calls];
+  const items = [...data.reminders, ...data.calls].filter((x) => inScope(x, scope));
   const done = items.filter((x) => x.done && inWeek(x)).length;
   const open = items.filter((x) => !x.done && x.due_at && new Date(x.due_at) < we).length;
 
@@ -131,17 +133,26 @@ export function WeeklySummary({ data, revenue, now, actions, onHide }) {
   const ns = we, ne = addDays(we, 6);
   const NS = toDateInput(ns), NE = toDateInput(ne);
   const nextItems = [
-    ...data.campaigns.filter((c) => c.start_date <= NE && c.end_date >= NS).map((c) => ({
+    ...data.campaigns.filter((c) => c.start_date <= NE && c.end_date >= NS && (scope !== 'ozel' || (c.kind === 'etkinlik' && !c.marketplace))).map((c) => ({
       key: 'k' + c.id, d: fromDateInput(c.start_date < NS ? NS : c.start_date),
       text: (c.kind === 'etkinlik' ? '📅 ' : '📣 ') + c.name + (c.marketplace ? ' · ' + c.marketplace : ''),
       when: c.start_date < NS ? 'devam ediyor' : rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date))
     })),
-    ...(data.collabs || []).filter((c) => c.publish_date >= NS && c.publish_date <= NE && c.status !== 'iptal').map((c) => {
+    ...(scope === 'ozel' ? [] : data.collabs || []).filter((c) => c.publish_date >= NS && c.publish_date <= NE && c.status !== 'iptal').map((c) => {
       const who = ((data.contacts || []).find((k) => k.id === c.contact_id) || {}).name || 'Influencer';
       return { key: 'i' + c.id, d: fromDateInput(c.publish_date), text: '🎬 ' + who + (c.brand ? ' · ' + c.brand : ''), when: fmtShort(fromDateInput(c.publish_date)) };
     }),
-    ...specialUpcoming(data.special_dates, ns, 6).map(({ s, date }) => ({ key: 's' + s.id, d: date, text: (SPECIAL_ICON[s.kind] || '⭐') + ' ' + specialLabel(s, date), when: fmtShort(date) }))
+    ...specialUpcoming(scope === 'is' ? [] : data.special_dates, ns, 6).map(({ s, date }) => ({ key: 's' + s.id, d: date, text: (SPECIAL_ICON[s.kind] || '⭐') + ' ' + specialLabel(s, date), when: fmtShort(date) }))
   ].sort((a, b) => a.d - b.d);
+
+  // Kişisel harcama (cüzdan)
+  const money = data.money || [];
+  const spend = sumBy(money, ws, today, 'gider');
+  const lastSpend = sumBy(money, addDays(ws, -7), addDays(today, -7), 'gider');
+  const spendDelta = lastSpend > 0 ? spend / lastSpend - 1 : null;
+  const warn = budgetStatus(money, budgets, now).filter((b) => b.ratio >= 0.8);
+  const showWork = scope !== 'ozel';
+  const showPrivate = scope !== 'is';
 
   const hasRepeat = data.reminders.some((r) => r.repeat_rule === 'weekly' && r.title === SUMMARY_TITLE && !r.done);
   const delta = last ? cur / last - 1 : null;
@@ -156,7 +167,7 @@ export function WeeklySummary({ data, revenue, now, actions, onHide }) {
         <button type="button" className="linkbtn" onClick={onHide}>Gizle</button>
       </div>
       <div className="wsum-grid">
-        <div className="wsum-cell">
+        {showWork ? <div className="wsum-cell">
           <span className="l">Ciro</span>
           {cur ? (
             <>
@@ -170,13 +181,20 @@ export function WeeklySummary({ data, revenue, now, actions, onHide }) {
               <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => actions.openRevenue(T)}>Ciro gir</button>
             </>
           )}
-        </div>
+        </div> : null}
+        {showPrivate && (money.length || spend) ? (
+          <div className="wsum-cell">
+            <span className="l">Harcama</span>
+            <span className="v">{tlShort(spend)}</span>
+            <span className="s">{spendDelta != null ? <b className={spendDelta <= 0 ? 'up' : 'down'}>{pct(spendDelta)}</b> : null}{spendDelta != null ? ' geçen haftaya göre' : 'geçen hafta kayıt yok'}</span>
+          </div>
+        ) : null}
         <div className="wsum-cell">
           <span className="l">İşler</span>
           <span className="v">{done} <small>bitti</small></span>
           <span className="s">{open ? open + ' açık iş kaldı' : 'Açık iş kalmadı 👏'}</span>
         </div>
-        {hRate != null ? (
+        {hRate != null && showPrivate ? (
           <div className="wsum-cell">
             <span className="l">Alışkanlıklar</span>
             <span className="v">%{Math.round(hRate * 100)}</span>
@@ -184,6 +202,11 @@ export function WeeklySummary({ data, revenue, now, actions, onHide }) {
           </div>
         ) : null}
       </div>
+      {showPrivate && warn.length ? (
+        <div className="wsum-warn">
+          {warn.map((b) => <span key={b.cat}>{catOf(b.cat).emoji} {catOf(b.cat).label}: bütçenin %{Math.round(b.ratio * 100)}'i{b.ratio >= 1 ? ' — aşıldı' : ''}</span>)}
+        </div>
+      ) : null}
       <div className="wsum-next">
         <span className="l">Gelecek hafta</span>
         {nextItems.length ? nextItems.slice(0, 6).map((x) => (
@@ -241,6 +264,35 @@ export function HabitsCard({ data, now, actions }) {
             </div>
           );
         }) : <p className="empty">Her gün yapmak istediğin şeyleri ekle: su içmek, yürüyüş, kitap… Her gün işaretle, seriyi takip et.</p>}
+      </div>
+    </Section>
+  );
+}
+
+// Son 30 gün: her alışkanlık için günlük kareler ve tamamlanma oranı
+export function HabitHistory({ data, now }) {
+  const habits = [...(data.habits || [])].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  if (!habits.length) return null;
+  const today = startOfDay(now);
+  const days = Array.from({ length: 30 }, (_, i) => addDays(today, i - 29));
+  return (
+    <Section title="Son 30 gün">
+      <div className="card list">
+        {habits.map((h) => {
+          const set = new Set((data.habit_logs || []).filter((l) => l.habit_id === h.id).map((l) => l.day));
+          const done = days.filter((d) => set.has(toDateInput(d))).length;
+          const { n } = streak(data.habit_logs || [], h.id, today);
+          let best = 0, run = 0;
+          [...set].sort().forEach((d, i, arr) => { run = i && daysBetween(fromDateInput(arr[i - 1]), fromDateInput(d)) === 1 ? run + 1 : 1; best = Math.max(best, run); });
+          return (
+            <div key={h.id} className="hh">
+              <div className="hh-top"><span className="title">{h.emoji ? h.emoji + ' ' : ''}{h.name}</span><span className="meta">%{Math.round((done / 30) * 100)} · şimdiki seri {n} · en uzun {best}</span></div>
+              <div className="hh-grid" aria-label={'Son 30 günde ' + done + ' gün'}>
+                {days.map((d) => <span key={d.getTime()} className={'hh-c' + (set.has(toDateInput(d)) ? ' on' : '') + (sameDay(d, today) ? ' today' : '')} title={fmtShort(d)} />)}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </Section>
   );

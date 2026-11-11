@@ -7,8 +7,9 @@ import { mapsLink, mapsTarget } from './location.js';
 import { occursOn, ruleLabel } from './recur.js';
 import { specialOn, specialLabel, specialUpcoming, SPECIAL_ICON } from './special.js';
 import {
-  findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, ListsView, ContactsView, InfluencerView, SpecialDatesSection
+  findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, ContactsView
 } from './life.jsx';
+import { SCOPES, scopeData } from './scope.js';
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -429,7 +430,8 @@ export function MarketplacePanel({ name, data, now, actions }) {
 }
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: allData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue }) {
+export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets }) {
+  const allData = scopeData(rawData, scope);
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} contacts={allData.contacts} />;
   const [sumHidden, setSumHidden] = useState(false);
   const showSummary = !sumHidden && weeklySummaryVisible(now);
@@ -458,7 +460,12 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-    <div className={'today-top' + (yarimHidden ? ' solo' : '')}>
+    {setScope ? (
+      <div className="scopebar" role="group" aria-label="Göster">
+        {SCOPES.map(([v, l]) => <button key={v} type="button" className={scope === v ? 'on' : ''} aria-pressed={scope === v} onClick={() => setScope(v)}>{l}</button>)}
+      </div>
+    ) : null}
+    <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
         <section className="hero">
           <span className="k">Sıradaki</span>
           {next ? (
@@ -473,9 +480,9 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
             </>
           )}
         </section>
-        {yarimHidden ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
+        {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
-    {showSummary ? <WeeklySummary data={allData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} /> : null}
+    {showSummary ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -494,7 +501,7 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
           </div>
         </Section>
 
-        <HabitsCard data={allData} now={now} actions={actions} />
+        {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
 
         {undated.length ? (
           <Section title="Tarihsiz işler" meta={undated.length + ' iş'}>
@@ -528,14 +535,16 @@ export function TodayScreen({ data: allData, events, google, now, actions, goTab
           </div>
         </Section>
 
-        <Section title="Kampanyalar" action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
-          {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />) : <div className="card"><p className="empty">Önümüzdeki 2 haftada kampanya yok.</p></div>}
-        </Section>
+        {scope !== 'ozel' ? (
+          <Section title="Kampanyalar" action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
+            {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />) : <div className="card"><p className="empty">Önümüzdeki 2 haftada kampanya yok.</p></div>}
+          </Section>
+        ) : null}
       </div>
     </div>
     <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} />
     <MonthCalendar data={allData} events={events} google={google} now={now} actions={actions} month={month} setMonth={setMonth} />
-    <MarketplaceStrip data={allData} now={now} actions={actions} />
+    {scope !== 'ozel' ? <MarketplaceStrip data={allData} now={now} actions={actions} /> : null}
     </div>
   );
 }
@@ -703,7 +712,6 @@ export function CalendarScreen({ data, events, google, now, day, setDay, actions
           {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} />) : google !== 'checking' ? <p className="empty">Bu gün için kayıt yok.</p> : null}
         </div>
       </Section>
-      <SpecialDatesSection data={data} now={now} actions={actions} />
     </div>
   );
 }
@@ -774,7 +782,7 @@ export function CampaignsScreen({ data, actions, revenue, now = new Date() }) {
 }
 
 // ---------- NOTLAR ----------
-function DailyNotes({ data, now, actions }) {
+export function DailyNotes({ data, now, actions }) {
   const [date, setDate] = useState(toDateInput(now));
   const existing = data.daily_notes.find((d) => d.note_date === date);
   const [text, setText] = useState(existing ? existing.body : '');
@@ -833,53 +841,41 @@ function DailyNotes({ data, now, actions }) {
   );
 }
 
-export function NotesScreen({ data, now, actions }) {
-  const [seg, setSegState] = useState(() => { try { return sessionStorage.getItem('ajanda-notes-seg') || 'pazaryeri'; } catch { return 'pazaryeri'; } });
-  const setSeg = (v) => { setSegState(v); try { sessionStorage.setItem('ajanda-notes-seg', v); } catch { /* yok say */ } };
+export function MarketplaceNotes({ data, actions }) {
   const [mp, setMp] = useState('Tümü');
   const [q, setQ] = useState('');
   const used = useMemo(() => {
-    const s = new Set(data.notes.map((n) => n.marketplace || 'Genel'));
-    return ['Tümü', ...MARKETPLACES.map((m) => m.name).filter((n) => s.has(n)), ...(s.has('Genel') ? ['Genel'] : [])];
+    const st = new Set(data.notes.map((n) => n.marketplace || 'Genel'));
+    return ['Tümü', ...MARKETPLACES.map((m) => m.name).filter((n) => st.has(n)), ...(st.has('Genel') ? ['Genel'] : [])];
   }, [data.notes]);
   const ql = q.trim().toLocaleLowerCase('tr-TR');
   const notes = data.notes
     .filter((n) => mp === 'Tümü' || (n.marketplace || 'Genel') === mp)
     .filter((n) => !ql || (n.title + ' ' + (n.body || '') + ' ' + (n.brand || '')).toLocaleLowerCase('tr-TR').includes(ql))
     .sort((a, b) => (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || ''));
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div className="seg three" role="group" aria-label="Not türü" style={{ maxWidth: 480 }}>
-        <button type="button" className={seg === 'pazaryeri' ? 'on' : ''} onClick={() => setSeg('pazaryeri')}>Pazaryeri</button>
-        <button type="button" className={seg === 'gunluk' ? 'on' : ''} onClick={() => setSeg('gunluk')}>Günlük</button>
-        <button type="button" className={seg === 'liste' ? 'on' : ''} onClick={() => setSeg('liste')}>Listeler</button>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <label htmlFor="nsearch" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Notlarda ara</label>
+        <input id="nsearch" className="search" type="search" placeholder="Notlarda ara" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button type="button" className="btn primary" style={{ flex: '0 0 auto', minHeight: 46 }} onClick={() => actions.openNote({})}>+ Not</button>
       </div>
-      {seg === 'pazaryeri' ? (
-        <>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <label htmlFor="nsearch" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Notlarda ara</label>
-            <input id="nsearch" className="search" type="search" placeholder="Notlarda ara" value={q} onChange={(e) => setQ(e.target.value)} />
-            <button type="button" className="btn primary" style={{ flex: '0 0 auto', minHeight: 46 }} onClick={() => actions.openNote({})}>+ Not</button>
-          </div>
-          <div className="chips">
-            {used.map((m) => (
-              <button key={m} type="button" className={'chip' + (mp === m ? ' on' : '')} onClick={() => setMp(m)} aria-pressed={mp === m}>
-                {m !== 'Tümü' ? <span className="dot" style={{ background: mpColor(m === 'Genel' ? '' : m) }} /> : null}{m}
-              </button>
-            ))}
-          </div>
-          <div className="notes-grid">
-            {notes.length ? notes.map((n) => (
-              <button type="button" key={n.id} className="note" onClick={() => actions.openNote(n)}>
-                <span className="top"><Mp name={n.marketplace || 'Genel'} /><span>{n.brand ? n.brand + ' · ' : ''}{fmtShort(new Date(n.updated_at || n.created_at))}</span></span>
-                <span className="h">{n.title}</span>
-                {n.body ? <span className="b">{n.body}</span> : null}
-              </button>
-            )) : <div className="card"><p className="empty">{q ? 'Aramaya uyan not yok.' : 'Henüz not yok.'}</p></div>}
-          </div>
-        </>
-      ) : seg === 'liste' ? <ListsView data={data} actions={actions} /> : <DailyNotes data={data} now={now} actions={actions} />}
+      <div className="chips">
+        {used.map((m) => (
+          <button key={m} type="button" className={'chip' + (mp === m ? ' on' : '')} onClick={() => setMp(m)} aria-pressed={mp === m}>
+            {m !== 'Tümü' ? <span className="dot" style={{ background: mpColor(m === 'Genel' ? '' : m) }} /> : null}{m}
+          </button>
+        ))}
+      </div>
+      <div className="notes-grid">
+        {notes.length ? notes.map((n) => (
+          <button type="button" key={n.id} className="note" onClick={() => actions.openNote(n)}>
+            <span className="top"><Mp name={n.marketplace || 'Genel'} /><span>{n.brand ? n.brand + ' · ' : ''}{fmtShort(new Date(n.updated_at || n.created_at))}</span></span>
+            <span className="h">{n.title}</span>
+            {n.body ? <span className="b">{n.body}</span> : null}
+          </button>
+        )) : <div className="card"><p className="empty">{q ? 'Aramaya uyan not yok.' : 'Henüz not yok.'}</p></div>}
+      </div>
     </div>
   );
 }
@@ -890,14 +886,11 @@ export function CallsScreen(props) {
   const setSeg = (v) => { setSegState(v); try { sessionStorage.setItem('ajanda-calls-seg', v); } catch { /* yok say */ } };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div className="seg three" role="group" aria-label="Görünüm" style={{ maxWidth: 480 }}>
-        <button type="button" className={seg === 'arama' ? 'on' : ''} onClick={() => setSeg('arama')}>Aramalar</button>
+      <div className="seg" role="group" aria-label="Görünüm" style={{ maxWidth: 360 }}>
+        <button type="button" className={seg !== 'rehber' ? 'on' : ''} onClick={() => setSeg('arama')}>Aramalar</button>
         <button type="button" className={seg === 'rehber' ? 'on' : ''} onClick={() => setSeg('rehber')}>Rehber</button>
-        <button type="button" className={seg === 'infl' ? 'on' : ''} onClick={() => setSeg('infl')}>Influencer</button>
       </div>
-      {seg === 'rehber' ? <ContactsView data={props.data} actions={props.actions} />
-        : seg === 'infl' ? <InfluencerView data={props.data} now={props.now} actions={props.actions} />
-          : <CallsList {...props} />}
+      {seg === 'rehber' ? <ContactsView data={props.data} actions={props.actions} /> : <CallsList {...props} />}
     </div>
   );
 }

@@ -2,13 +2,14 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { RULES, ruleLabel } from './recur.js';
 import { Sheet } from './ui.jsx';
 import { parseQuick } from './parse.js';
+import { parseMoney, catOf } from './money.js';
 import { MARKETPLACES, BRANDS, DEFAULT_PREPS, mpColor } from './constants.js';
-import { toDateInput, toTimeInput, combine, whenLabel, addDays, startOfDay, fromDateInput, rangeLabel } from './dates.js';
+import { toDateInput, toTimeInput, combine, whenLabel, dayLabel, addDays, startOfDay, fromDateInput, rangeLabel } from './dates.js';
 import { normalizePhone, prettyPhone, DEFAULT_LOVE_MESSAGE } from './whatsapp.js';
 import { currentLocation, searchPlaces, parseGeo, geoText, mapsLink, mapsTarget } from './location.js';
 const MapPin = lazy(() => import('./MapPin.jsx'));
 
-const EXAMPLES = ['yarın 10:00 HB fiyat güncelle', 'Cuma 15:00 kargo firmasını ara', 'not: Trendyol komisyon oranını kontrol et', '12-14 kasım Trendyol kampanyası'];
+const EXAMPLES = ['yarın 10:00 HB fiyat güncelle', 'Cuma 15:00 kargo firmasını ara', 'not: Trendyol komisyon oranını kontrol et', '12-14 kasım Trendyol kampanyası', '250 market kart'];
 
 function MpSelect({ value, onChange, id, emptyLabel = 'Yok' }) {
   return (
@@ -65,10 +66,12 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
       type: own.type !== 'Hatırlatma' ? own.type : (all.type === 'Not' ? 'Hatırlatma' : all.type)
     };
   }, [q, shared]);
-  const type = typeOverride || p.type;
+  // "250 market", "+45000 maaş" gibi yazılanlar cüzdana gider
+  const money = useMemo(() => (shared ? null : parseMoney(q)), [q, shared]);
+  const type = typeOverride || (money ? 'Para' : p.type);
   const yarim = yarimHidden ? false : (yarimOverride !== null ? yarimOverride : p.yarim);
 
-  const build = () => ({ ...p, type, yarim, shared: shared || '' });
+  const build = () => ({ ...p, type, yarim, shared: shared || '', money, raw: q.trim() });
 
   const submit = async (e) => {
     if (e) e.preventDefault();
@@ -93,12 +96,23 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
             onPaste={(e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; if (!shared && (t.length > 90 || /\n/.test(t))) { e.preventDefault(); setShared(t.trim().slice(0, 4000)); setQ(condense(t)); } }} placeholder="ör. yarın 10:00 HB fiyat güncelle" enterKeyHint="done" />
         </div>
         <div className="typechips" role="group" aria-label="Tür">
-          {['Hatırlatma', 'Arama', 'Not', 'Kampanya', 'Etkinlik'].map((t) => (
-            <button key={t} type="button" className={'chip' + (type === t ? ' on' : '')} onClick={() => setTypeOverride(t)} aria-pressed={type === t}>{t}</button>
+          {['Hatırlatma', 'Arama', 'Not', 'Kampanya', 'Etkinlik', 'Para'].map((t) => (
+            <button key={t} type="button" className={'chip' + (type === t ? ' on' : '')} onClick={() => setTypeOverride(t)} aria-pressed={type === t}>{t === 'Para' ? '💸 Para' : t}</button>
           ))}
-          {type !== 'Not' && type !== 'Etkinlik' && type !== 'Kampanya' && !yarimHidden && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
+          {type !== 'Not' && type !== 'Etkinlik' && type !== 'Kampanya' && type !== 'Para' && !yarimHidden && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
         </div>
-        {q.trim() ? (
+        {q.trim() && type === 'Para' ? (
+          <div className="parsed">
+            {money ? (
+              <>
+                <span><b>{money.kind === 'gelir' ? '+ Gelir' : '− Gider'}</b> · {money.amount.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ₺</span>
+                <span>{catOf(money.category).emoji} {catOf(money.category).label}</span>
+                <span>{dayLabel(fromDateInput(money.day))}</span>
+                {money.method ? <span>{money.method === 'kart' ? '💳 Kart' : '💵 Nakit'}</span> : null}
+              </>
+            ) : <span>Tutar bulunamadı — "Detaylı düzenle" ile gir</span>}
+          </div>
+        ) : q.trim() ? (
           <div className="parsed">
             <span>Zaman: {type === 'Not' ? '—' : (type === 'Etkinlik' || type === 'Kampanya') ? (p.date ? (p.endDate ? rangeLabel(p.date, p.endDate) : rangeLabel(p.date, p.date)) + (p.endDate ? ' · ' + (Math.round((p.endDate - startOfDay(p.date)) / 86400000) + 1) + ' gün' : '') : 'Bugün') : p.date ? whenLabel(p.date) + (p.hasTime ? '' : ' (varsayılan saat)') : 'Tarihsiz'}</span>
             {p.repeat && type === 'Hatırlatma' ? <span>↻ {ruleLabel(p.repeat, p.date)}</span> : null}
@@ -233,7 +247,10 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
   const [yarim, setYarim] = useState(!!initial.for_yarim);
   const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const [repeat, setRepeat] = useState(initial.repeat_rule || '');
+  const [scope, setScope] = useState(initial.scope || '');
   const [busy, setBusy] = useState(false);
+  // Sütun henüz yoksa (11 numaralı SQL) kaydı bozmamak için yalnız seçildiyse gönder
+  const scopeField = scope || initial.scope ? { scope: yarim ? null : (scope || null) } : {};
   // Arama eklerken rehberden öneriler (yazdıkça)
   const tq = title.trim().toLocaleLowerCase('tr-TR');
   const suggestions = kind === 'call' && tq.length >= 1
@@ -246,8 +263,8 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
     setBusy(true);
     const due = date ? combine(date, time).toISOString() : null;
     try {
-      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...(repeat || initial.repeat_rule ? { repeat_rule: due ? (repeat || null) : null } : {}), ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) });
-      else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim, missedId: initial.missedId });
+      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...scopeField, ...(repeat || initial.repeat_rule ? { repeat_rule: due ? (repeat || null) : null } : {}), ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) });
+      else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim, ...scopeField, missedId: initial.missedId });
     } finally { setBusy(false); }
   };
 
@@ -318,7 +335,14 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
           <span className="hint" style={{ alignSelf: 'center' }}>{yarim ? 'Yarim alanında görünür, bildirimin sonunda ❤️ olur' : 'Yarim ile ilgiliyse işaretle'}</span>
         </div>
         )}
-        {kind === 'reminder' && !yarim && (
+        {!yarim ? (
+          <div className="typechips" role="group" aria-label="Alan">
+            <button type="button" className={'chip' + (scope !== 'ozel' ? ' on' : '')} aria-pressed={scope !== 'ozel'} onClick={() => setScope(initial.scope ? 'is' : '')}>💼 İş</button>
+            <button type="button" className={'chip' + (scope === 'ozel' ? ' on' : '')} aria-pressed={scope === 'ozel'} onClick={() => { setScope('ozel'); setMp(''); }}>🏡 Özel</button>
+            <span className="hint" style={{ alignSelf: 'center' }}>{scope === 'ozel' ? 'Bugün sayfasında "Özel" filtresinde görünür' : 'Bugün sayfasında "İş" filtresinde görünür'}</span>
+          </div>
+        ) : null}
+        {kind === 'reminder' && !yarim && scope !== 'ozel' && (
           <div className="field">
             <label htmlFor="f-mp">Pazaryeri</label>
             <MpSelect id="f-mp" value={mp} onChange={setMp} />

@@ -5,6 +5,8 @@ export const Icon = {
   Calendar: (p) => (<svg width="22" height="22" viewBox="0 0 24 24" {...base} {...p}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>),
   Megaphone: (p) => (<svg width="22" height="22" viewBox="0 0 24 24" {...base} {...p}><path d="M3 11v3a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1z" /><path d="M17 9a4 4 0 0 1 0 6" /></svg>),
   Note: (p) => (<svg width="22" height="22" viewBox="0 0 24 24" {...base} {...p}><path d="M6 3h9l4 4v14H6z" /><path d="M9 12h7M9 16h5" /></svg>),
+  Briefcase: (p) => (<svg width="22" height="22" viewBox="0 0 24 24" {...base} {...p}><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18" /></svg>),
+  Home: (p) => (<svg width="22" height="22" viewBox="0 0 24 24" {...base} {...p}><path d="M4 11l8-7 8 7" /><path d="M6 10v10h12V10" /><path d="M10 20v-5h4v5" /></svg>),
   Phone: (p) => (<svg width="22" height="22" viewBox="0 0 24 24" {...base} {...p}><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>),
   Plus: (p) => (<svg width="26" height="26" viewBox="0 0 24 24" {...base} strokeWidth="2.4" {...p}><path d="M12 5v14M5 12h14" /></svg>),
   Close: (p) => (<svg width="20" height="20" viewBox="0 0 24 24" {...base} strokeWidth="2.2" {...p}><path d="M6 6l12 12M18 6L6 18" /></svg>),

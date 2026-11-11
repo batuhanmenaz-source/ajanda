@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
-import { TodayScreen, CalendarScreen, CampaignsScreen, NotesScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
+import { TodayScreen, CalendarScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
+import { WorkScreen, PrivateScreen, WORK_TABS, PRIVATE_TABS } from './areas.jsx';
+import { MoneySheet, FixedSheet, BudgetSheet } from './wallet.jsx';
+import { nextFixedDue } from './money.js';
 import { Sheet } from './ui.jsx';
-import { RevenueScreen, RevenueSheet, TargetSheet, marketplaceOrder } from './revenue.jsx';
+import { RevenueSheet, TargetSheet, marketplaceOrder, tl } from './revenue.jsx';
 import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet, YarimToggle } from './sheets.jsx';
 import { HabitSheet, ListSheet, ContactSheet, CollabSheet, SpecialDateSheet, findContact, nextFriday17, SUMMARY_TITLE } from './life.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
@@ -16,17 +19,36 @@ import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, 
 const TABS = [
   { id: 'bugun', label: 'Bugün', icon: Icon.Today },
   { id: 'takvim', label: 'Takvim', icon: Icon.Calendar },
-  { id: 'kampanya', label: 'Kampanya', icon: Icon.Megaphone },
-  { id: 'notlar', label: 'Notlar', icon: Icon.Note },
+  { id: 'is', label: 'İş', icon: Icon.Briefcase },
+  { id: 'ozel', label: 'Özel', icon: Icon.Home },
   { id: 'aramalar', label: 'Aramalar', icon: Icon.Phone }
 ];
 
-const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [] };
+const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [] };
 
 export default function App({ store, demo, email, onSignOut, onReconnect, googleSave }) {
   const [data, setData] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem('ajanda-tab') || 'bugun'; } catch { return 'bugun'; } });
+  const [tab, setTab] = useState(() => {
+    let t = 'bugun';
+    try { t = sessionStorage.getItem('ajanda-tab') || 'bugun'; } catch { /* yok say */ }
+    return t === 'kampanya' ? 'is' : t === 'notlar' ? 'ozel' : t;
+  });
+  // İş ve Özel sekmelerinin alt bölümleri
+  const ss = (k, d) => { try { return sessionStorage.getItem(k) || d; } catch { return d; } };
+  const [isSeg, setIsSegState] = useState(() => (ss('ajanda-sales', '') === 'ciro' ? 'ciro' : ss('ajanda-is-seg', 'kampanya')));
+  const [ozelSeg, setOzelSegState] = useState(() => ss('ajanda-ozel-seg', 'cuzdan'));
+  const setIsSeg = (v) => { setIsSegState(v); try { sessionStorage.setItem('ajanda-is-seg', v); sessionStorage.removeItem('ajanda-sales'); } catch { /* yok say */ } };
+  const setOzelSeg = (v) => { setOzelSegState(v); try { sessionStorage.setItem('ajanda-ozel-seg', v); } catch { /* yok say */ } };
+  const goTab = (t) => {
+    if (t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer') { setIsSeg(t); setTab('is'); }
+    else if (t === 'cuzdan' || t === 'listeler' || t === 'aliskanlik' || t === 'ozelgun' || t === 'gunluk') { setOzelSeg(t); setTab('ozel'); }
+    else setTab(t);
+  };
+  // Bugün sayfası filtresi: Tümü / İş / Özel (bu cihazda hatırlanır)
+  const [scope, setScopeState] = useState(() => { try { return localStorage.getItem('ajanda-scope') || 'tum'; } catch { return 'tum'; } });
+  const setScope = (v) => { setScopeState(v); try { localStorage.setItem('ajanda-scope', v); } catch { /* yok say */ } };
+  const [budgets, setBudgets] = useState({});
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
   const [google, setGoogle] = useState(demo ? 'off' : 'checking');
@@ -77,8 +99,6 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const [love, setLove] = useState({ phone: '', message: '', count: 0, token: '' });
 
   // ---------- Ciro ----------
-  const [salesView, setSalesView] = useState(() => { try { return sessionStorage.getItem('ajanda-sales') || 'kampanya'; } catch { return 'kampanya'; } });
-  useEffect(() => { try { sessionStorage.setItem('ajanda-sales', salesView); } catch { /* yok say */ } }, [salesView]);
   const [revenue, setRevenue] = useState([]);
   const [revLoaded, setRevLoaded] = useState(false);
   const [revError, setRevError] = useState('');
@@ -127,7 +147,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -245,14 +265,15 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/contacts|collabs|special_dates|list_items|lists|habits|habit_logs/.test(msg) && /schema cache|does not exist|relation/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 10 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/money|scope|budgets/.test(msg) && /schema cache|does not exist|relation|column/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 11 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/contacts|collabs|special_dates|list_items|lists|habits|habit_logs/.test(msg) && /schema cache|does not exist|relation/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 10 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/location_geo/.test(msg)) say('Kaydedilemedi: Harita konumu için Supabase\'de 08 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/location/.test(msg)) say('Kaydedilemedi: Konum için Supabase\'de 07 numaralı SQL\'i çalıştırman gerekiyor.');
     else say('İşlem yapılamadı. İnternet bağlantını kontrol edip tekrar dene.');
   };
 
   // ---------- Hatırlatma & arama ----------
-  const saveItem = async (table, input) => {
+  const saveItem = async (table, input, quiet) => {
     const { missedId, ...fields } = input;
     try {
       const syncFn = table === 'reminders' ? syncReminder : syncCall;
@@ -274,9 +295,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         await store.update('missed_calls', missedId, { handled: true });
         patchLocal('missed_calls', missedId, { handled: true });
       }
-      setSheet(null);
-      say(table === 'reminders' ? 'Hatırlatma kaydedildi' : 'Arama kaydedildi');
-    } catch (e) { fail(e); }
+      if (!quiet) { setSheet(null); say(table === 'reminders' ? 'Hatırlatma kaydedildi' : 'Arama kaydedildi'); }
+      return row;
+    } catch (e) { fail(e); return null; }
   };
 
   const deleteItem = async (table, item) => {
@@ -444,9 +465,59 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
   const addWeeklySummaryReminder = () => saveItem('reminders', { title: SUMMARY_TITLE, marketplace: null, due_at: nextFriday17().toISOString(), for_yarim: false, repeat_rule: 'weekly' });
 
+  // ---------- Cüzdan ----------
+  const fixedReminder = (f) => ({
+    title: (f.kind === 'gelir' ? '💰 ' : '💳 ') + f.title + ' · ' + tl(f.amount), marketplace: null, for_yarim: false, scope: 'ozel',
+    due_at: nextFixedDue(f).toISOString(), repeat_rule: 'monthly'
+  });
+  const removeReminderQuiet = async (id) => {
+    const r = data.reminders.find((x) => x.id === id);
+    if (!r) return;
+    if (r.google_event_id) await gsync(() => syncReminder({ ...r, done: true }));
+    await store.remove('reminders', id);
+    removeLocal('reminders', id);
+  };
+  const saveFixed = async (f) => {
+    const row = await saveRow('money_fixed', f, 'Sabit kalem kaydedildi');
+    if (!row) return;
+    try {
+      const has = row.reminder_id && data.reminders.some((x) => x.id === row.reminder_id);
+      if (row.remind) {
+        const rem = await saveItem('reminders', { ...(has ? { id: row.reminder_id } : {}), ...fixedReminder(row) }, true);
+        if (rem && rem.id !== row.reminder_id) { await store.update('money_fixed', row.id, { reminder_id: rem.id }); patchLocal('money_fixed', row.id, { reminder_id: rem.id }); }
+      } else if (has) {
+        await removeReminderQuiet(row.reminder_id);
+        await store.update('money_fixed', row.id, { reminder_id: null }); patchLocal('money_fixed', row.id, { reminder_id: null });
+      }
+    } catch (e) { fail(e); }
+  };
+  const deleteFixed = async (f) => {
+    if (!window.confirm('"' + f.title + '" silinsin mi? Geçmiş ödemeler kayıtlarda kalır.')) return;
+    try { if (f.reminder_id) await removeReminderQuiet(f.reminder_id); } catch (e) { console.error(e); }
+    await deleteRow('money_fixed', f);
+  };
+  const payFixed = async (f, due) => {
+    const t = startOfDay(new Date());
+    const sameMonth = due.getFullYear() === t.getFullYear() && due.getMonth() === t.getMonth();
+    const row = await saveRow('money', { kind: f.kind || 'gider', amount: f.amount, category: f.category, note: f.title, method: f.method || null, fixed_id: f.id, day: toDateInput(sameMonth ? t : due) });
+    if (row) say(f.title + (f.kind === 'gelir' ? ' geldi olarak işaretlendi' : ' ödendi olarak işaretlendi') + ' ✓');
+  };
+  const saveBudgets = async (b) => {
+    try { const s2 = await store.saveSettings({ budgets: b }); setBudgets(s2.budgets || b); setSheet(null); say('Bütçe kaydedildi'); }
+    catch (e) { fail(e); }
+  };
+  const moneyMsg = (m) => (m.kind === 'gelir' ? 'Gelir kaydedildi' : 'Gider kaydedildi') + ' · ' + tl(m.amount, Number(m.amount) % 1 ? 2 : 0);
+
   // ---------- Hızlı ekle ----------
   const quickSave = async (p) => {
     const due = p.date ? p.date.toISOString() : null;
+    // Bugün sayfasında İş ya da Özel seçiliyse yeni kayıt o alana yazılır
+    const sc = scope === 'ozel' && !p.yarim && !p.mp ? { scope: 'ozel' } : {};
+    if (p.type === 'Para') {
+      if (p.money) await saveRow('money', p.money, moneyMsg(p.money));
+      else setSheet({ kind: 'money', item: { kind: 'gider', note: p.raw || '' } });
+      return;
+    }
     if (p.type === 'Kampanya' || p.type === 'Etkinlik') {
       const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
       const en = p.endDate ? startOfDay(p.endDate) : st;
@@ -456,19 +527,20 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       );
     } else if (p.type === 'Not') {
       await saveNote({ marketplace: p.mp || null, brand: p.brand || null, title: p.title || 'Not', body: p.shared || '' });
-      setTab('notlar');
+      goTab('notlar');
     } else if (p.type === 'Arama') {
-      await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due, for_yarim: !!p.yarim });
+      await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due, for_yarim: !!p.yarim, ...sc });
     } else {
-      await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.yarim ? null : (p.mp || null), due_at: due, for_yarim: !!p.yarim, ...(p.repeat ? { repeat_rule: p.repeat } : {}) });
+      await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.yarim ? null : (p.mp || null), due_at: due, for_yarim: !!p.yarim, ...sc, ...(p.repeat ? { repeat_rule: p.repeat } : {}) });
     }
   };
   const quickDetail = (p) => {
+    if (p.type === 'Para') { setSheet({ kind: 'money', item: p.money || { kind: 'gider', note: p.raw || '' } }); return; }
     if (p.type === 'Kampanya' || p.type === 'Etkinlik') {
       const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
       setSheet({ kind: 'campaign', item: { name: p.title, marketplace: p.mp, start_date: toDateInput(st), end_date: toDateInput(p.endDate ? startOfDay(p.endDate) : st), kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik' } });
     } else if (p.type === 'Not') setSheet({ kind: 'note', item: { marketplace: p.mp, brand: p.brand, title: p.title, body: p.shared || '' } });
-    else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim, repeat_rule: p.repeat || '' } });
+    else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim, repeat_rule: p.repeat || '', ...(scope === 'ozel' && !p.yarim && !p.mp ? { scope: 'ozel' } : {}) } });
   };
 
   const actions = {
@@ -520,6 +592,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openContact: (x) => setSheet({ kind: 'contact', item: x }),
     openHabit: (x) => setSheet({ kind: 'habit', item: x.id ? x : { ...x, sort: data.habits.length } }),
     openList: (x) => setSheet({ kind: 'list', item: x }),
+    openMoney: (m) => setSheet({ kind: 'money', item: m }),
+    openFixed: (f) => setSheet({ kind: 'fixed', item: f }),
+    openBudget: () => setSheet({ kind: 'budget' }),
+    payFixed,
     toggleHabit, addListItems, toggleListItem, deleteListItem, clearListDone, addWeeklySummaryReminder,
     toggleTask, addTask, deleteTask, saveDaily
   };
@@ -622,8 +698,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const head = {
     bugun: ['Bugün', fmtLong(today)],
     takvim: ['Takvim', rangeLabel(weekStart(day), addDays(weekStart(day), 6))],
-    kampanya: salesView === 'ciro' ? ['Ciro', 'Günlük ciro takibi'] : ['Kampanyalar', upcomingCamps + ' aktif / yaklaşan kampanya'],
-    notlar: ['Notlar', 'Pazaryeri ve günlük notlar'],
+    is: ['İş', isSeg === 'kampanya' ? upcomingCamps + ' aktif / yaklaşan kampanya' : (WORK_TABS.find((x) => x[0] === isSeg) || [, ''])[1]],
+    ozel: ['Özel', (PRIVATE_TABS.find((x) => x[0] === ozelSeg) || [, ''])[1]],
     aramalar: ['Aramalar', openCalls + ' aranacak']
   }[tab];
 
@@ -685,20 +761,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={setTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} yarimHidden={yarimHidden} />}
-              {tab === 'kampanya' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div className="seg" role="group" aria-label="Görünüm" style={{ maxWidth: 420 }}>
-                    <button type="button" className={salesView === 'kampanya' ? 'on' : ''} onClick={() => setSalesView('kampanya')}>Kampanyalar</button>
-                    <button type="button" className={salesView === 'ciro' ? 'on' : ''} onClick={() => setSalesView('ciro')}>Ciro</button>
-                  </div>
-                  {salesView === 'ciro'
-                    ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} />
-                    : <CampaignsScreen data={data} actions={actions} revenue={revenue} now={now} />}
-                </div>
-              )}
-              {tab === 'notlar' && <NotesScreen data={data} now={now} actions={actions} />}
+              {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} />}
+              {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} />}
               {tab === 'aramalar' && <CallsScreen data={viewData} now={now} actions={actions} missedConfigured={!!love.token} />}
             </>
           )}
@@ -730,6 +796,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         onSave={(f) => saveRow('habits', f, 'Alışkanlık kaydedildi')} onDelete={(x) => deleteRow('habits', x, '"' + x.name + '" ve tüm geçmişi silinsin mi?')} />}
       {sheet && sheet.kind === 'list' && <ListSheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('lists', f, 'Liste kaydedildi')} onDelete={(x) => deleteRow('lists', x, '"' + x.title + '" listesi ve içindekiler silinsin mi?')} />}
+      {sheet && sheet.kind === 'money' && <MoneySheet initial={sheet.item} onClose={() => setSheet(null)}
+        onSave={(f) => saveRow('money', f, moneyMsg(f))} onDelete={(x) => deleteRow('money', x, 'Bu kayıt silinsin mi?')} />}
+      {sheet && sheet.kind === 'fixed' && <FixedSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveFixed} onDelete={deleteFixed} />}
+      {sheet && sheet.kind === 'budget' && <BudgetSheet budgets={budgets} onClose={() => setSheet(null)} onSave={saveBudgets} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} />}
       {sheet && sheet.kind === 'yarim' && (

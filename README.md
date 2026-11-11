@@ -14,11 +14,13 @@ Google Takvim, hatırlatmalar, pazaryeri notları, kampanya takvimi ve aramalar�
 - **Haftalık özet:** Cuma–pazar Bugün sayfasında haftanın cirosu, işler, alışkanlıklar ve gelecek hafta.
 - **Rehber ve influencer:** Kişiler (arama eklerken isimden numara gelir, cevapsız çağrıda isim görünür), influencer iş birlikleri (yayın tarihi, ücret, durum).
 - **Özel günler, listeler, alışkanlıklar:** Her yıl tekrarlayan özel günler, işaretlenebilir listeler, günlük alışkanlık serileri.
+- **Menü:** Bugün · Takvim · İş (kampanyalar, ciro, pazaryeri notları, influencer) · Özel (cüzdan, listeler, alışkanlıklar, özel günler, günlük not) · Aramalar. Bugün sayfasında Tümü / İş / Özel filtresi.
+- **Cüzdan:** Kişisel gelir/gider (işten ayrı); haftalık ve aylık görünüm, kategori dağılımı, kart/nakit, aylık kategori bütçesi, sabit giderler ve ödeme günü hatırlatması. Hızlı ekle'ye "250 market" ya da "+45000 maaş" yazılabilir.
 - **Hızlı ekle:** "yarın 10:00 HB fiyat güncelle", "Cuma 15:00 kargo firmasını ara", "not: Trendyol komisyon kontrolü" gibi yazılanları tarih, saat, pazaryeri ve türüne göre ayırır.
 
 ## Kurulum özeti
 
-1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`10` numaralı dosyaları sırayla çalıştır.
+1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`11` numaralı dosyaları sırayla çalıştır.
 2. Supabase > Authentication > Providers > Google: Google Cloud'daki istemci kimliği ve gizli anahtarı gir.
 3. Vercel'de bu depoyu içe aktar ve şu ortam değişkenlerini tanımla:
 
