@@ -2,7 +2,7 @@
 import { supabase } from './supabase.js';
 import { addDays, startOfDay, toDateInput } from './dates.js';
 
-export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories'];
+export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories', 'followups'];
 export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls', ...NEW_TABLES];
 // SQL'i henüz çalıştırılmamış olabilecek tablolar: hata verirse boş sayılır
 const OPTIONAL = new Set(['missed_calls', ...NEW_TABLES]);
@@ -25,7 +25,8 @@ const ORDER = {
   money: ['day', false],
   money_fixed: ['day_of_month', true],
   yarim_items: ['sort', true],
-  memories: ['day', false]
+  memories: ['day', false],
+  followups: ['since', true]
 };
 // Açılışta yalnız son ~14 ayın harcamaları yüklenir (hepsi yedekte durur)
 const SINCE = { money: ['day', 430] };
@@ -370,6 +371,17 @@ export function createDemoStore() {
   if (!db.missed_calls) db.missed_calls = [];
   if (!db.contacts) Object.assign(db, seedLife());
   if (!db.yarim_items) Object.assign(db, seedYarim());
+  if (!db.followups) {
+    const t = startOfDay(new Date());
+    const d = (n) => toDateInput(addDays(t, n));
+    db.followups = [
+      { id: uid(), title: 'Varyant talebi (renk seçenekleri)', party: 'Beymen', marketplace: 'Beymen', since: d(-9), nudge_days: 10, done: false },
+      { id: uid(), title: 'Kampanya katılım onayı', party: 'Trendyol kategori ekibi', marketplace: 'Trendyol', since: d(-3), done: false },
+      { id: uid(), title: 'Fatura düzeltmesi', party: 'Hepsiburada', marketplace: 'Hepsiburada', since: d(-16), done: false },
+      { id: uid(), title: 'Ürün açılış talebi', party: 'Beymen', marketplace: 'Beymen', since: d(-30), done: true, done_at: d(-24) },
+      { id: uid(), title: 'Görsel onayı', party: 'Beymen', marketplace: 'Beymen', since: d(-20), done: true, done_at: d(-12) }
+    ];
+  }
   if (!db.money) { const sm = seedMoney(); db.money = sm.money; db.money_fixed = sm.money_fixed; db.settings = { ...(db.settings || {}), budgets: sm.budgets }; }
   if (!db.revenue) {
     // Örnek ciro: son 45 gün

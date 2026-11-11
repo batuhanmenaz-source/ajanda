@@ -21,12 +21,14 @@ Google Takvim, hatırlatmalar, pazaryeri notları, kampanya takvimi ve aramalar�
 - **Bildirim özeti:** MacroDroid `/api/summary` adresini aralıklarla çağırıp kalıcı bildirimde gösterir (sıradaki iş, dünkü ciro, kampanya, özel gün).
 - **Hatırlatma seçimi:** Her kayıtta ne zaman hatırlatılacağı seçilir (tam zamanında, dakika/saat önce, 1–7 gün önce, başladığı gün), kampanyalarda "başlayana kadar her gün", hatırlatmalarda "yapılana kadar her gün"; notlara hatırlatma; Hesap'ta türlere göre varsayılanlar. Google Takvim bir kayıt için en fazla 5 bildirim gönderir.
 - **Yarim:** Anı defteri (fotoğraflı, "1 yıl önce bugün"), onun sevdikleri, hediye fikirleri (doğum günü / yıl dönümüne 2 hafta kala hatırlatma), birlikte yapılacaklar (rastgele hafta sonu önerisi), rastgele günlerde küçük sürpriz hatırlatıcısı.
+- **Bekleyenler:** Tarihsiz takip edilen talepler; kaç gündür beklediği, "N. günde hatırlat", kime göre ortalama dönüş süresi. Hızlı ekle: "bekle: Beymen varyant talebi".
+- **Raporlar:** Dönem ve pazaryerine göre kampanya sayısı, kampanyalı gün, kampanya cirosu ve etkisi; pazaryeri karşılaştırması, influencer, bekleyenler; Excel.
 - **Excel:** Cüzdan (seçili hafta/ay) ve Ciro (ay ya da yıl) .xlsx olarak indirilir.
 - **Hızlı ekle:** "yarın 10:00 HB fiyat güncelle", "Cuma 15:00 kargo firmasını ara", "not: Trendyol komisyon kontrolü" gibi yazılanları tarih, saat, pazaryeri ve türüne göre ayırır.
 
 ## Kurulum özeti
 
-1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`15` numaralı dosyaları sırayla çalıştır.
+1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`16` numaralı dosyaları sırayla çalıştır.
 2. Supabase > Authentication > Providers > Google: Google Cloud'daki istemci kimliği ve gizli anahtarı gir.
 3. Vercel'de bu depoyu içe aktar ve şu ortam değişkenlerini tanımla:
 

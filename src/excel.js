@@ -135,3 +135,27 @@ export async function exportRevenue({ revenue, month, mode }) {
     { name: 'Kayıtlar', rows: raw, widths: [12, 16, 15, 10], sticky: 1 }
   ], 'ciro-' + slug(label) + '.xlsx');
 }
+
+// ---------- Rapor (İş → Raporlar) ----------
+export async function exportReport({ rep, label }) {
+  const camps = [[H('Kampanya'), H('Pazaryeri'), H('Başlangıç'), H('Bitiş'), H('Gün'), H('Kampanya cirosu'), H('Günlük ort.'), H('Öncesine göre'), H('Girilen gün')]];
+  rep.camps.forEach(({ c, days, r }) => camps.push([
+    S(c.name), S(c.marketplace || 'Genel'), D(c.start_date), D(c.end_date), N(days),
+    r ? N(r.cur, TL) : S(''), r ? N(r.avg, TL) : S(''), r && r.delta != null ? N(r.delta, PCT) : S(''), r ? S(r.entered + '/' + r.total) : S('')
+  ]));
+  camps.push([B(S('Toplam')), S(''), S(''), S(''), B(N(rep.totals.days)), B(N(rep.totals.ciro, TL)), S(''), rep.totals.avgDelta != null ? B(N(rep.totals.avgDelta, PCT)) : S(''), S('')]);
+  const mps = [[H('Pazaryeri'), H('Kampanya'), H('Kampanyalı gün'), H('Kampanya cirosu'), H('Ort. etki'), H('Dönem cirosu')]];
+  rep.byMp.forEach((x) => mps.push([S(x.name), N(x.count), N(x.days), N(x.ciro, TL), x.avgDelta != null ? N(x.avgDelta, PCT) : S(''), N(x.periodCiro, TL)]));
+  const inf = [[H('Influencer'), H('İş birliği'), H('Ücret')]];
+  rep.inf.list.forEach((x) => inf.push([S(x.name), N(x.n), N(x.fee, TL)]));
+  inf.push([B(S('Toplam')), B(N(rep.inf.count)), B(N(rep.inf.fee, TL))]);
+  const fu = [[H('Kimden'), H('Tamamlanan talep'), H('Ortalama dönüş (gün)'), H('En uzun (gün)')]];
+  rep.fup.stats.forEach((s) => fu.push([S(s.party), N(s.n), N(Math.round(s.avg * 10) / 10), N(s.max)]));
+  fu.push([S('Açık talep'), N(rep.fup.open), S(''), S('')]);
+  await save([
+    { name: 'Kampanyalar', rows: camps, widths: [28, 14, 12, 12, 7, 16, 14, 13, 11], sticky: 1 },
+    { name: 'Pazaryerleri', rows: mps, widths: [16, 11, 14, 16, 11, 16], sticky: 1 },
+    { name: 'Influencer', rows: inf, widths: [24, 11, 15], sticky: 1 },
+    { name: 'Bekleyenler', rows: fu, widths: [24, 16, 20, 14], sticky: 1 }
+  ], 'rapor-' + slug(label) + '.xlsx');
+}

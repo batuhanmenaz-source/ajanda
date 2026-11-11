@@ -748,3 +748,36 @@ button.pill { min-height: 32px; }
 .ygift .title.done { text-decoration: line-through; color: var(--muted); }
 .ygift-total { padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--ink-2); text-align: right; border-top: 1px solid var(--line-2); }
 .ypage .subtabs button.on { background: #D6336C; border-color: #D6336C; }
+
+/* ---------- Bekleyenler ---------- */
+.row.fup { padding: 6px 10px 6px 12px; gap: 10px; align-items: center; }
+.fup .title.done { text-decoration: line-through; color: var(--muted); }
+.fup-age { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 50px; height: 48px; border-radius: 12px; background: var(--chip); color: var(--ink-2); line-height: 1.05; }
+.fup-age b { font-family: var(--display); font-size: 19px; color: var(--ink); }
+.fup-age small { font-size: 11px; }
+.fup-age.mid { background: #FFF4DB; }
+.fup-age.mid b, .fup-age.mid small { color: #8A5300; }
+.fup-age.hi { background: #FDECEC; }
+.fup-age.hi b, .fup-age.hi small { color: var(--danger); }
+.row.fup-stat { padding: 10px 14px; gap: 10px; align-items: baseline; }
+.fup-stat .title { flex: 1 1 auto; min-width: 0; font-size: 15px; }
+.fup-stat .meta { font-size: 12px; color: var(--ink-2); }
+.fup-avg { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- Raporlar ---------- */
+.rp-sum { padding: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+@media (min-width: 760px) { .rp-sum { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.rp-sum > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rp-v { font-family: var(--display); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rp-v.up { color: #1F6B31; }
+.rp-v.down { color: var(--danger); }
+.row.rp-camp { padding: 10px 12px; gap: 10px; align-items: center; }
+.rp-res { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.rp-table-wrap { overflow-x: auto; }
+.rp-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.rp-table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 8px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+.rp-table td { padding: 10px 8px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+.rp-table tr:last-child td { border-bottom: 0; }
+.rp-table td.up { color: #1F6B31; font-weight: 600; }
+.rp-table td.down { color: var(--danger); font-weight: 600; }
+@media (max-width: 420px) { .rp-table { font-size: 13px; } .rp-table th:first-child, .rp-table td:first-child { padding-left: 12px; } }

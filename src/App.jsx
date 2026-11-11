@@ -10,10 +10,11 @@ import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSetti
 import { alertDefaults as mergeAlertDefaults } from './alerts.js';
 import { MemorySheet, YarimItemSheet, nextSaturdayEvening, randomSurpriseDate, pickSurpriseIdea, SURPRISE_PREFIX } from './yarim.jsx';
 import { specialUpcoming, specialLabel } from './special.js';
+import { FollowupSheet } from './work.jsx';
 import { HabitSheet, ListSheet, ContactSheet, CollabSheet, SpecialDateSheet, findContact, nextFriday17, SUMMARY_TITLE } from './life.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES, DEFAULT_PREPS, YARIM_START } from './constants.js';
-import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, whenLabel } from './dates.js';
+import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, fromDateInput, whenLabel } from './dates.js';
 import { nextOccurrence } from './recur.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent } from './google.js';
 import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
@@ -27,7 +28,7 @@ const TABS = [
   { id: 'aramalar', label: 'Aramalar', icon: Icon.Phone }
 ];
 
-const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [], yarim_items: [], memories: [] };
+const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [], yarim_items: [], memories: [], followups: [] };
 
 export default function App({ store, demo, email, onSignOut, onReconnect, googleSave }) {
   const [data, setData] = useState(EMPTY);
@@ -48,7 +49,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const setIsSeg = (v) => { setIsSegState(v); try { sessionStorage.setItem('ajanda-is-seg', v); sessionStorage.removeItem('ajanda-sales'); } catch { /* yok say */ } };
   const setOzelSeg = (v) => { setOzelSegState(v); try { sessionStorage.setItem('ajanda-ozel-seg', v); } catch { /* yok say */ } };
   const goTab = (t) => {
-    if (t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer') { setIsSeg(t); setTab('is'); }
+    if (t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer' || t === 'bekleyenler' || t === 'raporlar') { setSheet(null); setIsSeg(t); setTab('is'); }
     else if (t === 'yarim') { setOzelSeg('yarim'); setTab('ozel'); }
     else if (t === 'cuzdan' || t === 'listeler' || t === 'aliskanlik' || t === 'ozelgun' || t === 'gunluk') { setOzelSeg(t); setTab('ozel'); }
     else setTab(t);
@@ -307,7 +308,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/yarim_items|memories|yarim_prefs|anilar/.test(msg)) say('Kaydedilemedi: Yarim bölümü için Supabase\'de 15 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/followups|nudge_/.test(msg)) say('Kaydedilemedi: Bekleyenler için Supabase\'de 16 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/yarim_items|memories|yarim_prefs|anilar/.test(msg)) say('Kaydedilemedi: Yarim bölümü için Supabase\'de 15 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/alerts|remind_at|aux_event_id|alert_defaults/.test(msg)) say('Kaydedilemedi: Hatırlatma seçimleri için Supabase\'de 14 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/receipt_path|fisler|bucket/i.test(msg)) say('Kaydedilemedi: Fiş fotoğrafı için Supabase\'de 12 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/money|scope|budgets/.test(msg) && /schema cache|does not exist|relation|column/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 11 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -696,11 +698,53 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, prefsLoaded, data.special_dates]);
 
+  // ---------- Bekleyen talepler ----------
+  const nudgeTitle = (f) => '⏳ ' + (f.party ? f.party + ': ' : '') + f.title + ' — ' + f.nudge_days + ' gündür bekliyor, tekrar yaz';
+  const syncNudge = async (f) => {
+    const has = f.nudge_reminder_id && data.reminders.some((r) => r.id === f.nudge_reminder_id);
+    if (!f.done && f.nudge_days) {
+      let due = addDays(fromDateInput(f.since), f.nudge_days); due.setHours(10, 0, 0, 0);
+      if (due < new Date()) due = new Date(Date.now() + 15 * 60000);
+      const rem = await saveItem('reminders', { ...(has ? { id: f.nudge_reminder_id } : {}), title: nudgeTitle(f), marketplace: f.marketplace || null, due_at: due.toISOString(), for_yarim: false, alerts: { list: ['0'], at: '09:00' } }, true);
+      if (rem && rem.id !== f.nudge_reminder_id) { await store.update('followups', f.id, { nudge_reminder_id: rem.id }); patchLocal('followups', f.id, { nudge_reminder_id: rem.id }); }
+    } else if (has) {
+      await removeReminderQuiet(f.nudge_reminder_id);
+      await store.update('followups', f.id, { nudge_reminder_id: null }); patchLocal('followups', f.id, { nudge_reminder_id: null });
+    }
+  };
+  const saveFollowup = async (f) => {
+    const row = await saveRow('followups', f, 'Bekleyen talep kaydedildi');
+    if (row) { try { await syncNudge(row); } catch (e) { console.error(e); } }
+  };
+  const doneFollowup = async (f) => {
+    const patch = { done: !f.done, done_at: !f.done ? toDateInput(new Date()) : null };
+    patchLocal('followups', f.id, patch);
+    try {
+      await store.update('followups', f.id, patch);
+      await syncNudge({ ...f, ...patch });
+      if (!f.done) { const n = Math.max(0, Math.round((startOfDay(new Date()) - fromDateInput(f.since)) / 86400000)); say('Tamamlandı ✓ ' + n + ' günde döndü'); }
+    } catch (e) { patchLocal('followups', f.id, { done: f.done, done_at: f.done_at }); fail(e); }
+  };
+  const deleteFollowup = async (f) => {
+    if (!window.confirm('"' + f.title + '" silinsin mi?')) return;
+    try { if (f.nudge_reminder_id) await removeReminderQuiet(f.nudge_reminder_id); } catch (e) { console.error(e); }
+    await deleteRow('followups', f);
+  };
+  const exportReport = async (opts) => {
+    say('Excel hazırlanıyor…');
+    try { const { exportReport: ex } = await import('./excel.js'); await ex(opts); say('Excel dosyası indirildi'); }
+    catch (e) { console.error(e); say('Excel dosyası oluşturulamadı.'); }
+  };
+
   // ---------- Hızlı ekle ----------
   const quickSave = async (p) => {
     const due = p.date ? p.date.toISOString() : null;
     // Bugün sayfasında İş ya da Özel seçiliyse yeni kayıt o alana yazılır
     const sc = scope === 'ozel' && !p.yarim && !p.mp ? { scope: 'ozel' } : {};
+    if (p.type === 'Bekleyen') {
+      await saveFollowup({ title: p.title || 'Talep', party: p.mp || null, marketplace: p.mp || null, since: toDateInput(new Date()) });
+      return;
+    }
     if (p.type === 'Para') {
       if (p.money) await saveMoney(p.money);
       else setSheet({ kind: 'money', item: { kind: 'gider', note: p.raw || '' } });
@@ -724,6 +768,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
   const quickDetail = (p) => {
     if (p.type === 'Para') { setSheet({ kind: 'money', item: p.money || { kind: 'gider', note: p.raw || '' } }); return; }
+    if (p.type === 'Bekleyen') { setSheet({ kind: 'followup', item: { title: p.title, party: p.mp || '', marketplace: p.mp || null } }); return; }
     if (p.type === 'Kampanya' || p.type === 'Etkinlik') {
       const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
       setSheet({ kind: 'campaign', item: { name: p.title, marketplace: p.mp, start_date: toDateInput(st), end_date: toDateInput(p.endDate ? startOfDay(p.endDate) : st), kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik' } });
@@ -741,6 +786,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openYarimSettings: () => setSheet({ kind: 'yarimSettings' }),
     openYarim: () => { setSheet(null); setYarimSeg('ozet'); goTab('yarim'); },
     openMemory: (m) => setSheet({ kind: 'memory', item: m }),
+    openFollowup: (f) => setSheet({ kind: 'followup', item: f }),
+    doneFollowup, exportReport, goTab,
     openYarimItem: (x) => setSheet({ kind: 'yitem', item: x }),
     toggleYarimItem, planToCalendar, saveSurprise,
     hideYarim: () => { setYarimHidden(true); setSheet(null); say('Yarim alanı bu cihazda gizlendi. Geri açmak için: sağ üstteki etiket › Hesap'); },
@@ -992,6 +1039,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         onSave={(f) => saveRow('habits', f, 'Alışkanlık kaydedildi')} onDelete={(x) => deleteRow('habits', x, '"' + x.name + '" ve tüm geçmişi silinsin mi?')} />}
       {sheet && sheet.kind === 'list' && <ListSheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('lists', f, 'Liste kaydedildi')} onDelete={(x) => deleteRow('lists', x, '"' + x.title + '" listesi ve içindekiler silinsin mi?')} />}
+      {sheet && sheet.kind === 'followup' && <FollowupSheet initial={sheet.item} followups={data.followups} onClose={() => setSheet(null)} onSave={saveFollowup} onDelete={deleteFollowup} />}
       {sheet && sheet.kind === 'memory' && <MemorySheet initial={sheet.item} photoUrl={photoUrl} onClose={() => setSheet(null)} onSave={saveMemory} onDelete={deleteMemory} />}
       {sheet && sheet.kind === 'yitem' && <YarimItemSheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('yarim_items', f, f.kind === 'hediye' ? 'Hediye fikri kaydedildi 🎁' : f.kind === 'plan' ? 'Kaydedildi ✨' : 'Kaydedildi 💗')}

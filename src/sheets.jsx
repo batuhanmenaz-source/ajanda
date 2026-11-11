@@ -107,10 +107,12 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
   }, [q, shared]);
   // "250 market", "+45000 maaş" gibi yazılanlar cüzdana gider
   const money = useMemo(() => (shared ? null : parseMoney(q)), [q, shared]);
-  const type = typeOverride || (money ? 'Para' : p.type);
+  // "bekle: Beymen varyant talebi" → Bekleyen
+  const waitPrefix = /^\s*bekle(?:n|yen)?\s*[:\-]\s*/i.test(q);
+  const type = typeOverride || (waitPrefix ? 'Bekleyen' : money ? 'Para' : p.type);
   const yarim = yarimHidden ? false : (yarimOverride !== null ? yarimOverride : p.yarim);
 
-  const build = () => ({ ...p, type, yarim, shared: shared || '', money, raw: q.trim() });
+  const build = () => ({ ...p, type, yarim, shared: shared || '', money, raw: q.trim(), title: type === 'Bekleyen' ? ((p.title || '').replace(/^\s*bekle(?:n|yen)?\s*[:\-]\s*/i, '') || p.title) : p.title });
 
   const submit = async (e) => {
     if (e) e.preventDefault();
@@ -144,12 +146,14 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
           {voiceErr ? <span className="hint" style={{ color: 'var(--danger)' }}>{voiceErr}</span> : null}
         </div>
         <div className="typechips" role="group" aria-label="Tür">
-          {['Hatırlatma', 'Arama', 'Not', 'Kampanya', 'Etkinlik', 'Para'].map((t) => (
-            <button key={t} type="button" className={'chip' + (type === t ? ' on' : '')} onClick={() => setTypeOverride(t)} aria-pressed={type === t}>{t === 'Para' ? '💸 Para' : t}</button>
+          {['Hatırlatma', 'Arama', 'Not', 'Kampanya', 'Etkinlik', 'Bekleyen', 'Para'].map((t) => (
+            <button key={t} type="button" className={'chip' + (type === t ? ' on' : '')} onClick={() => setTypeOverride(t)} aria-pressed={type === t}>{t === 'Para' ? '💸 Para' : t === 'Bekleyen' ? '⏳ Bekleyen' : t}</button>
           ))}
-          {type !== 'Not' && type !== 'Etkinlik' && type !== 'Kampanya' && type !== 'Para' && !yarimHidden && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
+          {type !== 'Not' && type !== 'Etkinlik' && type !== 'Kampanya' && type !== 'Para' && type !== 'Bekleyen' && !yarimHidden && <YarimToggle on={yarim} onClick={() => setYarimOverride(!yarim)} />}
         </div>
-        {q.trim() && type === 'Para' ? (
+        {q.trim() && type === 'Bekleyen' ? (
+          <div className="parsed"><span>⏳ Bugünden itibaren gün sayılır</span><span><span className="dot" style={{ background: p.mp ? mpColor(p.mp) : '#C9C6BE' }} />{p.mp || 'Pazaryeri yok'}</span></div>
+        ) : q.trim() && type === 'Para' ? (
           <div className="parsed">
             {money ? (
               <>

@@ -13,6 +13,7 @@ import {
 import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
 import { WeatherCard } from './weather.jsx';
+import { FollowupsMini } from './work.jsx';
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -428,6 +429,7 @@ export function MarketplacePanel({ name, data, now, actions }) {
         {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)
           : <div className="card"><p className="empty">Yaklaşan kampanya ya da etkinlik yok.</p></div>}
       </Section>
+      <FollowupsMini data={data} now={now} actions={actions} mp={name} limit={5} />
       <Section title="Hatırlatmalar" meta={rems.length ? rems.length + ' açık' : ''}>
         <div className="card list">
           {rems.length ? rems.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />)
@@ -525,6 +527,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
           </div>
         </Section>
 
+        {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
         {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
 
         {undated.length ? (
