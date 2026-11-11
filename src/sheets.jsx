@@ -479,7 +479,12 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
   const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const isEvent = kind === 'etkinlik';
   const [busy, setBusy] = useState(false);
-  const invalid = !name.trim() || !start || !end || end < start;
+  // İsteğe bağlı saatler (boşsa tüm gün)
+  const [timed, setTimed] = useState(!!(initial.start_time || initial.end_time));
+  const [sTime, setSTime] = useState(initial.start_time || '10:00');
+  const [eTime, setETime] = useState(initial.end_time || '23:59');
+  const badTime = timed && start === end && eTime <= sTime;
+  const invalid = !name.trim() || !start || !end || end < start || badTime;
   const days = start && end && end >= start ? Math.round((fromDateInput(end) - fromDateInput(start)) / 86400000) + 1 : 0;
   const setLen = (n) => { if (!start) return; setEnd(toDateInput(addDays(fromDateInput(start), n - 1))); };
 
@@ -489,7 +494,9 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
     setBusy(true);
     try {
       await onSave(
-        { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
+        { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind,
+          // Sütunlar henüz yoksa (13 numaralı SQL) bozmamak için yalnız gerektiğinde gönder
+          ...(timed || initial.start_time || initial.end_time ? { start_time: timed ? sTime : null, end_time: timed ? eTime : null } : {}), ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
         isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
       );
     } finally { setBusy(false); }
@@ -527,7 +534,28 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
             <button key={n} type="button" className={'chip' + (days === n ? ' on' : '')} onClick={() => setLen(n)} aria-pressed={days === n}>{n === 1 ? '1 gün' : n + ' gün'}</button>
           ))}
           {days > 0 && ![1, 2, 3, 5, 7].includes(days) ? <span className="hint" style={{ alignSelf: 'center' }}>{days} gün</span> : null}
+          <button type="button" className={'chip' + (timed ? ' on' : '')} aria-pressed={timed} onClick={() => setTimed(!timed)}>🕒 Saat {timed ? 'var' : 'ekle'}</button>
         </div>
+        {timed ? (
+          <>
+            <div className="row2">
+              <div className="field">
+                <label htmlFor="c-stime">Başlangıç saati</label>
+                <input id="c-stime" type="time" value={sTime} onChange={(e) => setSTime(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label htmlFor="c-etime">Bitiş saati</label>
+                <input id="c-etime" type="time" value={eTime} onChange={(e) => setETime(e.target.value)} required aria-invalid={badTime} />
+              </div>
+            </div>
+            <div className="typechips" role="group" aria-label="Hazır saatler">
+              {[['00:00', '23:59', 'Tüm gün (00:00–23:59)'], ['10:00', '23:59', '10:00 → 23:59'], ['12:00', '23:59', '12:00 → 23:59']].map(([a, b, l]) => (
+                <button key={l} type="button" className={'chip' + (sTime === a && eTime === b ? ' on' : '')} onClick={() => { setSTime(a); setETime(b); }}>{l}</button>
+              ))}
+            </div>
+            {badTime ? <span className="hint" style={{ color: 'var(--danger)', marginTop: -6 }}>Aynı gün bitiyorsa bitiş saati başlangıçtan sonra olmalı.</span> : null}
+          </>
+        ) : null}
         {!isEdit && !isEvent && (
           <div className="field">
             <label htmlFor="c-preps">Hazırlık adımları (her satıra bir tane)</label>
@@ -540,8 +568,8 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
           <input id="c-notes" type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <p className="hint" style={{ margin: 0 }}>{isEvent
-          ? 'Etkinlik Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir.'
-          : 'Kampanya Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir. Başlangıçtan 3 gün ve 1 gün önce saat 09:00\'da hazırlık hatırlatması gelir.'}</p>
+          ? (timed ? 'Etkinlik Google Takvim\'e başlangıç ve bitiş saatiyle eklenir; başladığı an bildirim gelir.' : 'Etkinlik Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir.')
+          : (timed ? 'Kampanya Google Takvim\'e başlangıç ve bitiş saatiyle eklenir; başladığı an bildirim gelir.' : 'Kampanya Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir.') + ' Başlangıçtan 3 gün ve 1 gün önce saat 09:00\'da hazırlık hatırlatması gelir.'}</p>
         <div className="actions">
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(initial)}>Sil</button>}
           <button type="submit" className="btn big primary" disabled={busy || invalid}>Kaydet</button>

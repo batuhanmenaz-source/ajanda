@@ -1,6 +1,6 @@
 // Kayıtları Google Takvim'deki "Ajanda" takvimine yansıtır.
 import { saveTimed, saveAllDay, deleteEvent } from './google.js';
-import { addDays, fromDateInput, startOfDay } from './dates.js';
+import { addDays, fromDateInput, startOfDay, combine } from './dates.js';
 import { rrule } from './recur.js';
 import { specialNext, SPECIAL_ICON } from './special.js';
 
@@ -39,13 +39,17 @@ export async function syncCampaign(c) {
   const start = fromDateInput(c.start_date);
   const end = fromDateInput(c.end_date);
   const isEvent = c.kind === 'etkinlik';
-  const mainId = await saveAllDay(c.google_event_id, {
-    summary: (isEvent ? '📅 ' : '📣 ') + (c.marketplace ? c.marketplace + ' · ' : '') + c.name,
-    description: c.notes || (isEvent ? 'Ajanda etkinliği' : 'Ajanda kampanyası'),
-    startDate: start,
-    endDate: end,
-    location: c.location || undefined
-  });
+  const summary = (isEvent ? '📅 ' : '📣 ') + (c.marketplace ? c.marketplace + ' · ' : '') + c.name;
+  const description = c.notes || (isEvent ? 'Ajanda etkinliği' : 'Ajanda kampanyası');
+  // Saat verildiyse saatli etkinlik (başlangıçta bildirim), yoksa tüm gün
+  let mainId;
+  if (c.start_time || c.end_time) {
+    const st = combine(c.start_date, c.start_time || '00:00');
+    const en = combine(c.end_date, c.end_time || '23:59');
+    mainId = await saveTimed(c.google_event_id, { summary, description, start: st, minutes: Math.max(15, Math.round((en - st) / 60000)), location: c.location || undefined });
+  } else {
+    mainId = await saveAllDay(c.google_event_id, { summary, description, startDate: start, endDate: end, location: c.location || undefined });
+  }
 
   for (const id of c.prep_event_ids || []) await deleteEvent(id);
   const prepIds = [];

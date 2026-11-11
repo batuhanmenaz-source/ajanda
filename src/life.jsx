@@ -136,7 +136,7 @@ export function WeeklySummary({ data, revenue, now, actions, onHide, budgets, sc
     ...data.campaigns.filter((c) => c.start_date <= NE && c.end_date >= NS && (scope !== 'ozel' || (c.kind === 'etkinlik' && !c.marketplace))).map((c) => ({
       key: 'k' + c.id, d: fromDateInput(c.start_date < NS ? NS : c.start_date),
       text: (c.kind === 'etkinlik' ? '📅 ' : '📣 ') + c.name + (c.marketplace ? ' · ' + c.marketplace : ''),
-      when: c.start_date < NS ? 'devam ediyor' : rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date))
+      when: c.start_date < NS ? 'devam ediyor' : rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date)) + (c.start_time ? ' · ' + c.start_time : '')
     })),
     ...(scope === 'ozel' ? [] : data.collabs || []).filter((c) => c.publish_date >= NS && c.publish_date <= NE && c.status !== 'iptal').map((c) => {
       const who = ((data.contacts || []).find((k) => k.id === c.contact_id) || {}).name || 'Influencer';

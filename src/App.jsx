@@ -300,7 +300,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     else if (/contacts|collabs|special_dates|list_items|lists|habits|habit_logs/.test(msg) && /schema cache|does not exist|relation/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 10 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/location_geo/.test(msg)) say('Kaydedilemedi: Harita konumu için Supabase\'de 08 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/location/.test(msg)) say('Kaydedilemedi: Konum için Supabase\'de 07 numaralı SQL\'i çalıştırman gerekiyor.');
-    else say('İşlem yapılamadı. İnternet bağlantını kontrol edip tekrar dene.');
+    else say('İşlem yapılamadı. İnternet bağlantını kontrol edip tekrar dene.' + (msg ? ' (' + msg.slice(0, 90) + ')' : ''));
   };
 
   // ---------- Hatırlatma & arama ----------
@@ -411,8 +411,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       setSheet(null);
       say(row.kind === 'etkinlik' ? 'Etkinlik kaydedildi' : 'Kampanya kaydedildi');
     } catch (e) {
-      if (/location/.test((e && e.message) || '')) fail(e);
-      else if (/kind/.test((e && e.message) || '')) { console.error(e); say('Kaydedilemedi: Supabase\'de 06 numaralı SQL\'i (etkinlik) çalıştırman gerekiyor.'); }
+      const m = (e && e.message) || '';
+      if (/start_time|end_time/.test(m)) { console.error(e); say('Kaydedilemedi: Kampanya saati için Supabase\'de 13 numaralı SQL\'i çalıştırman gerekiyor.'); }
+      else if (/location/.test(m)) fail(e);
+      else if (/'kind'|"kind"|\bkind\b/.test(m) && /column|schema cache/.test(m)) { console.error(e); say('Kaydedilemedi: Supabase\'de 13 numaralı SQL\'i çalıştırman gerekiyor.'); }
       else fail(e);
     }
   };

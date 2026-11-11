@@ -30,14 +30,25 @@ import {
 } from './dates.js';
 
 // ---------- Yardımcılar ----------
+// Saatli kampanya: "27 – 28 Kasım · 10:00–23:59" / "27 Kas 10:00 – 28 Kas 23:59"
+export function campaignWhen(c) {
+  const s = fromDateInput(c.start_date), e = fromDateInput(c.end_date);
+  if (!c.start_time && !c.end_time) return rangeLabel(s, e);
+  const a = c.start_time || '00:00', b = c.end_time || '23:59';
+  return sameDay(s, e) ? fmtShort(s) + ' · ' + a + '–' + b : fmtShort(s) + ' ' + a + ' – ' + fmtShort(e) + ' ' + b;
+}
+
 export function campaignStatus(c, now = new Date()) {
   const s = fromDateInput(c.start_date);
   const e = fromDateInput(c.end_date);
   const t = startOfDay(now);
   if (t > e) return { key: 'past', label: 'Bitti' };
+  const hm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  if (sameDay(t, e) && c.end_time && hm >= c.end_time) return { key: 'past', label: 'Bitti' };
+  if (sameDay(t, s) && c.start_time && hm < c.start_time) return { key: 'soon', label: 'Bugün ' + c.start_time + '\'da başlıyor' };
   if (t >= s) {
     const left = daysBetween(t, e);
-    return { key: 'live', label: left === 0 ? 'Son gün' : 'Aktif · ' + (left + 1) + ' gün' };
+    return { key: 'live', label: left === 0 ? 'Son gün' + (c.end_time ? ' · ' + c.end_time + '\'e kadar' : '') : 'Aktif · ' + (left + 1) + ' gün' };
   }
   const n = daysBetween(t, s);
   return { key: 'soon', label: n === 1 ? 'Yarın başlıyor' : n + ' gün sonra' };
@@ -78,7 +89,7 @@ export function dayItems(day, { data, events }) {
     const total = daysBetween(s, e) + 1;
     const nth = daysBetween(s, day) + 1;
     if (day >= s && day <= e) out.push({
-      key: 'k' + c.id, time: 'Tüm gün',
+      key: 'k' + c.id, time: sameDay(day, s) && c.start_time && c.start_time !== '00:00' ? c.start_time : !multi && c.start_time ? c.start_time : sameDay(day, e) && c.end_time && multi ? '–' + c.end_time : 'Tüm gün',
       title: c.name + (!multi ? '' : sameDay(day, s) ? ' başlıyor' : sameDay(day, e) ? ' son gün' : isEvent ? ' (' + nth + '/' + total + '. gün)' : ' aktif'),
       src: isEvent ? 'Etkinlik' : 'Kampanya', color: isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, sub: [c.marketplace, multi ? rangeLabel(s, e) : ''].filter(Boolean).join(' · '), loc: c.location, geo: c.location_geo, item: c, kind: 'campaign'
     });
@@ -147,7 +158,7 @@ function CampaignMini({ c, tasks, onOpen, result }) {
     <div className="card camp">
       <div className="camp-head">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-          <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: mpColor(c.marketplace) }} />{isEvent ? 'Etkinlik · ' : ''}{c.marketplace || (isEvent ? '' : 'Genel')}{c.marketplace || !isEvent ? ' · ' : ''}{rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date))}</span>
+          <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: mpColor(c.marketplace) }} />{isEvent ? 'Etkinlik · ' : ''}{c.marketplace || (isEvent ? '' : 'Genel')}{c.marketplace || !isEvent ? ' · ' : ''}{campaignWhen(c)}</span>
           <button type="button" className="name" onClick={() => onOpen(c)}>{c.name}</button>
           <LocLink location={c.location} geo={c.location_geo} small />
         </div>
@@ -737,7 +748,7 @@ function CampaignCard({ c, tasks, actions, revenue, now }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <Mp name={c.marketplace || 'Genel'} />
           <button type="button" className="name big" onClick={() => actions.openCampaign(c)}>{c.name}</button>
-          <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{rangeLabel(fromDateInput(c.start_date), fromDateInput(c.end_date))}{c.notes ? ' · ' + c.notes : ''}</span>
+          <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{campaignWhen(c)}{c.notes ? ' · ' + c.notes : ''}</span>
           <LocLink location={c.location} geo={c.location_geo} />
         </div>
         <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
