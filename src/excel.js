@@ -146,7 +146,7 @@ export async function exportReport({ rep, label }) {
   camps.push([B(S('Toplam')), S(''), S(''), S(''), B(N(rep.totals.days)), B(N(rep.totals.ciro, TL)), S(''), rep.totals.avgDelta != null ? B(N(rep.totals.avgDelta, PCT)) : S(''), S('')]);
   const mps = [[H('Pazaryeri'), H('Kampanya'), H('Kampanyalı gün'), H('Kampanya cirosu'), H('Ort. etki'), H('Dönem cirosu')]];
   rep.byMp.forEach((x) => mps.push([S(x.name), N(x.count), N(x.days), N(x.ciro, TL), x.avgDelta != null ? N(x.avgDelta, PCT) : S(''), N(x.periodCiro, TL)]));
-  const inf = [[H('Influencer'), H('İş birliği'), H('Ücret')]];
+  const inf = [[H('Hesap'), H('Reklam'), H('Bütçe')]];
   rep.inf.list.forEach((x) => inf.push([S(x.name), N(x.n), N(x.fee, TL)]));
   inf.push([B(S('Toplam')), B(N(rep.inf.count)), B(N(rep.inf.fee, TL))]);
   const fu = [[H('Kimden'), H('Tamamlanan talep'), H('Ortalama dönüş (gün)'), H('En uzun (gün)')]];

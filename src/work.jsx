@@ -1,5 +1,6 @@
 // İş: Bekleyen talepler ve Raporlar
 import { useMemo, useState } from 'react';
+import { adWho } from './ads.jsx';
 import { Sheet, Section, Check } from './ui.jsx';
 import { MARKETPLACES, mpColor } from './constants.js';
 import { tl, tlShort } from './revenue.jsx';
@@ -219,10 +220,9 @@ export function buildReport({ data, revenue, now, period, mp }) {
     return { name: n, count: cs.length, days: cs.reduce((s, x) => s + x.days, 0), ciro: cs.reduce((s, x) => s + (x.r ? x.r.cur : 0), 0), avgDelta: ds.length ? ds.reduce((s, x) => s + x.r.delta, 0) / ds.length : null, periodCiro };
   }).filter((x) => x.count || x.periodCiro).sort((x, y) => y.count - x.count || y.periodCiro - x.periodCiro);
   // Influencer
-  const nameOf = (id) => ((data.contacts || []).find((k) => k.id === id) || {}).name || 'Influencer';
   const collabs = (data.collabs || []).filter((c) => c.publish_date && c.publish_date >= A && c.publish_date <= B && c.status !== 'iptal' && (!mp || c.marketplace === mp));
   const byInf = {};
-  collabs.forEach((c) => { const k = nameOf(c.contact_id); byInf[k] = byInf[k] || { name: k, n: 0, fee: 0 }; byInf[k].n++; byInf[k].fee += Number(c.fee) || 0; });
+  collabs.forEach((c) => { const k = adWho(c, data.contacts); byInf[k] = byInf[k] || { name: k, n: 0, fee: 0 }; byInf[k].n++; byInf[k].fee += Number(c.fee) || 0; });
   // Bekleyenler
   const fups = (data.followups || []).filter((f) => !mp || f.marketplace === mp);
   const openF = fups.filter((f) => !f.done);
@@ -297,10 +297,10 @@ export function ReportsView({ data, revenue, now, actions }) {
         </Section>
       ) : null}
 
-      <Section title="Influencer" meta={label}>
+      <Section title="Influencer reklamları" meta={label}>
         <div className="card list">
-          <div className="row fup-stat"><span className="title">İş birliği</span><span className="meta">{rep.inf.count} adet</span><span className="fup-avg">{tl(rep.inf.fee)}</span></div>
-          {rep.inf.list.slice(0, 5).map((x) => <div key={x.name} className="row fup-stat"><span className="title">{x.name}</span><span className="meta">{x.n} iş birliği</span><span className="fup-avg">{tlShort(x.fee)}</span></div>)}
+          <div className="row fup-stat"><span className="title">Reklam</span><span className="meta">{rep.inf.count} adet</span><span className="fup-avg">{tl(rep.inf.fee)}</span></div>
+          {rep.inf.list.slice(0, 5).map((x) => <div key={x.name} className="row fup-stat"><span className="title">{x.name}</span><span className="meta">{x.n} reklam</span><span className="fup-avg">{tlShort(x.fee)}</span></div>)}
         </div>
       </Section>
 

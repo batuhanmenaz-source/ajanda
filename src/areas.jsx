@@ -1,12 +1,13 @@
 // İş ve Özel sekmeleri: alt sekmelerle ilgili ekranları bir araya toplar
-import { HabitsCard, ListsView, InfluencerView, SpecialDatesSection, HabitHistory } from './life.jsx';
+import { HabitsCard, ListsView, SpecialDatesSection, HabitHistory } from './life.jsx';
+import { AdsView } from './ads.jsx';
 import { CampaignsScreen, MarketplaceNotes, DailyNotes } from './screens.jsx';
 import { RevenueScreen } from './revenue.jsx';
 import { WalletView } from './wallet.jsx';
 import { YarimPage } from './yarim.jsx';
 import { FollowupsView, ReportsView } from './work.jsx';
 
-export const WORK_TABS = [['kampanya', 'Kampanyalar'], ['ciro', 'Ciro'], ['bekleyenler', 'Bekleyenler'], ['notlar', 'Pazaryeri notları'], ['influencer', 'Influencer'], ['raporlar', 'Raporlar']];
+export const WORK_TABS = [['kampanya', 'Kampanyalar'], ['ciro', 'Ciro'], ['bekleyenler', 'Bekleyenler'], ['notlar', 'Pazaryeri notları'], ['influencer', 'Influencer reklamları'], ['raporlar', 'Raporlar']];
 export const PRIVATE_TABS = [['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
 export function SubTabs({ tabs, value, onChange, label }) {
@@ -27,7 +28,7 @@ export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded
         : seg === 'bekleyenler' ? <FollowupsView data={data} now={now} actions={actions} />
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
         : seg === 'notlar' ? <MarketplaceNotes data={data} actions={actions} />
-          : seg === 'influencer' ? <InfluencerView data={data} now={now} actions={actions} />
+          : seg === 'influencer' ? <AdsView data={data} now={now} actions={actions} />
             : <CampaignsScreen data={data} actions={actions} revenue={revenue} now={now} />}
     </div>
   );

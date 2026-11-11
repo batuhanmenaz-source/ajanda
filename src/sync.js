@@ -103,10 +103,24 @@ export async function syncSpecialDate(s) {
 
 // İş birliği: yayın günü tüm gün etkinliği + seçilen hatırlatmalar (varsayılan bir gün önce 09:00). Döner: { google_event_id, aux_event_id }
 export async function syncCollab(c, who) {
-  if (!c.publish_date || c.status === 'iptal') {
+  if ((!c.publish_date && !c.start_at) || c.status === 'iptal') {
     if (c.google_event_id) await deleteEvent(c.google_event_id);
     if (c.aux_event_id) await deleteEvent(c.aux_event_id);
     return { google_event_id: null, aux_event_id: null };
+  }
+  if (c.start_at) {
+    // Saatli reklam: takvimde başlangıç→bitiş aralığı, bitişe ayrıca hatırlatma
+    const s = new Date(c.start_at);
+    const e = c.end_at ? new Date(c.end_at) : new Date(s.getTime() + 3600000);
+    const name = c.handle || who || 'Influencer';
+    const tail = (c.brand ? ' · ' + c.brand : '') + (c.title ? ' — ' + c.title : '');
+    const description = [c.platform ? 'Platform: ' + c.platform : '', c.marketplace ? 'Pazaryeri: ' + c.marketplace : '', c.link || '', c.notes || '', 'Ajanda influencer reklamı'].filter(Boolean).join('\n');
+    const id = await saveTimed(c.google_event_id, { summary: '🎬 ' + name + tail, description, start: s, minutes: Math.max(15, Math.round((e - s) / 60000)), overrides: timedOverrides(c, s) });
+    let aux = c.aux_event_id || null;
+    const wantEnd = !c.alerts || c.alerts.end !== false;
+    if (wantEnd && e > new Date()) aux = await saveTimed(aux, { summary: '🏁 Reklam bitiyor: ' + name + tail, description, start: e, overrides: [60, 0] });
+    else if (aux) { await deleteEvent(aux); aux = null; }
+    return { google_event_id: id, aux_event_id: aux };
   }
   const d = fromDateInput(c.publish_date);
   const summary = '🎬 ' + (who || 'Influencer') + (c.brand ? ' · ' + c.brand : '') + (c.title ? ' — ' + c.title : '');

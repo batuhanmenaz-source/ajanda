@@ -34,7 +34,7 @@ export const YARIM_START = new Date('2026-07-10T22:00:00+03:00');
 // İki ayrı başlangıç tarihi; ikisi de aynı şekilde sayılır ve gösterilir
 export const YARIM_STARTS = [
   { start: YARIM_START, label: '10 Temmuz 2026' },
-  { start: new Date('2026-08-12T00:00:00+03:00'), label: '12 Ağustos 2026' }
+  { start: new Date('2026-08-12T23:00:00+03:00'), label: '12 Ağustos 2026' }
 ];
 
 export function mpColor(name) {

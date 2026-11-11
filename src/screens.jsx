@@ -14,6 +14,7 @@ import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FollowupsMini } from './work.jsx';
+import { AdsTodayCard, adWho, adStart, adEnd } from './ads.jsx';
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -108,9 +109,17 @@ export function dayItems(day, { data, events }) {
     out.push({ key: 's' + x.id + day.getFullYear(), time: 'Tüm gün', title: (SPECIAL_ICON[x.kind] || '⭐') + ' ' + specialLabel(x, day) + (x.for_yarim ? ' ❤️' : ''), src: 'Özel gün', color: x.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Özel gün'], sub: x.for_yarim ? 'Yarim' : '', item: x, kind: 'special' })
   );
   const dk = toDateInput(day);
-  (data.collabs || []).filter((c) => c.publish_date === dk && c.status !== 'iptal').forEach((c) => {
-    const who = ((data.contacts || []).find((k) => k.id === c.contact_id) || {}).name || 'Influencer';
-    out.push({ key: 'i' + c.id, time: 'Tüm gün', title: '🎬 ' + who + (c.title ? ' — ' + c.title : ''), src: 'Influencer', color: SRC_COLORS.Influencer, sub: [c.brand, c.marketplace].filter(Boolean).join(' · '), done: c.status === 'yayinlandi' || c.status === 'odendi', item: c, kind: 'collab' });
+  (data.collabs || []).filter((c) => c.status !== 'iptal').forEach((c) => {
+    const who = adWho(c, data.contacts);
+    const sub = [c.platform, c.brand, c.marketplace].filter(Boolean).join(' · ');
+    const base = { src: 'Influencer', color: SRC_COLORS.Influencer, item: c, kind: 'collab' };
+    if (c.start_at) {
+      const s = adStart(c), e = adEnd(c);
+      if (sameDay(s, day)) out.push({ ...base, key: 'i' + c.id, time: fmtTime(s), title: '🎬 ' + who + (c.title ? ' — ' + c.title : '') + ' · yayına giriyor', sub: sub + (sub ? ' · ' : '') + 'bitiş ' + whenLabel(e, s), done: e < new Date() });
+      if (sameDay(e, day) && !sameDay(s, day)) out.push({ ...base, key: 'ie' + c.id, time: fmtTime(e), title: '🏁 ' + who + (c.title ? ' — ' + c.title : '') + ' · bitiyor', sub, done: e < new Date() });
+    } else if (c.publish_date === dk) {
+      out.push({ ...base, key: 'i' + c.id, time: 'Tüm gün', title: '🎬 ' + who + (c.title ? ' — ' + c.title : ''), sub, done: c.status === 'yayinlandi' || c.status === 'odendi' });
+    }
   });
   return out.sort((a, b) => {
     if (a.time === 'Tüm gün' && b.time !== 'Tüm gün') return -1;
@@ -535,6 +544,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
           </div>
         </Section>
 
+        {scope !== 'ozel' ? <AdsTodayCard data={rawData} now={now} actions={actions} onAll={() => goTab('influencer')} /> : null}
         {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
         {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
 

@@ -338,11 +338,17 @@ function seedLife() {
       { id: k1, name: 'Elif Güzellik', phone: '', company: '', is_influencer: true, handle: '@elifguzellik' },
       { id: k2, name: 'Cilt Bakım Günlüğü', phone: '', company: '', is_influencer: true, handle: '@ciltbakimgunlugu' }
     ],
-    collabs: [
-      { id: uid(), contact_id: k1, title: 'Reels: serum incelemesi', brand: 'Missha', marketplace: 'Trendyol', publish_date: d(2), fee: 15000, status: 'anlasildi' },
-      { id: uid(), contact_id: k2, title: 'Story serisi', brand: 'DERMA:B', marketplace: 'Hepsiburada', publish_date: d(9), fee: 8000, status: 'planlandi' },
-      { id: uid(), contact_id: k1, title: 'Kasım kampanyası paylaşımı', brand: 'Missha', marketplace: 'Trendyol', publish_date: d(-12), fee: 12000, status: 'odendi' }
-    ],
+    collabs: (() => {
+      const H = (h) => { const x = new Date(); x.setMinutes(0, 0, 0); return new Date(x.getTime() + h * 3600000); };
+      const ad = (s, e, o) => ({ id: uid(), start_at: H(s).toISOString(), end_at: H(e).toISOString(), publish_date: toDateInput(H(s)), status: 'planlandi', alerts: { list: ['30m', '0'], at: '09:00', end: true }, ...o });
+      return [
+        ad(-3, 21, { handle: '@elifguzellik', platform: 'Instagram', title: 'Serum Reels + indirim kodu', brand: 'Missha', marketplace: 'Trendyol', fee: 15000 }),
+        ad(-30, 42, { handle: '@ciltbakimgunlugu', platform: 'TikTok', title: '3 video seri', brand: 'DERMA:B', marketplace: 'Hepsiburada', fee: 8000 }),
+        ad(4, 28, { handle: '@makyajkutusu', platform: 'Instagram', title: 'Story serisi', brand: 'ZEROID', marketplace: 'Trendyol', fee: 6000 }),
+        ad(74, 74 + 168, { handle: '@guzelliksirlari', platform: 'YouTube', title: 'Rutin videosu', brand: 'Missha', marketplace: 'Amazon', fee: 22000 }),
+        ad(-300, -228, { handle: '@elifguzellik', platform: 'Instagram', title: 'Kasım kampanyası paylaşımı', brand: 'Missha', marketplace: 'Trendyol', fee: 12000 })
+      ];
+    })(),
     special_dates: [
       { id: uid(), title: 'Annemin doğum günü', kind: 'dogum', ...md(5), year: null, remind_days: 3, for_yarim: false },
       { id: uid(), title: 'Şirket kuruluş yıl dönümü', kind: 'yildonumu', ...md(40), year: 2019, remind_days: 1, for_yarim: false }

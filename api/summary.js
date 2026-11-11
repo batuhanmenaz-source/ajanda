@@ -36,13 +36,14 @@ export default async function handler(req, res) {
   const dayEnd = dayStart + 86400000;
   const iso = (ms) => new Date(ms).toISOString();
 
-  const [rem, calls, missed, rev, camps, specials] = await Promise.all([
+  const [rem, calls, missed, rev, camps, specials, ads] = await Promise.all([
     sb.from('reminders').select('title, due_at, for_yarim').eq('user_id', uid).eq('done', false).not('due_at', 'is', null).lt('due_at', iso(dayEnd)),
     sb.from('calls').select('who, due_at, for_yarim').eq('user_id', uid).eq('done', false).not('due_at', 'is', null).lt('due_at', iso(dayEnd)),
     sb.from('missed_calls').select('id').eq('user_id', uid).eq('handled', false),
     sb.from('revenue').select('day, marketplace, amount').eq('user_id', uid).gte('day', ymd(now - 8 * 86400000)).lte('day', today),
     sb.from('campaigns').select('name, marketplace, start_date, end_date, kind').eq('user_id', uid).lte('start_date', today).gte('end_date', today),
-    sb.from('special_dates').select('title, month, day').eq('user_id', uid)
+    sb.from('special_dates').select('title, month, day').eq('user_id', uid),
+    sb.from('collabs').select('handle, title, start_at, end_at, status').eq('user_id', uid).gt('end_at', iso(now)).lt('start_at', iso(dayEnd))
   ]);
 
   const items = [
@@ -81,6 +82,16 @@ export default async function handler(req, res) {
   if (live.length) {
     const c = live.sort((a, b) => a.end_date.localeCompare(b.end_date))[0];
     lines.push('📣 ' + clip(c.name, 30) + (c.marketplace ? ' (' + c.marketplace + ')' : '') + (c.end_date === today ? ' · son gün' : '') + (live.length > 1 ? ' +' + (live.length - 1) : ''));
+  }
+
+  // Influencer reklamları: yayındaki (en yakın biten) ya da bugün başlayacak olan
+  const adList = (ads.data || []).filter((a) => a.status !== 'iptal');
+  if (adList.length) {
+    const on = adList.filter((a) => Date.parse(a.start_at) <= now).sort((a, b) => a.end_at.localeCompare(b.end_at));
+    const who = (a) => clip(a.handle || a.title || 'Reklam', 22);
+    const endTxt = (a) => (ymd(Date.parse(a.end_at)) === today ? hm(a.end_at) : ymd(Date.parse(a.end_at)) === ymd(now + 86400000) ? 'yarın ' + hm(a.end_at) : ymd(Date.parse(a.end_at)).slice(8) + '.' + ymd(Date.parse(a.end_at)).slice(5, 7) + ' ' + hm(a.end_at));
+    if (on.length) lines.push('🎬 ' + who(on[0]) + ' yayında · bitiş ' + endTxt(on[0]) + (adList.length > 1 ? ' +' + (adList.length - 1) : ''));
+    else { const a = adList.sort((x, y) => x.start_at.localeCompare(y.start_at))[0]; lines.push('🎬 ' + who(a) + ' ' + hm(a.start_at) + '\'te başlıyor' + (adList.length > 1 ? ' +' + (adList.length - 1) : '')); }
   }
 
   const tm = ymd(now + 86400000);

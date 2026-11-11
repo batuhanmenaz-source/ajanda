@@ -509,7 +509,7 @@ export function ContactSheet({ initial, onClose, onSave, onDelete, onCall, onCol
         {isEdit ? (
           <div className="typechips">
             <button type="button" className="chip" onClick={() => onCall(initial)}>📞 Arama hatırlatması</button>
-            {initial.is_influencer ? <button type="button" className="chip" onClick={() => onCollab(initial)}>🎬 İş birliği ekle</button> : null}
+            {initial.is_influencer ? <button type="button" className="chip" onClick={() => onCollab(initial)}>🎬 Reklam ekle</button> : null}
           </div>
         ) : null}
         <div className="actions">
