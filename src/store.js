@@ -256,7 +256,7 @@ function seedMoney() {
   const f1 = uid(), f2 = uid(), f3 = uid(), f4 = uid();
   const money = [];
   const add = (n, kind, amount, category, note, method, fixed_id) => money.push({ id: uid(), day: toDateInput(addDays(t, -n)), kind, amount, category, note, method, fixed_id: fixed_id || null, created_at: addDays(t, -n).toISOString() });
-  const pick = [['market', 'Migros', 'kart', 650], ['yemek', 'Kahve', 'kart', 120], ['ulasim', 'Benzin', 'kart', 1800], ['yemek', 'Öğle yemeği', 'kart', 380], ['market', 'Manav', 'nakit', 240], ['eglence', 'Sinema', 'kart', 400], ['giyim', '', 'kart', 1500], ['yarim', 'Akşam yemeği', 'kart', 1400], ['saglik', 'Eczane', 'nakit', 310]];
+  const pick = [['market', 'Migros', 'kart', 650], ['yemek', 'Kahve', 'kart', 120], ['ulasim', 'Benzin', 'kart', 1800], ['yemek', 'Öğle yemeği', 'kart', 380], ['market', 'Manav', 'nakit', 240], ['eglence', 'Sinema', 'kart', 400], ['giyim', '', 'kart', 1500], ['yemek', 'Akşam yemeği', 'kart', 1400], ['saglik', 'Eczane', 'nakit', 310]];
   for (let n = 0; n < 50; n++) {
     const k = (n * 7 + 3) % pick.length;
     const [c, note, m, a] = pick[k];

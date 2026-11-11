@@ -12,7 +12,6 @@ export const EXPENSE_CATS = [
   { id: 'saglik', label: 'Sağlık', emoji: '💊', words: ['eczane', 'ilaç', 'doktor', 'hastane', 'muayene', 'diş', 'sağlık', 'gözlük'] },
   { id: 'eglence', label: 'Eğlence & tatil', emoji: '🎉', words: ['sinema', 'konser', 'tiyatro', 'eğlence', 'bar', 'tatil', 'otel', 'uçak', 'bilet', 'maç', 'oyun', 'kitap'] },
   { id: 'hediye', label: 'Hediye', emoji: '🎁', words: ['hediye', 'çiçek', 'doğum günü'] },
-  { id: 'yarim', label: 'Yarim', emoji: '❤️', words: ['yarim', 'yarimle', 'yarim ile', 'sevgilim'] },
   { id: 'kredi', label: 'Kredi & borç', emoji: '🏦', words: ['kredi', 'taksit', 'borç', 'kart borcu', 'ekstre'] },
   { id: 'diger', label: 'Diğer', emoji: '📦', words: [] }
 ];
@@ -24,6 +23,8 @@ export const INCOME_CATS = [
 ];
 const ALL = [...EXPENSE_CATS, ...INCOME_CATS];
 const BY_ID = Object.fromEntries(ALL.map((c) => [c.id, c]));
+// Kaldırılan eski kategori: daha önce bununla girilen kayıtlar "Eğlence & tatil" altında görünür
+BY_ID.yarim = BY_ID.eglence;
 export const catOf = (id) => BY_ID[id] || BY_ID.diger;
 export const catsFor = (kind) => (kind === 'gelir' ? INCOME_CATS : EXPENSE_CATS);
 
