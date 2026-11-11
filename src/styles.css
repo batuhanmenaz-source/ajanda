@@ -781,3 +781,11 @@ button.pill { min-height: 32px; }
 .rp-table td.up { color: #1F6B31; font-weight: 600; }
 .rp-table td.down { color: var(--danger); font-weight: 600; }
 @media (max-width: 420px) { .rp-table { font-size: 13px; } .rp-table th:first-child, .rp-table td:first-child { padding-left: 12px; } }
+
+.yarim-counter { gap: 12px; }
+.yc-one { display: flex; flex-direction: column; gap: 2px; }
+.yc-one + .yc-one { padding-top: 12px; border-top: 1px solid #F9C6D6; }
+.ytile-count + .ytile-count { margin-top: 0; }
+.ytile-count { white-space: nowrap; }
+.ytile-count .u-short { display: none; }
+@media (max-width: 400px) { .ytile-count { font-size: 11px; } .ytile-count b { font-size: 13px; } .ytile-count .u-long { display: none; } .ytile-count .u-short { display: inline; } }

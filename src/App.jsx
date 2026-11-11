@@ -13,7 +13,7 @@ import { specialUpcoming, specialLabel } from './special.js';
 import { FollowupSheet } from './work.jsx';
 import { HabitSheet, ListSheet, ContactSheet, CollabSheet, SpecialDateSheet, findContact, nextFriday17, SUMMARY_TITLE } from './life.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
-import { MARKETPLACES, DEFAULT_PREPS, YARIM_START } from './constants.js';
+import { MARKETPLACES, DEFAULT_PREPS, YARIM_STARTS } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, fromDateInput, whenLabel } from './dates.js';
 import { nextOccurrence } from './recur.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent } from './google.js';
@@ -938,7 +938,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     takvim: ['Takvim', rangeLabel(weekStart(day), addDays(weekStart(day), 6))],
     is: ['İş', isSeg === 'kampanya' ? upcomingCamps + ' aktif / yaklaşan kampanya' : (WORK_TABS.find((x) => x[0] === isSeg) || [, ''])[1]],
     ozel: ozelSeg === 'yarim' && !yarimHidden
-      ? ['Yarim ❤️', Math.floor(Math.max(0, now - YARIM_START) / 86400000).toLocaleString('tr-TR') + ' gündür birlikte']
+      ? ['Yarim ❤️', YARIM_STARTS.map((x) => Math.floor(Math.max(0, now - x.start) / 86400000).toLocaleString('tr-TR')).join(' · ') + ' gündür birlikte']
       : ['Özel', (PRIVATE_TABS.find((x) => x[0] === ozelSeg) || [, ''])[1]],
     aramalar: ['Aramalar', openCalls + ' aranacak']
   }[tab];

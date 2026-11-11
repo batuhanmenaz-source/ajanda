@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Mp, Check, Section, Progress } from './ui.jsx';
-import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START } from './constants.js';
+import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START, YARIM_STARTS } from './constants.js';
 import { whatsappLink, DEFAULT_LOVE_MESSAGE, prettyPhone, normalizePhone } from './whatsapp.js';
 import { mapsLink, mapsTarget } from './location.js';
 import { occursOn, ruleLabel } from './recur.js';
@@ -187,8 +187,7 @@ function nextMonthiversary(start, now) {
   return null;
 }
 
-function YarimCounter({ now }) {
-  const start = YARIM_START;
+function OneCounter({ start, label, now }) {
   const diff = Math.max(0, now - start);
   const days = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
@@ -200,13 +199,21 @@ function YarimCounter({ now }) {
     nextText = (n === 0 ? 'Bugün ' : n === 1 ? 'Yarın ' : n + ' gün sonra ') + what + (n <= 1 ? ' 💐' : '');
   }
   return (
-    <div className="yarim-counter" aria-label={'Birlikte geçen süre: ' + days + ' gün ' + hours + ' saat'}>
+    <div className="yc-one" aria-label={label + ' tarihinden beri: ' + days + ' gün ' + hours + ' saat'}>
       <div className="yc-num">
         <span className="yc-big">{days.toLocaleString('tr-TR')}</span><span className="yc-unit">gün</span>
         <span className="yc-big">{hours}</span><span className="yc-unit">saat</span>
       </div>
-      <div className="yc-since">10 Temmuz 2026'dan beri birlikte</div>
+      <div className="yc-since">{label}'dan beri birlikte</div>
       {nextText ? <div className="yc-next">{nextText}</div> : null}
+    </div>
+  );
+}
+
+function YarimCounter({ now }) {
+  return (
+    <div className="yarim-counter">
+      {YARIM_STARTS.map((x) => <OneCounter key={x.label} start={x.start} label={x.label} now={now} />)}
     </div>
   );
 }
@@ -294,17 +301,18 @@ function YarimSpecials({ data, now, actions }) {
 
 // Ana sayfanın sağ üstündeki kare
 function YarimTile({ data, now, actions, love }) {
-  const diff = Math.max(0, now - YARIM_START);
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
+  const counts = YARIM_STARTS.map((x) => { const diff = Math.max(0, now - x.start); return { days: Math.floor(diff / 86400000), hours: Math.floor((diff % 86400000) / 3600000) }; });
+  const { days, hours } = counts[0];
   const today = startOfDay(now);
   // Yaklaşan Yarim kayıtları (gecikenler dahil, tarihsizler en sonda)
   const items = yarimItems(data, now).filter((x) => !x.item.done);
-  const next = nextMonthiversary(YARIM_START, now);
-  const nd = next ? daysBetween(now, next.date) : 99;
-  const anniv = next && nd <= 7
-    ? { key: 'anniv', title: (next.months % 12 === 0 ? (next.months / 12) + '. yıl dönümü' : next.months + '. ay dönümü') + ' 💐', when: nd === 0 ? 'Bugün' : nd === 1 ? 'Yarın' : nd + ' gün sonra' }
-    : null;
+  const annivs = YARIM_STARTS.map((x, i) => {
+    const next = nextMonthiversary(x.start, now);
+    const nd = next ? daysBetween(now, next.date) : 99;
+    return next && nd <= 7
+      ? { key: 'anniv' + i, title: (next.months % 12 === 0 ? (next.months / 12) + '. yıl dönümü' : next.months + '. ay dönümü') + ' 💐', when: nd === 0 ? 'Bugün' : nd === 1 ? 'Yarın' : nd + ' gün sonra' }
+      : null;
+  }).filter(Boolean);
   const rows = items.map((x) => ({
     key: x.kind + x.item.id,
     title: x.kind === 'call' ? x.item.who + ' ara' : x.item.title,
@@ -317,7 +325,7 @@ function YarimTile({ data, now, actions, love }) {
   // "1 yıl önce bugün" anıları
   const mems = (data.memories || []).filter((m) => { const d = fromDateInput(m.day); return d.getMonth() === now.getMonth() && d.getDate() === now.getDate() && d.getFullYear() < now.getFullYear(); })
     .map((m) => ({ key: 'm' + m.id, title: '📸 ' + m.title, when: (now.getFullYear() - Number(m.day.slice(0, 4))) + ' yıl önce bugün' }));
-  const list = [...mems, ...(anniv ? [anniv] : []), ...specials, ...rows];
+  const list = [...mems, ...annivs, ...specials, ...rows];
   const shown = list.slice(0, 3);
   const more = list.length - shown.length;
   return (
@@ -327,7 +335,7 @@ function YarimTile({ data, now, actions, love }) {
         <span className="ytile-name">Yarim</span>
         <LoveButton love={love} actions={actions} />
       </div>
-      <div className="ytile-count" aria-hidden="true"><b>{days.toLocaleString('tr-TR')}</b> gün <b>{hours}</b> saat</div>
+      {counts.map((c, i) => <div key={i} className="ytile-count" aria-hidden="true"><b>{c.days.toLocaleString('tr-TR')}</b> gün <b>{c.hours}</b> <span className="u-long">saat</span><span className="u-short">sa</span></div>)}
       <div className="ytile-list" aria-hidden="true">
         {shown.length ? shown.map((r) => (
           <div key={r.key} className="ytile-item">
