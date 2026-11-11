@@ -43,8 +43,145 @@ export function marketplaceOrder(revenue, now = new Date()) {
 function monthKey(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
 function daysInMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); }
 
+// ---------- Günlük bakış (Ciro ekranının üstü ve Bugün sayfası) ----------
+// Varsayılan gün: dün girildiyse dün, değilse girilmiş en son gün
+export function glanceDefaultDay(revenue, now = new Date()) {
+  const t = startOfDay(now);
+  const y = toDateInput(addDays(t, -1));
+  if (revenue.some((r) => r.day === y)) return y;
+  const T = toDateInput(t);
+  const days = revenue.map((r) => r.day).filter((d) => d <= T).sort();
+  return days.length ? days[days.length - 1] : y;
+}
+function dayStat(revenue, key) {
+  const rows = revenue.filter((r) => r.day === key);
+  const by = {};
+  rows.forEach((r) => { by[r.marketplace] = { v: Number(r.amount), o: Number(r.orders) || 0 }; });
+  return { rows, total: rows.reduce((s, r) => s + Number(r.amount), 0), orders: rows.reduce((s, r) => s + (Number(r.orders) || 0), 0), by };
+}
+const dlt = (a, b) => (b > 0 ? a / b - 1 : null);
+function Delta({ v, small }) {
+  if (v == null) return null;
+  const up = v >= 0;
+  return <span className={'gl-d ' + (up ? 'up' : 'down') + (small ? ' sm' : '')}>{up ? '▲' : '▼'} {Math.abs(Math.round(v * 100))}%</span>;
+}
+const relLabel = (key, now) => {
+  const d = fromDateInput(key);
+  const lbl = dayLabel(d, now);
+  return lbl === fmtShort(d) ? fmtShort(d) + ' ' + WEEKDAYS_SHORT[d.getDay()] : lbl + ' · ' + fmtShort(d);
+};
+
+export function RevenueGlance({ revenue, now, actions, order }) {
+  const t = startOfDay(now);
+  const T = toDateInput(t);
+  const [day, setDay] = useState(() => glanceDefaultDay(revenue, now));
+  // Veri sonradan yüklenirse varsayılan günü güncelle (kullanıcı gün değiştirmediyse)
+  const [touched, setTouched] = useState(false);
+  useEffect(() => { if (!touched) setDay(glanceDefaultDay(revenue, now)); }, [revenue, now, touched]);
+  const go = (n) => { setTouched(true); setDay(toDateInput(addDays(fromDateInput(day), n))); };
+  const cur = dayStat(revenue, day);
+  const wk = dayStat(revenue, toDateInput(addDays(fromDateInput(day), -7)));
+  const prev = dayStat(revenue, toDateInput(addDays(fromDateInput(day), -1)));
+  const mps = (order || MARKETPLACES.map((m) => m.name)).filter((n) => cur.by[n] || wk.by[n]);
+  mps.sort((a, b) => ((cur.by[b] || {}).v || 0) - ((cur.by[a] || {}).v || 0));
+  // Her pazaryeri için son 7 gün (seçili gün dahil)
+  const last7 = Array.from({ length: 7 }, (_, i) => toDateInput(addDays(fromDateInput(day), i - 6)));
+  const spark = (mp) => {
+    const vals = last7.map((k) => { const r = revenue.find((x) => x.day === k && x.marketplace === mp); return r ? Number(r.amount) : 0; });
+    const mx = Math.max(1, ...vals);
+    return vals.map((v, i) => ({ v, h: v ? Math.max(8, (v / mx) * 100) : 0, last: i === 6 }));
+  };
+  return (
+    <section className="card gl" aria-label="Günlük ciro">
+      <div className="gl-head">
+        <button type="button" className="iconbtn" aria-label="Önceki gün" onClick={() => go(-1)}><Icon.Left /></button>
+        <div className="gl-title">
+          <span className="rv-k">Günlük ciro</span>
+          <span className="gl-day">{relLabel(day, now)}</span>
+        </div>
+        <button type="button" className="iconbtn" aria-label="Sonraki gün" onClick={() => go(1)} disabled={day >= T}><Icon.Right /></button>
+      </div>
+      {cur.rows.length ? (
+        <>
+          <div className="gl-total">
+            <span className="rv-big">{tl(cur.total)}</span>
+            <span className="gl-sub">
+              <Delta v={dlt(cur.total, wk.total)} />{wk.total ? ' geçen ' + ['pazara', 'pazartesiye', 'salıya', 'çarşambaya', 'perşembeye', 'cumaya', 'cumartesiye'][fromDateInput(day).getDay()] + ' göre' : ''}
+              {prev.total ? <span className="muted"> · önceki gün {tlShort(prev.total)}</span> : null}
+              {cur.orders ? <span className="muted"> · {cur.orders.toLocaleString('tr-TR')} sipariş</span> : null}
+            </span>
+          </div>
+          <div className="gl-grid">
+            {mps.map((n) => {
+              const c = cur.by[n];
+              const w = wk.by[n];
+              return (
+                <div key={n} className="gl-tile">
+                  <span className="tag"><span className="dot" style={{ background: mpColor(n) }} />{n}</span>
+                  <span className="gl-v">{c ? tl(c.v) : '—'}</span>
+                  <span className="gl-meta">
+                    {c && w ? <Delta v={dlt(c.v, w.v)} small /> : <span className="muted">{c ? 'geçen hafta yok' : 'girilmedi'}</span>}
+                    {c && c.o ? <span className="muted">{c.o} sip.</span> : null}
+                  </span>
+                  <span className="gl-spark" aria-hidden="true">
+                    {spark(n).map((x, i) => <span key={i} className={x.last ? 'on' : ''} style={{ height: x.h + '%', background: x.v ? mpColor(n) : 'transparent' }} />)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <span className="hint">Yüzdeler geçen haftanın aynı gününe göre · çubuklar son 7 gün</span>
+          <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => actions.openRevenue(day)}>Bu günü düzenle</button>
+        </>
+      ) : (
+        <div className="gl-empty">
+          <span>Bu günün cirosu girilmedi.</span>
+          <button type="button" className="btn primary" onClick={() => actions.openRevenue(day)}>Ciro gir</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Bugün sayfası için kısa kart
+export function RevenueMini({ revenue, now, actions, onOpen }) {
+  const day = glanceDefaultDay(revenue, now);
+  const y = toDateInput(addDays(startOfDay(now), -1));
+  const cur = dayStat(revenue, day);
+  const wk = dayStat(revenue, toDateInput(addDays(fromDateInput(day), -7)));
+  const top = Object.entries(cur.by).sort((a, b) => b[1].v - a[1].v);
+  if (!cur.rows.length || day < toDateInput(addDays(startOfDay(now), -3))) {
+    return (
+      <section className="card gl-mini empty">
+        <span><b>Dünün cirosu</b> henüz girilmedi.</span>
+        <button type="button" className="btn primary" onClick={() => actions.openRevenue(y)}>Ciro gir</button>
+      </section>
+    );
+  }
+  return (
+    <button type="button" className="card gl-mini" onClick={onOpen} aria-label={'Ciro: ' + relLabel(day, now) + ' ' + tl(cur.total) + '. Ciro ekranını aç'}>
+      <span className="gl-mini-head">
+        <span className="rv-k">{day === y ? 'Dünkü ciro · ' + fmtShort(fromDateInput(day)) : 'Son girilen ciro · ' + relLabel(day, now)}</span>
+        <span className="gl-mini-total">{tl(cur.total)} <Delta v={dlt(cur.total, wk.total)} small /></span>
+      </span>
+      <span className="gl-mini-row">
+        {top.slice(0, 6).map(([n, x]) => {
+          const w = wk.by[n];
+          return (
+            <span key={n} className="gl-chip">
+              <span className="gl-chip-top"><span className="dot" style={{ background: mpColor(n) }} /><span className="n">{n}</span></span>
+              <span className="gl-chip-bot"><b>{tlShort(x.v)}</b>{w ? <Delta v={dlt(x.v, w.v)} small /> : null}</span>
+            </span>
+          );
+        })}
+
+      </span>
+    </button>
+  );
+}
+
 // ---------- Ekran ----------
-export function RevenueScreen({ revenue, loaded, error, target, now, actions }) {
+export function RevenueScreen({ revenue, loaded, error, target, now, actions, order }) {
   const today = startOfDay(now);
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [hover, setHover] = useState(null);
@@ -108,6 +245,8 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions }) 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {loaded ? <RevenueGlance revenue={revenue} now={now} actions={actions} order={order} /> : null}
+      <div className="section-head" style={{ marginBottom: -8 }}><h2>Aylık görünüm</h2></div>
       <div className="week-nav">
         <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
         <span className="lbl">{MONTHS[month.getMonth()]} {month.getFullYear()}</span>

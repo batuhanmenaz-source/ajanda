@@ -10,6 +10,7 @@ import {
   findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, ContactsView
 } from './life.jsx';
 import { SCOPES, scopeData } from './scope.js';
+import { RevenueMini } from './revenue.jsx';
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -430,7 +431,7 @@ export function MarketplacePanel({ name, data, now, actions }) {
 }
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets }) {
+export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady }) {
   const allData = scopeData(rawData, scope);
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} contacts={allData.contacts} />;
   const [sumHidden, setSumHidden] = useState(false);
@@ -482,6 +483,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </section>
         {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
+    {revReady && scope !== 'ozel' ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} /> : null}
     {showSummary ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

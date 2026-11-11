@@ -652,3 +652,39 @@ button.pill { min-height: 32px; }
 .mic.on { background: #C92A2A; border-color: #C92A2A; color: #fff; animation: micpulse 1.2s ease-in-out infinite; }
 @keyframes micpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(201, 42, 42, 0.35); } 50% { box-shadow: 0 0 0 8px rgba(201, 42, 42, 0); } }
 @media (prefers-reduced-motion: reduce) { .mic.on { animation: none; } }
+
+/* ---------- Günlük ciro bakışı ---------- */
+.gl { padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.gl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gl-title { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.gl-day { font-size: 16px; font-weight: 700; }
+.gl-total { display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
+.gl-sub { font-size: 13px; color: var(--ink-2); }
+.gl-d { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.gl-d.sm { font-size: 12px; }
+.gl-d.up { color: #1F6B31; }
+.gl-d.down { color: var(--danger); }
+.gl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 760px) { .gl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .gl-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.gl-tile { display: flex; flex-direction: column; gap: 3px; padding: 10px 10px 8px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--bg); min-width: 0; }
+.gl-tile .tag { font-size: 13px; font-weight: 600; }
+.gl-v { font-family: var(--display); font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.gl-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; min-height: 16px; }
+.gl-spark { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; height: 20px; align-items: end; margin-top: 2px; }
+.gl-spark span { display: block; border-radius: 2px 2px 0 0; opacity: 0.35; }
+.gl-spark span.on { opacity: 1; }
+.gl-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0 4px; color: var(--ink-2); font-size: 14px; }
+.gl-mini { display: flex; flex-direction: column; gap: 10px; padding: 14px; text-align: left; width: 100%; border: 1px solid var(--line); cursor: pointer; }
+.gl-mini.empty { flex-direction: row; justify-content: space-between; align-items: center; cursor: default; font-size: 14px; color: var(--ink-2); }
+.gl-mini-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.gl-mini-total { font-family: var(--display); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; display: inline-flex; gap: 8px; align-items: baseline; }
+.gl-mini-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+@media (min-width: 760px) { .gl-mini-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.gl-chip { display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line-2); font-size: 12px; color: var(--ink-2); min-width: 0; }
+.gl-chip-top { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.gl-chip-top .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.gl-chip-bot { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; white-space: nowrap; }
+.gl-chip-bot b { font-size: 14px; }
+.gl-chip b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.gl-chip .dot { width: 7px; height: 7px; }

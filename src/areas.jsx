@@ -17,11 +17,11 @@ export function SubTabs({ tabs, value, onChange, label }) {
   );
 }
 
-export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget }) {
+export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" />
-      {seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} />
+      {seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} />
         : seg === 'notlar' ? <MarketplaceNotes data={data} actions={actions} />
           : seg === 'influencer' ? <InfluencerView data={data} now={now} actions={actions} />
             : <CampaignsScreen data={data} actions={actions} revenue={revenue} now={now} />}
