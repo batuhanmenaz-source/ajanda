@@ -688,3 +688,24 @@ button.pill { min-height: 32px; }
 .gl-chip-bot b { font-size: 14px; }
 .gl-chip b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .gl-chip .dot { width: 7px; height: 7px; }
+
+/* ---------- Hava durumu ---------- */
+.wx { padding: 4px 6px; display: flex; flex-direction: column; gap: 0; }
+.wx-empty { padding: 12px 14px; flex-direction: row; justify-content: space-between; align-items: center; font-size: 14px; color: var(--ink-2); }
+.wx-main { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 8px; border: 0; background: transparent; text-align: left; min-height: 56px; }
+.wx-icon { font-size: 30px; line-height: 1; flex: 0 0 auto; }
+.wx-temp { font-family: var(--display); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.wx-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.wx-l1 { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-l2 { font-size: 12px; color: var(--ink-2); }
+.wx-chev { color: var(--muted); font-size: 14px; flex: 0 0 auto; }
+.wx-tip { margin: 0 8px 8px; padding: 7px 10px; border-radius: 10px; background: #EEF4FB; color: #17406B; font-size: 13px; font-weight: 600; }
+.wx-hours { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(48px, 1fr); gap: 4px; overflow-x: auto; padding: 4px 8px 8px; scrollbar-width: none; }
+.wx-hours::-webkit-scrollbar { display: none; }
+.wx-h { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; border-radius: 10px; background: var(--bg); font-size: 12px; color: var(--ink-2); }
+.wx-h .i { font-size: 18px; }
+.wx-h b { color: var(--ink); font-size: 14px; }
+.wx-h .p.hi { color: #17406B; font-weight: 700; }
+.wx-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 8px 10px; font-size: 12px; color: var(--ink-2); }
+.wx .hint { padding: 0 8px 10px; }
+.sum-preview { margin: 0; padding: 10px 12px; border-radius: 10px; background: #1F1F1C; color: #F4F3EF; font: 13px/1.55 var(--font); white-space: pre-wrap; }

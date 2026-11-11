@@ -17,6 +17,8 @@ Google Takvim, hatırlatmalar, pazaryeri notları, kampanya takvimi ve aramalar�
 - **Menü:** Bugün · Takvim · İş (kampanyalar, ciro, pazaryeri notları, influencer) · Özel (cüzdan, listeler, alışkanlıklar, özel günler, günlük not) · Aramalar. Bugün sayfasında Tümü / İş / Özel filtresi.
 - **Cüzdan:** Kişisel gelir/gider (işten ayrı); haftalık ve aylık görünüm, kategori dağılımı, kart/nakit, aylık kategori bütçesi, sabit giderler ve ödeme günü hatırlatması. Hızlı ekle'ye "250 market" ya da "+45000 maaş" yazılabilir.
 - **Telefon:** Sesle ekleme (Hızlı ekle'deki mikrofon), ana ekran kısayolları (simgeye uzun bas), fiş fotoğrafından harcama (okuma telefonda yapılır), MacroDroid ile cevapsız çağrılar ve arama bitince otomatik "Arandı".
+- **Hava durumu:** Bugün sayfasında telefonun konumuna göre (Open-Meteo); yağmur/soğuk uyarısı, saatlik tahmin.
+- **Bildirim özeti:** MacroDroid `/api/summary` adresini aralıklarla çağırıp kalıcı bildirimde gösterir (sıradaki iş, dünkü ciro, kampanya, özel gün).
 - **Excel:** Cüzdan (seçili hafta/ay) ve Ciro (ay ya da yıl) .xlsx olarak indirilir.
 - **Hızlı ekle:** "yarın 10:00 HB fiyat güncelle", "Cuma 15:00 kargo firmasını ara", "not: Trendyol komisyon kontrolü" gibi yazılanları tarih, saat, pazaryeri ve türüne göre ayırır.
 

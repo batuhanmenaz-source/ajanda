@@ -599,6 +599,37 @@ function CopyBox({ label, value }) {
   );
 }
 
+// Bildirim çubuğunda kalıcı "Ajanda özeti" (widget yerine)
+function SummarySetup({ token }) {
+  const [preview, setPreview] = useState('');
+  const [busy, setBusy] = useState(false);
+  const url = window.location.origin + '/api/summary?token=' + token;
+  const look = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      setPreview(r.ok ? await r.text() : 'Önizleme alınamadı (' + r.status + ').');
+    } catch { setPreview('Önizleme alınamadı. Örnek modda bu özellik çalışmaz.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="setup-box">
+      <span className="lbl" style={{ fontSize: 15 }}>Bildirim çubuğunda Ajanda özeti</span>
+      <p className="hint" style={{ margin: 0, fontSize: 14 }}>Sıradaki işin, bugünkü iş sayısı, dünkü ciro, süren kampanya ve yaklaşan özel gün; bildirim çubuğunda sürekli duran tek bir bildirimde görünür ve kendiliğinden yenilenir. MacroDroid'de yeni bir makro kur:</p>
+      <ol className="steps">
+        <li><b>Tetikleyici:</b> Tarih/Saat → <b>Düzenli Aralık</b> → <b>30 dakika</b>. (İstersen ikinci tetikleyici olarak <b>Cihaz Açılışı</b>.)</li>
+        <li><b>Eylem 1:</b> Bağlanılabilirlik → <b>HTTP İsteği</b> → Yöntem: <b>GET</b> → URL'ye aşağıdaki satırı yapıştır. Ayarlarda <b>"Yanıtı değişkene kaydet"</b>i aç ve <b>ozet</b> adında yeni bir metin değişkeni seç.</li>
+        <li><b>Eylem 2:</b> Bildirim → <b>Bildirim Göster</b> → Başlık: <b>Ajanda</b>, Metin: <b>[lv=ozet]</b>. <b>Kalıcı</b> (kaydırarak kapanmasın) ve <b>önceki bildirimin üzerine yaz</b> seçeneklerini aç; bildirime dokununca Ajanda açılsın diye tıklama eylemi olarak bu sitenin adresini ver.</li>
+        <li>Kaydet ve makroyu bir kez elle çalıştır.</li>
+      </ol>
+      <CopyBox label="URL (tamamını kopyala)" value={url} />
+      <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={look}>{busy ? 'Alınıyor…' : 'Özeti önizle'}</button>
+      {preview ? <pre className="sum-preview">{preview}</pre> : null}
+      <p className="hint" style={{ margin: 0 }}>Bu adres yalnız bu kısa özeti verir; anahtarı bilen biri özeti görebilir. "Yeni anahtar oluştur" dersen eski adresler çalışmaz olur, MacroDroid'deki URL'leri yenilemen gerekir.</p>
+    </div>
+  );
+}
+
 export function MissedSetupSheet({ token, onClose, onCreateToken, onTest }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState('');
@@ -628,6 +659,7 @@ export function MissedSetupSheet({ token, onClose, onCreateToken, onTest }) {
             <CopyBox label="URL (tamamını kopyala)" value={window.location.origin + '/api/call-done?token=' + token + '&number=[call_number]'} />
             <p className="hint" style={{ margin: 0 }}>Not: Karşı taraf açmasa bile arama bitince işaretlenir; gerekirse kaydın işaretini kaldırabilirsin.</p>
           </div>
+          <SummarySetup token={token} />
           <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => { if (window.confirm('Yeni anahtar oluşturulursa MacroDroid\'deki eski anahtar çalışmaz. Devam edilsin mi?')) onCreateToken(); }}>Yeni anahtar oluştur</button>
         </>
       ) : (
@@ -678,7 +710,7 @@ export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefr
       <BackupSection demo={demo} backup={backup} onBackupNow={onBackupNow} onDownload={onDownload} onRestore={onRestore} onReconnect={onReconnect} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!demo && <button type="button" className="btn big" onClick={onReconnect}>Google Takvim'i yeniden bağla</button>}
-        <button type="button" className="btn big" onClick={onMissedSetup}>Telefon bağlantısı (cevapsız çağrılar)</button>
+        <button type="button" className="btn big" onClick={onMissedSetup}>Telefon bağlantısı (MacroDroid: cevapsız çağrı, arama, bildirim özeti)</button>
         <button type="button" className="btn big" onClick={onToggleYarim} aria-pressed={!yarimHidden}>{yarimHidden ? 'Yarim alanını göster' : 'Yarim alanını bu cihazda gizle'}</button>
         <button type="button" className="btn big" onClick={onRefresh}>Verileri yenile</button>
         {!demo && <button type="button" className="btn big danger" onClick={onSignOut}>Çıkış yap</button>}
