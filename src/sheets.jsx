@@ -198,7 +198,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
 
 // ---------- Konum alanı ----------
 // loc = { text, geo }  (geo = "lat,lng" ya da '')
-function LocationField({ id, value, onChange }) {
+export function LocationField({ id, value, onChange }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [sugs, setSugs] = useState([]);

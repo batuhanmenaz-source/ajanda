@@ -8,9 +8,11 @@ import { Sheet } from './ui.jsx';
 import { RevenueSheet, TargetSheet, marketplaceOrder, tl } from './revenue.jsx';
 import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet, YarimToggle, AlertDefaultsSheet } from './sheets.jsx';
 import { alertDefaults as mergeAlertDefaults } from './alerts.js';
+import { MemorySheet, YarimItemSheet, nextSaturdayEvening, randomSurpriseDate, pickSurpriseIdea, SURPRISE_PREFIX } from './yarim.jsx';
+import { specialUpcoming, specialLabel } from './special.js';
 import { HabitSheet, ListSheet, ContactSheet, CollabSheet, SpecialDateSheet, findContact, nextFriday17, SUMMARY_TITLE } from './life.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
-import { MARKETPLACES, DEFAULT_PREPS } from './constants.js';
+import { MARKETPLACES, DEFAULT_PREPS, YARIM_START } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, whenLabel } from './dates.js';
 import { nextOccurrence } from './recur.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent } from './google.js';
@@ -25,7 +27,7 @@ const TABS = [
   { id: 'aramalar', label: 'Aramalar', icon: Icon.Phone }
 ];
 
-const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [] };
+const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [], yarim_items: [], memories: [] };
 
 export default function App({ store, demo, email, onSignOut, onReconnect, googleSave }) {
   const [data, setData] = useState(EMPTY);
@@ -39,10 +41,15 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const ss = (k, d) => { try { return sessionStorage.getItem(k) || d; } catch { return d; } };
   const [isSeg, setIsSegState] = useState(() => (ss('ajanda-sales', '') === 'ciro' ? 'ciro' : ss('ajanda-is-seg', 'kampanya')));
   const [ozelSeg, setOzelSegState] = useState(() => ss('ajanda-ozel-seg', 'cuzdan'));
+  const [yarimSeg, setYarimSegState] = useState(() => ss('ajanda-yarim-seg', 'ozet'));
+  const setYarimSeg = (v) => { setYarimSegState(v); try { sessionStorage.setItem('ajanda-yarim-seg', v); } catch { /* yok say */ } };
+  const [yarimPrefs, setYarimPrefs] = useState({});
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const setIsSeg = (v) => { setIsSegState(v); try { sessionStorage.setItem('ajanda-is-seg', v); sessionStorage.removeItem('ajanda-sales'); } catch { /* yok say */ } };
   const setOzelSeg = (v) => { setOzelSegState(v); try { sessionStorage.setItem('ajanda-ozel-seg', v); } catch { /* yok say */ } };
   const goTab = (t) => {
     if (t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer') { setIsSeg(t); setTab('is'); }
+    else if (t === 'yarim') { setOzelSeg('yarim'); setTab('ozel'); }
     else if (t === 'cuzdan' || t === 'listeler' || t === 'aliskanlik' || t === 'ozelgun' || t === 'gunluk') { setOzelSeg(t); setTab('ozel'); }
     else setTab(t);
   };
@@ -164,7 +171,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -300,7 +307,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/alerts|remind_at|aux_event_id|alert_defaults/.test(msg)) say('Kaydedilemedi: Hatırlatma seçimleri için Supabase\'de 14 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/yarim_items|memories|yarim_prefs|anilar/.test(msg)) say('Kaydedilemedi: Yarim bölümü için Supabase\'de 15 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/alerts|remind_at|aux_event_id|alert_defaults/.test(msg)) say('Kaydedilemedi: Hatırlatma seçimleri için Supabase\'de 14 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/receipt_path|fisler|bucket/i.test(msg)) say('Kaydedilemedi: Fiş fotoğrafı için Supabase\'de 12 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/money|scope|budgets/.test(msg) && /schema cache|does not exist|relation|column/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 11 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/contacts|collabs|special_dates|list_items|lists|habits|habit_logs/.test(msg) && /schema cache|does not exist|relation/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 10 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -601,6 +609,93 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
   const moneyMsg = (m) => (m.kind === 'gelir' ? 'Gelir kaydedildi' : 'Gider kaydedildi') + ' · ' + tl(m.amount, Number(m.amount) % 1 ? 2 : 0);
 
+  // ---------- Yarim: anılar, sevdikleri, hediyeler, planlar, sürpriz ----------
+  const photoUrl = useCallback((path) => store.photoUrl('anilar', path), [store]);
+  const saveMemory = async (fields, { photo, removePhoto, oldPath }) => {
+    const f = { ...fields };
+    try {
+      if (photo && photo.blob) f.photo_path = await store.uploadPhoto('anilar', photo.blob, (f.day || '').slice(0, 7));
+      else if (removePhoto) f.photo_path = null;
+    } catch (e) {
+      console.error(e);
+      say('Fotoğraf yüklenemedi (Supabase\'de 15 numaralı SQL\'i çalıştırdın mı?). Anı fotoğrafsız kaydediliyor.');
+    }
+    const row = await saveRow('memories', f, 'Anı kaydedildi 💗');
+    if (row && oldPath && (removePhoto || (photo && photo.blob && f.photo_path)) && oldPath !== row.photo_path) { try { await store.removePhoto('anilar', oldPath); } catch { /* yok say */ } }
+  };
+  const deleteMemory = async (m) => {
+    if (!window.confirm('"' + m.title + '" anısı silinsin mi?' + (m.photo_path ? ' Fotoğrafı da silinir.' : ''))) return;
+    if (m.photo_path) { try { await store.removePhoto('anilar', m.photo_path); } catch { /* yok say */ } }
+    await deleteRow('memories', m);
+  };
+  const toggleYarimItem = async (x) => {
+    const patch = { done: !x.done, done_at: !x.done ? toDateInput(new Date()) : null };
+    patchLocal('yarim_items', x.id, patch);
+    try { await store.update('yarim_items', x.id, patch); if (!x.done) say(x.kind === 'hediye' ? 'Alındı olarak işaretlendi 🎁' : 'Yaptınız ✓ İstersen "Yaptıklarımız"dan anılara ekle'); }
+    catch (e) { patchLocal('yarim_items', x.id, { done: x.done, done_at: x.done_at }); fail(e); }
+  };
+  const planToCalendar = (x) => setSheet({ kind: 'item', item: { kind: 'reminder', title: x.title, due_at: nextSaturdayEvening().toISOString(), for_yarim: true, location: x.location || '', location_geo: x.location_geo || '' } });
+  const saveYarimPrefs = async (next) => {
+    setYarimPrefs(next);
+    try { const s2 = await store.saveSettings({ yarim_prefs: next }); setYarimPrefs(s2.yarim_prefs || next); return true; }
+    catch (e) { fail(e); return false; }
+  };
+  // Sürpriz hatırlatması kur (açıksa ve bekleyen yoksa). Kurulumu yalnız aşağıdaki effect tetikler.
+  const surpriseBusy = useRef(false);
+  const scheduleSurprise = async (prefs) => {
+    const sp = (prefs && prefs.surprise) || {};
+    if (surpriseBusy.current || !sp.on) return;
+    surpriseBusy.current = true;
+    try {
+      const when = randomSurpriseDate(sp.min || 3, sp.max || 4);
+      const idea = pickSurpriseIdea(sp.ideas, data.yarim_items.filter((x) => x.kind === 'hediye'));
+      const rem = await saveItem('reminders', { title: SURPRISE_PREFIX + idea, marketplace: null, due_at: when.toISOString(), for_yarim: true, alerts: { list: ['0'], at: '09:00' } }, true);
+      if (rem) await saveYarimPrefs({ ...prefs, surprise: { ...sp, reminder_id: rem.id } });
+    } catch (e) { console.error(e); } finally { surpriseBusy.current = false; }
+  };
+  const saveSurprise = async (sp, replan) => {
+    const cur = yarimPrefs.surprise || {};
+    const pending = cur.reminder_id ? data.reminders.find((r) => r.id === cur.reminder_id && !r.done) : null;
+    // Kapatılınca ya da yeniden planlanınca bekleyen hatırlatmayı kaldır; yenisini effect kurar
+    const drop = pending && (!sp.on || replan);
+    if (drop) { try { await removeReminderQuiet(pending.id); } catch (e) { console.error(e); } }
+    const next = { ...yarimPrefs, surprise: { min: 3, max: 4, ...sp, reminder_id: drop ? null : sp.reminder_id } };
+    if (await saveYarimPrefs(next)) say(!next.surprise.on ? 'Sürpriz hatırlatıcısı kapatıldı' : replan ? 'Sürpriz yeniden planlandı 🌷' : 'Sürpriz hatırlatıcısı açık 🌷');
+  };
+  // Tamamlanan sürprizden sonra bir sonrakini kur
+  useEffect(() => {
+    if (loading || !prefsLoaded) return;
+    const sp = yarimPrefs.surprise || {};
+    if (!sp.on) return;
+    const r = sp.reminder_id && data.reminders.find((x) => x.id === sp.reminder_id);
+    if (!r || r.done) scheduleSurprise(yarimPrefs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, prefsLoaded, data.reminders, yarimPrefs]);
+  // Yarim doğum günü / yıl dönümüne 2 hafta kala "hediye listene bak" hatırlatması (yılda bir kez)
+  const giftBusy = useRef(false);
+  useEffect(() => {
+    if (loading || !prefsLoaded || giftBusy.current || yarimHidden) return;
+    const g = yarimPrefs.gifts || {};
+    if (g.on === false) return;
+    const nudged = g.nudged || {};
+    const todo = specialUpcoming(data.special_dates.filter((x) => x.for_yarim), new Date(), 14)
+      .filter(({ s, date }) => !nudged[s.id + ':' + date.getFullYear()]);
+    if (!todo.length) return;
+    giftBusy.current = true;
+    (async () => {
+      const done = { ...nudged };
+      for (const { s, date, inDays } of todo) {
+        let due = addDays(date, -14); due.setHours(10, 0, 0, 0);
+        if (due < new Date()) due = new Date(Date.now() + 15 * 60000);
+        const ideas = data.yarim_items.filter((x) => x.kind === 'hediye' && !x.done).length;
+        const rem = await saveItem('reminders', { title: '🎁 ' + specialLabel(s, date) + ' yaklaşıyor (' + inDays + ' gün) — hediye listene bak' + (ideas ? ' (' + ideas + ' fikir)' : ''), marketplace: null, due_at: due.toISOString(), for_yarim: true, alerts: { list: ['0'], at: '09:00' } }, true);
+        if (rem) done[s.id + ':' + date.getFullYear()] = true;
+      }
+      await saveYarimPrefs({ ...yarimPrefs, gifts: { ...g, nudged: done } });
+    })().catch(console.error).finally(() => { giftBusy.current = false; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, prefsLoaded, data.special_dates]);
+
   // ---------- Hızlı ekle ----------
   const quickSave = async (p) => {
     const due = p.date ? p.date.toISOString() : null;
@@ -644,7 +739,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     newCall: () => setSheet({ kind: 'item', item: { kind: 'call' } }),
     newYarim: () => setSheet({ kind: 'quick', yarim: true }),
     openYarimSettings: () => setSheet({ kind: 'yarimSettings' }),
-    openYarim: () => setSheet({ kind: 'yarim' }),
+    openYarim: () => { setSheet(null); setYarimSeg('ozet'); goTab('yarim'); },
+    openMemory: (m) => setSheet({ kind: 'memory', item: m }),
+    openYarimItem: (x) => setSheet({ kind: 'yitem', item: x }),
+    toggleYarimItem, planToCalendar, saveSurprise,
     hideYarim: () => { setYarimHidden(true); setSheet(null); say('Yarim alanı bu cihazda gizlendi. Geri açmak için: sağ üstteki etiket › Hesap'); },
     openMissedSetup: () => setSheet({ kind: 'missedSetup' }),
     missedDone: async (m) => {
@@ -792,7 +890,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     bugun: ['Bugün', fmtLong(today)],
     takvim: ['Takvim', rangeLabel(weekStart(day), addDays(weekStart(day), 6))],
     is: ['İş', isSeg === 'kampanya' ? upcomingCamps + ' aktif / yaklaşan kampanya' : (WORK_TABS.find((x) => x[0] === isSeg) || [, ''])[1]],
-    ozel: ['Özel', (PRIVATE_TABS.find((x) => x[0] === ozelSeg) || [, ''])[1]],
+    ozel: ozelSeg === 'yarim' && !yarimHidden
+      ? ['Yarim ❤️', Math.floor(Math.max(0, now - YARIM_START) / 86400000).toLocaleString('tr-TR') + ' gündür birlikte']
+      : ['Özel', (PRIVATE_TABS.find((x) => x[0] === ozelSeg) || [, ''])[1]],
     aramalar: ['Aramalar', openCalls + ' aranacak']
   }[tab];
 
@@ -857,7 +957,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
               {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} />}
-              {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} />}
+              {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden}
+                yarim={{ seg: yarimSeg, setSeg: setYarimSeg, love, prefs: yarimPrefs, photoUrl }} />}
               {tab === 'aramalar' && <CallsScreen data={viewData} now={now} actions={actions} missedConfigured={!!love.token} />}
             </>
           )}
@@ -891,6 +992,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         onSave={(f) => saveRow('habits', f, 'Alışkanlık kaydedildi')} onDelete={(x) => deleteRow('habits', x, '"' + x.name + '" ve tüm geçmişi silinsin mi?')} />}
       {sheet && sheet.kind === 'list' && <ListSheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('lists', f, 'Liste kaydedildi')} onDelete={(x) => deleteRow('lists', x, '"' + x.title + '" listesi ve içindekiler silinsin mi?')} />}
+      {sheet && sheet.kind === 'memory' && <MemorySheet initial={sheet.item} photoUrl={photoUrl} onClose={() => setSheet(null)} onSave={saveMemory} onDelete={deleteMemory} />}
+      {sheet && sheet.kind === 'yitem' && <YarimItemSheet initial={sheet.item} onClose={() => setSheet(null)}
+        onSave={(f) => saveRow('yarim_items', f, f.kind === 'hediye' ? 'Hediye fikri kaydedildi 🎁' : f.kind === 'plan' ? 'Kaydedildi ✨' : 'Kaydedildi 💗')}
+        onDelete={(x) => deleteRow('yarim_items', x, '"' + x.title + '" silinsin mi?')} onCalendar={planToCalendar} />}
       {sheet && sheet.kind === 'money' && <MoneySheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={saveMoney} onDelete={deleteMoney} onScan={scanReceipt} getReceiptUrl={store.receiptUrl} />}
       {sheet && sheet.kind === 'scan' && <ReceiptScanSheet file={sheet.file} onClose={() => setSheet(null)} onDone={(item) => setSheet({ kind: 'money', item })} />}

@@ -713,3 +713,38 @@ button.pill { min-height: 32px; }
 .alert-at { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--ink-2); }
 .alert-at input { width: 140px; }
 .wl-check small { color: var(--muted); font-size: 12px; }
+
+/* ---------- Yarim sayfası ---------- */
+.ypage .chip.on, .ypage .subtabs button.on { }
+.ymem-today { display: flex; gap: 12px; align-items: center; padding: 12px; text-align: left; width: 100%; border-color: #F9C6D6; background: linear-gradient(135deg, #FFF0F5, #fff); cursor: pointer; }
+.ymem-today-img { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; flex: 0 0 auto; background: #FCE4EC; }
+.ymem-today-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; color: var(--ink-2); }
+.ymem-today-txt .k { font-size: 12px; font-weight: 700; color: #A61E4D; text-transform: uppercase; letter-spacing: 0.04em; }
+.ymem-today-txt b { font-size: 16px; color: var(--ink); }
+.ygift-nudge { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; font-size: 14px; border-color: #F9C6D6; }
+.ywk, .ysurprise { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.ywk-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ywk-head .k { font-weight: 700; font-size: 15px; }
+.ywk-pick { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: #FFF0F5; }
+.ywk-title { font-family: var(--display); font-size: 18px; font-weight: 700; }
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.switch input { width: 20px; height: 20px; accent-color: #D6336C; }
+.ymem-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.ymem { display: flex; gap: 12px; align-items: flex-start; padding: 10px; text-align: left; width: 100%; cursor: pointer; }
+.ymem-img { width: 84px; height: 84px; border-radius: 10px; object-fit: cover; flex: 0 0 auto; background: #FCE4EC; display: grid; place-items: center; font-size: 28px; }
+.ymem-img.ph { background: var(--track); }
+.ymem-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ymem-body b { font-size: 15px; }
+.ymem-body .meta { font-size: 12px; color: var(--ink-2); }
+.ymem-note { font-size: 13px; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ymem-sheet-img { width: 100%; max-height: 280px; object-fit: cover; border-radius: 14px; }
+.ylike-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.ylike { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.ylike .k { font-size: 12px; font-weight: 700; color: #A61E4D; text-transform: uppercase; letter-spacing: 0.04em; }
+.ylike-item { border: 0; background: transparent; padding: 4px 0; text-align: left; display: flex; flex-direction: column; gap: 1px; font-size: 15px; cursor: pointer; }
+.ylike-item span { font-size: 12px; color: var(--ink-2); }
+.row.ygift { padding: 6px 8px 6px 12px; gap: 10px; align-items: center; }
+.row.ygift .check.on span { background: #D6336C; border-color: #D6336C; }
+.ygift .title.done { text-decoration: line-through; color: var(--muted); }
+.ygift-total { padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--ink-2); text-align: right; border-top: 1px solid var(--line-2); }
+.ypage .subtabs button.on { background: #D6336C; border-color: #D6336C; }

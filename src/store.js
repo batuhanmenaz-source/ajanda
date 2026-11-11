@@ -2,7 +2,7 @@
 import { supabase } from './supabase.js';
 import { addDays, startOfDay, toDateInput } from './dates.js';
 
-export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed'];
+export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories'];
 export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls', ...NEW_TABLES];
 // SQL'i henüz çalıştırılmamış olabilecek tablolar: hata verirse boş sayılır
 const OPTIONAL = new Set(['missed_calls', ...NEW_TABLES]);
@@ -23,7 +23,9 @@ const ORDER = {
   habits: ['sort', true],
   habit_logs: ['day', false],
   money: ['day', false],
-  money_fixed: ['day_of_month', true]
+  money_fixed: ['day_of_month', true],
+  yarim_items: ['sort', true],
+  memories: ['day', false]
 };
 // Açılışta yalnız son ~14 ayın harcamaları yüklenir (hepsi yedekte durur)
 const SINCE = { money: ['day', 430] };
@@ -163,6 +165,19 @@ export function createSupabaseStore() {
       if (error) throw error;
       return path;
     },
+    async uploadPhoto(bucket, blob, folder) {
+      const { data: u } = await supabase.auth.getUser();
+      const path = u.user.id + '/' + (folder || 'genel') + '/' + crypto.randomUUID() + '.jpg';
+      const { error } = await supabase.storage.from(bucket).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+      if (error) throw error;
+      return path;
+    },
+    async photoUrl(bucket, path) {
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+      if (error) throw error;
+      return data.signedUrl;
+    },
+    async removePhoto(bucket, path) { await supabase.storage.from(bucket).remove([path]); },
     async receiptUrl(path) {
       const { data, error } = await supabase.storage.from('fisler').createSignedUrl(path, 3600);
       if (error) throw error;
@@ -251,6 +266,32 @@ function seed() {
   };
 }
 
+function seedYarim() {
+  const t = startOfDay(new Date());
+  const d = (n) => toDateInput(addDays(t, n));
+  const it = (kind, title, extra) => ({ id: uid(), kind, title, done: false, sort: 0, created_at: new Date().toISOString(), ...extra });
+  return {
+    yarim_items: [
+      it('sevdigi', 'Beyaz lale', { category: 'Çiçek' }),
+      it('sevdigi', 'Oat latte, şekersiz', { category: 'Kahve / içecek' }),
+      it('sevdigi', 'S beden · 38 numara', { category: 'Beden / numara' }),
+      it('sevdigi', 'San Sebastian cheesecake', { category: 'Tatlı' }),
+      it('hediye', 'Seramik atölyesi', { detail: 'Bahsetti, denemek istiyor', price: 1800 }),
+      it('hediye', 'Kablosuz kulaklık', { link: 'https://www.trendyol.com', price: 4500 }),
+      it('hediye', 'Kitap: Kürk Mantolu Madonna', { price: 180, done: true, done_at: d(-20) }),
+      it('plan', 'Kapadokya balon turu', { category: 'Tatil' }),
+      it('plan', 'Karaköy\'de yeni ramen yeri', { category: 'Restoran' }),
+      it('plan', 'Bir film maratonu', { category: 'Film / dizi' }),
+      it('plan', 'Belgrad Ormanı yürüyüşü', { category: 'Yer', done: true, done_at: d(-9) })
+    ],
+    memories: [
+      { id: uid(), day: d(-124), title: 'İlk buluşma', note: 'Moda sahili, akşamüstü.', photo_path: null },
+      { id: uid(), day: d(-60), title: 'İlk tatil', note: 'Ayvalık', photo_path: null },
+      { id: uid(), day: d(-365), title: 'Tanıştığımız konser', note: '', photo_path: null }
+    ]
+  };
+}
+
 function seedMoney() {
   const t = startOfDay(new Date());
   const f1 = uid(), f2 = uid(), f3 = uid(), f4 = uid();
@@ -328,6 +369,7 @@ export function createDemoStore() {
   if (!db) db = seed();
   if (!db.missed_calls) db.missed_calls = [];
   if (!db.contacts) Object.assign(db, seedLife());
+  if (!db.yarim_items) Object.assign(db, seedYarim());
   if (!db.money) { const sm = seedMoney(); db.money = sm.money; db.money_fixed = sm.money_fixed; db.settings = { ...(db.settings || {}), budgets: sm.budgets }; }
   if (!db.revenue) {
     // Örnek ciro: son 45 gün
@@ -367,6 +409,11 @@ export function createDemoStore() {
     },
     async receiptUrl(path) { return path; },
     async removeReceipt() {},
+    async uploadPhoto(bucket, blob) {
+      return new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
+    },
+    async photoUrl(bucket, path) { return path; },
+    async removePhoto() {},
     async getSettings() { return db.settings || {}; },
     async dumpTable(t) { if (t === 'app_settings') return db.settings ? [db.settings] : []; return JSON.parse(JSON.stringify(db[t] || [])); },
     async restoreTable(t, rows) {

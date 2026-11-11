@@ -4,7 +4,7 @@ import { googleRaw } from './google.js';
 // Geri yüklemede bu sırayla yazılır (bağlı tablolar sonra)
 export const BACKUP_TABLES = [
   'app_settings', 'reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls',
-  'revenue', 'love_taps', 'contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money_fixed', 'money'
+  'revenue', 'love_taps', 'contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money_fixed', 'money', 'yarim_items', 'memories'
 ];
 const FOLDER = 'Ajanda Yedekleri';
 const KEEP = 12; // Drive'da en son 12 yedek tutulur

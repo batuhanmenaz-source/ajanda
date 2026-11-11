@@ -3,9 +3,10 @@ import { HabitsCard, ListsView, InfluencerView, SpecialDatesSection, HabitHistor
 import { CampaignsScreen, MarketplaceNotes, DailyNotes } from './screens.jsx';
 import { RevenueScreen } from './revenue.jsx';
 import { WalletView } from './wallet.jsx';
+import { YarimPage } from './yarim.jsx';
 
 export const WORK_TABS = [['kampanya', 'Kampanyalar'], ['ciro', 'Ciro'], ['notlar', 'Pazaryeri notları'], ['influencer', 'Influencer']];
-export const PRIVATE_TABS = [['cuzdan', 'Cüzdan'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
+export const PRIVATE_TABS = [['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
 export function SubTabs({ tabs, value, onChange, label }) {
   return (
@@ -29,11 +30,14 @@ export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded
   );
 }
 
-export function PrivateScreen({ seg, setSeg, data, now, actions, budgets, walletError }) {
+export function PrivateScreen({ seg: seg0, setSeg, data, now, actions, budgets, walletError, yarimHidden, yarim }) {
+  const tabs = yarimHidden ? PRIVATE_TABS.filter(([k]) => k !== 'yarim') : PRIVATE_TABS;
+  const seg = yarimHidden && seg0 === 'yarim' ? 'cuzdan' : seg0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <SubTabs tabs={PRIVATE_TABS} value={seg} onChange={setSeg} label="Özel bölümler" />
-      {seg === 'listeler' ? <ListsView data={data} actions={actions} />
+      <SubTabs tabs={tabs} value={seg} onChange={setSeg} label="Özel bölümler" />
+      {seg === 'yarim' ? <YarimPage {...yarim} data={data} now={now} actions={actions} />
+        : seg === 'listeler' ? <ListsView data={data} actions={actions} />
         : seg === 'aliskanlik' ? <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 760 }}><HabitsCard data={data} now={now} actions={actions} /><HabitHistory data={data} now={now} /></div>
           : seg === 'ozelgun' ? <div style={{ maxWidth: 760 }}><SpecialDatesSection data={data} now={now} actions={actions} /></div>
             : seg === 'gunluk' ? <DailyNotes data={data} now={now} actions={actions} />

@@ -313,7 +313,10 @@ function YarimTile({ data, now, actions, love }) {
   const specials = specialUpcoming((data.special_dates || []).filter((x) => x.for_yarim), now, 7).map(({ s, date, inDays }) => ({
     key: 'sp' + s.id, title: specialLabel(s, date) + ' ' + (SPECIAL_ICON[s.kind] || '⭐'), when: inDays === 0 ? 'Bugün' : inDays === 1 ? 'Yarın' : inDays + ' gün sonra'
   }));
-  const list = [...(anniv ? [anniv] : []), ...specials, ...rows];
+  // "1 yıl önce bugün" anıları
+  const mems = (data.memories || []).filter((m) => { const d = fromDateInput(m.day); return d.getMonth() === now.getMonth() && d.getDate() === now.getDate() && d.getFullYear() < now.getFullYear(); })
+    .map((m) => ({ key: 'm' + m.id, title: '📸 ' + m.title, when: (now.getFullYear() - Number(m.day.slice(0, 4))) + ' yıl önce bugün' }));
+  const list = [...mems, ...(anniv ? [anniv] : []), ...specials, ...rows];
   const shown = list.slice(0, 3);
   const more = list.length - shown.length;
   return (
