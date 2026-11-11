@@ -18,6 +18,13 @@ export default defineConfig({
           method: 'GET',
           params: { title: 'title', text: 'text', url: 'url' }
         },
+        // Simgeye uzun basınca çıkan kısayollar
+        shortcuts: [
+          { name: 'Gider ekle', short_name: 'Gider', url: '/?yeni=gider', icons: [{ src: '/icons/sc-gider.png', sizes: '96x96', type: 'image/png' }] },
+          { name: 'Sesle ekle', short_name: 'Sesle', url: '/?yeni=ses', icons: [{ src: '/icons/sc-ses.png', sizes: '96x96', type: 'image/png' }] },
+          { name: 'Hatırlatma ekle', short_name: 'Hatırlatma', url: '/?yeni=hatirlatma', icons: [{ src: '/icons/sc-hatirlatma.png', sizes: '96x96', type: 'image/png' }] },
+          { name: 'Ciro gir', short_name: 'Ciro', url: '/?yeni=ciro', icons: [{ src: '/icons/sc-ciro.png', sizes: '96x96', type: 'image/png' }] }
+        ],
         lang: 'tr',
         start_url: '/',
         scope: '/',
@@ -32,7 +39,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
+        // Fiş okuma dosyaları büyük; yalnız kullanılınca indirilir
+        globIgnores: ['ocr/**'],
+        navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/ocr\//],
         runtimeCaching: []
       }
     })

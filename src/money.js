@@ -2,9 +2,9 @@
 import { addDays, startOfDay, weekStart, toDateInput } from './dates.js';
 
 export const EXPENSE_CATS = [
-  { id: 'market', label: 'Market', emoji: '🛒', words: ['market', 'migros', 'a101', 'bim', 'şok', 'sok', 'carrefour', 'file', 'manav', 'kasap', 'fırın', 'ekmek', 'bakkal', 'getir', 'istegelsin'] },
+  { id: 'market', label: 'Market', emoji: '🛒', words: ['market', 'migros', 'macrocenter', 'carrefoursa', 'hakmar', 'gross', 'a101', 'bim', 'şok', 'sok', 'carrefour', 'file', 'manav', 'kasap', 'fırın', 'ekmek', 'bakkal', 'getir', 'istegelsin'] },
   { id: 'yemek', label: 'Yemek & kahve', emoji: '🍽️', words: ['yemek', 'restoran', 'restaurant', 'kahve', 'cafe', 'kafe', 'starbucks', 'yemeksepeti', 'trendyol yemek', 'öğle', 'akşam yemeği', 'kahvaltı', 'döner', 'pizza', 'burger', 'tatlı'] },
-  { id: 'ulasim', label: 'Yakıt & ulaşım', emoji: '⛽', words: ['benzin', 'yakıt', 'akaryakıt', 'mazot', 'dizel', 'otopark', 'taksi', 'uber', 'bitaksi', 'metro', 'otobüs', 'istanbulkart', 'ulaşım', 'köprü', 'otoyol', 'hgs', 'ogs', 'servis', 'oto yıkama', 'yıkama', 'lastik'] },
+  { id: 'ulasim', label: 'Yakıt & ulaşım', emoji: '⛽', words: ['benzin', 'yakıt', 'akaryakıt', 'shell', 'opet', 'petrol', 'aytemiz', 'kurşunsuz', 'motorin', 'mazot', 'dizel', 'otopark', 'taksi', 'uber', 'bitaksi', 'metro', 'otobüs', 'istanbulkart', 'ulaşım', 'köprü', 'otoyol', 'hgs', 'ogs', 'servis', 'oto yıkama', 'yıkama', 'lastik'] },
   { id: 'fatura', label: 'Faturalar', emoji: '💡', words: ['fatura', 'elektrik', 'doğalgaz', 'dogalgaz', 'su faturası', 'internet', 'telefon faturası', 'gsm', 'turkcell', 'vodafone', 'türk telekom', 'igdaş', 'enerjisa'] },
   { id: 'ev', label: 'Kira & ev', emoji: '🏠', words: ['kira', 'aidat', 'ev', 'mobilya', 'ikea', 'temizlik', 'tamir', 'tadilat', 'koçtaş'] },
   { id: 'abonelik', label: 'Abonelikler', emoji: '📺', words: ['abonelik', 'netflix', 'spotify', 'youtube', 'disney', 'amazon prime', 'prime', 'icloud', 'exxen', 'blutv', 'gain', 'chatgpt', 'claude', 'spor salonu', 'gym'] },
@@ -29,15 +29,20 @@ export const catsFor = (kind) => (kind === 'gelir' ? INCOME_CATS : EXPENSE_CATS)
 
 export const METHODS = [['kart', 'Kart'], ['nakit', 'Nakit']];
 
+// Serbest metinden gider kategorisi tahmini (fiş okuma için)
+export function guessCategory(text) { return findCat(text, EXPENSE_CATS) || 'diger'; }
+
 const low = (s) => (s || '').toLocaleLowerCase('tr-TR');
 
+// Fişlerde büyük harf I/İ karışık gelir: karşılaştırmada ı ile i aynı sayılır
+const fold = (x) => low(x).replace(/ı/g, 'i').replace(/i̇/g, 'i');
 function findCat(text, cats) {
-  const t = ' ' + low(text).replace(/[.,!?]/g, ' ') + ' ';
+  const t = ' ' + fold(text).replace(/[.,!?]/g, ' ') + ' ';
   let best = null;
   for (const c of cats) {
     for (const w of c.words) {
       // kelime başında eşleşme ("marketten", "benzinciye" de olur)
-      const i = t.indexOf(' ' + w);
+      const i = t.indexOf(' ' + fold(w));
       if (i >= 0 && (!best || w.length > best.len)) best = { id: c.id, len: w.length };
     }
   }

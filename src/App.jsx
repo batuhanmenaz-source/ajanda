@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { TodayScreen, CalendarScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
 import { WorkScreen, PrivateScreen, WORK_TABS, PRIVATE_TABS } from './areas.jsx';
-import { MoneySheet, FixedSheet, BudgetSheet } from './wallet.jsx';
+import { MoneySheet, FixedSheet, BudgetSheet, ReceiptScanSheet } from './wallet.jsx';
 import { nextFixedDue } from './money.js';
 import { Sheet } from './ui.jsx';
 import { RevenueSheet, TargetSheet, marketplaceOrder, tl } from './revenue.jsx';
@@ -87,6 +87,20 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   }, [store, say]);
 
   useEffect(() => { load(false); }, [load]);
+
+  // Ana ekran kısayolları: simgeye uzun bas → "Gider ekle", "Sesle ekle"…
+  useEffect(() => {
+    let k = '';
+    try { k = new URLSearchParams(location.search).get('yeni') || ''; } catch { k = ''; }
+    if (!k) return;
+    try { const u = new URL(location.href); u.searchParams.delete('yeni'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } catch { /* yok say */ }
+    const t = toDateInput(new Date());
+    if (k === 'gider') { goTab('cuzdan'); setSheet({ kind: 'money', item: { kind: 'gider', day: t } }); }
+    else if (k === 'ses') { setTab('bugun'); setSheet({ kind: 'quick', voice: true }); }
+    else if (k === 'hatirlatma') { setSheet({ kind: 'item', item: { kind: 'reminder' } }); }
+    else if (k === 'ciro') { goTab('ciro'); setSheet({ kind: 'revenue', day: t }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // "Paylaş → Ajanda" ile gelen metni hızlı ekle penceresinde aç
   useEffect(() => {
@@ -249,6 +263,22 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [google, loading]);
 
+  // Telefondan "Arandı" işaretlenen aramaların takvim etkinliğini temizle
+  const cleaning = useRef(new Set());
+  useEffect(() => {
+    if (google !== 'ok' || loading) return;
+    const todo = data.calls.filter((c) => c.done && c.google_event_id && !cleaning.current.has(c.id));
+    if (!todo.length) return;
+    todo.forEach((c) => cleaning.current.add(c.id));
+    (async () => {
+      for (const c of todo) {
+        const id = await gsync(() => syncCall(c));
+        if (id === null) { await store.update('calls', c.id, { google_event_id: null }); patchLocal('calls', c.id, { google_event_id: null }); }
+      }
+    })().catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [google, loading, data.calls]);
+
   // ---------- Yerel durum yardımcıları ----------
   const patchLocal = (table, id, patch) => setData((d) => ({ ...d, [table]: d[table].map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
   const addLocal = (table, rows) => setData((d) => ({ ...d, [table]: [...d[table], ...rows] }));
@@ -265,7 +295,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/money|scope|budgets/.test(msg) && /schema cache|does not exist|relation|column/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 11 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/receipt_path|fisler|bucket/i.test(msg)) say('Kaydedilemedi: Fiş fotoğrafı için Supabase\'de 12 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/money|scope|budgets/.test(msg) && /schema cache|does not exist|relation|column/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 11 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/contacts|collabs|special_dates|list_items|lists|habits|habit_logs/.test(msg) && /schema cache|does not exist|relation/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 10 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/location_geo/.test(msg)) say('Kaydedilemedi: Harita konumu için Supabase\'de 08 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/location/.test(msg)) say('Kaydedilemedi: Konum için Supabase\'de 07 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -329,6 +360,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       }
     }
     const done = !item.done;
+    if (table === 'calls') cleaning.current.add(item.id);
     patchLocal(table, item.id, { done });
     try {
       await store.update(table, item.id, { done });
@@ -506,6 +538,38 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     try { const s2 = await store.saveSettings({ budgets: b }); setBudgets(s2.budgets || b); setSheet(null); say('Bütçe kaydedildi'); }
     catch (e) { fail(e); }
   };
+  // Fiş fotoğrafı varsa önce yükle; yüklenemezse kayıt fotoğrafsız yapılır
+  const saveMoney = async (f) => {
+    const { _receipt, ...fields } = f;
+    if (_receipt) {
+      try {
+        let blob = _receipt.blob;
+        if (!blob && _receipt.file) blob = await (await import('./receipt.js')).shrinkImage(_receipt.file);
+        if (blob) fields.receipt_path = await store.uploadReceipt(blob, fields.day);
+      } catch (e) {
+        console.error(e);
+        say('Fiş fotoğrafı yüklenemedi (Supabase\'de 12 numaralı SQL\'i çalıştırdın mı?). Kayıt fotoğrafsız yapılıyor.');
+      }
+    }
+    return saveRow('money', fields, moneyMsg(fields) + (fields.receipt_path ? ' · 🧾' : ''));
+  };
+  const deleteMoney = async (m) => {
+    if (!window.confirm('Bu kayıt silinsin mi?' + (m.receipt_path ? ' Fiş fotoğrafı da silinir.' : ''))) return;
+    if (m.receipt_path) { try { await store.removeReceipt(m.receipt_path); } catch (e) { console.error(e); } }
+    await deleteRow('money', m);
+  };
+  const fileRef = useRef(null);
+  const scanReceipt = () => { if (fileRef.current) { fileRef.current.value = ''; fileRef.current.click(); } };
+  const exportWallet = async (opts) => {
+    say('Excel hazırlanıyor…');
+    try { const { exportWallet: ex } = await import('./excel.js'); await ex({ ...opts, money: data.money, fixed: data.money_fixed, budgets }); say('Excel dosyası indirildi'); }
+    catch (e) { console.error(e); say('Excel dosyası oluşturulamadı.'); }
+  };
+  const exportRevenue = async (month, mode) => {
+    say('Excel hazırlanıyor…');
+    try { const { exportRevenue: ex } = await import('./excel.js'); await ex({ revenue, month, mode }); say('Excel dosyası indirildi'); }
+    catch (e) { console.error(e); say('Excel dosyası oluşturulamadı.'); }
+  };
   const moneyMsg = (m) => (m.kind === 'gelir' ? 'Gelir kaydedildi' : 'Gider kaydedildi') + ' · ' + tl(m.amount, Number(m.amount) % 1 ? 2 : 0);
 
   // ---------- Hızlı ekle ----------
@@ -514,7 +578,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     // Bugün sayfasında İş ya da Özel seçiliyse yeni kayıt o alana yazılır
     const sc = scope === 'ozel' && !p.yarim && !p.mp ? { scope: 'ozel' } : {};
     if (p.type === 'Para') {
-      if (p.money) await saveRow('money', p.money, moneyMsg(p.money));
+      if (p.money) await saveMoney(p.money);
       else setSheet({ kind: 'money', item: { kind: 'gider', note: p.raw || '' } });
       return;
     }
@@ -595,7 +659,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openMoney: (m) => setSheet({ kind: 'money', item: m }),
     openFixed: (f) => setSheet({ kind: 'fixed', item: f }),
     openBudget: () => setSheet({ kind: 'budget' }),
-    payFixed,
+    payFixed, scanReceipt, exportWallet, exportRevenue,
     toggleHabit, addListItems, toggleListItem, deleteListItem, clearListDone, addWeeklySummaryReminder,
     toggleTask, addTask, deleteTask, saveDaily
   };
@@ -772,6 +836,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       </div>
 
       <button type="button" className="fab" aria-label="Hızlı ekle" onClick={() => setSheet({ kind: 'quick' })}><Icon.Plus /></button>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1}
+        onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) setSheet({ kind: 'scan', file: f }); }} />
 
       <nav className="bottomnav" aria-label="Ana menü">
         {TABS.map((t) => (
@@ -781,7 +847,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         ))}
       </nav>
 
-      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} shared={sheet.shared} />}
+      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} shared={sheet.shared} autoVoice={!!sheet.voice} />}
       {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} contacts={data.contacts} />}
       {sheet && sheet.kind === 'special' && <SpecialDateSheet initial={sheet.item} yarimHidden={yarimHidden} YarimToggle={YarimToggle} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('special_dates', f, 'Özel gün kaydedildi')} onDelete={(x) => deleteRow('special_dates', x, '"' + x.title + '" silinsin mi?')} />}
@@ -797,7 +863,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'list' && <ListSheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('lists', f, 'Liste kaydedildi')} onDelete={(x) => deleteRow('lists', x, '"' + x.title + '" listesi ve içindekiler silinsin mi?')} />}
       {sheet && sheet.kind === 'money' && <MoneySheet initial={sheet.item} onClose={() => setSheet(null)}
-        onSave={(f) => saveRow('money', f, moneyMsg(f))} onDelete={(x) => deleteRow('money', x, 'Bu kayıt silinsin mi?')} />}
+        onSave={saveMoney} onDelete={deleteMoney} onScan={scanReceipt} getReceiptUrl={store.receiptUrl} />}
+      {sheet && sheet.kind === 'scan' && <ReceiptScanSheet file={sheet.file} onClose={() => setSheet(null)} onDone={(item) => setSheet({ kind: 'money', item })} />}
       {sheet && sheet.kind === 'fixed' && <FixedSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveFixed} onDelete={deleteFixed} />}
       {sheet && sheet.kind === 'budget' && <BudgetSheet budgets={budgets} onClose={() => setSheet(null)} onSave={saveBudgets} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}

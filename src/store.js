@@ -155,6 +155,20 @@ export function createSupabaseStore() {
       return data;
     },
     // Yarim ayarları ve kalp sayacı (04_kalp.sql)
+    // Fiş fotoğrafları: Supabase Storage 'fisler' kutusu, kullanıcının kendi klasörü
+    async uploadReceipt(blob, day) {
+      const { data: u } = await supabase.auth.getUser();
+      const path = u.user.id + '/' + (day || '').slice(0, 7) + '/' + crypto.randomUUID() + '.jpg';
+      const { error } = await supabase.storage.from('fisler').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+      if (error) throw error;
+      return path;
+    },
+    async receiptUrl(path) {
+      const { data, error } = await supabase.storage.from('fisler').createSignedUrl(path, 3600);
+      if (error) throw error;
+      return data.signedUrl;
+    },
+    async removeReceipt(path) { await supabase.storage.from('fisler').remove([path]); },
     async getSettings() {
       const { data, error } = await supabase.from('app_settings').select('*').maybeSingle();
       if (error) throw error;
@@ -348,6 +362,11 @@ export function createDemoStore() {
       if (ex) { ex.body = body; save(); return ex; }
       const r = { id: uid(), note_date, body }; db.daily_notes.push(r); save(); return r;
     },
+    async uploadReceipt(blob) {
+      return new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
+    },
+    async receiptUrl(path) { return path; },
+    async removeReceipt() {},
     async getSettings() { return db.settings || {}; },
     async dumpTable(t) { if (t === 'app_settings') return db.settings ? [db.settings] : []; return JSON.parse(JSON.stringify(db[t] || [])); },
     async restoreTable(t, rows) {

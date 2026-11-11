@@ -114,6 +114,15 @@ export function parseQuick(text, now = new Date()) {
     hour = parseInt(tColon[1], 10); minute = parseInt(tColon[2], 10);
     removals.push(/\d{1,2}:\d{2}(?:'?(?:de|da|te|ta))?/);
   }
+  // "akşam 8'de", "sabah 9", "öğleden sonra 3'te" (sesle eklemede sık)
+  const PART = /(sabah|öğleden sonra|öğlen|öğle|akşam|gece)\s*(?:saat\s*)?(\d{1,2})(?:[.:](\d{2}))?(?:'?(?:de|da|te|ta))?(?=\s|$)/;
+  const tPart = s.match(PART);
+  if (tPart) {
+    if (hour === null) { hour = parseInt(tPart[2], 10); minute = tPart[3] ? parseInt(tPart[3], 10) : 0; }
+    removals.push(PART);
+    const pm = tPart[1] === 'akşam' || tPart[1] === 'öğleden sonra' || (tPart[1] === 'gece' && hour >= 6) || ((tPart[1] === 'öğle' || tPart[1] === 'öğlen') && hour < 6);
+    if (pm && hour < 12) hour += 12;
+  }
   if (hour !== null && (hour > 23 || minute > 59)) hour = null;
 
   // Aylık tekrar "her ayın 5'i": bir sonraki ayın o günü

@@ -1,5 +1,5 @@
 // Cüzdan: kişisel gelir / gider, sabit giderler, bütçe (iş cirosundan tamamen ayrı)
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Sheet, Section } from './ui.jsx';
 import { tl, tlShort, parseTL } from './revenue.jsx';
@@ -111,7 +111,11 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
         <button type="button" className="btn primary big" onClick={() => actions.openMoney({ kind: 'gider', day: isCurrent ? toDateInput(today) : B })}>− Gider ekle</button>
         <button type="button" className="btn big" onClick={() => actions.openMoney({ kind: 'gelir', day: isCurrent ? toDateInput(today) : B })}>+ Gelir ekle</button>
       </div>
-      <p className="hint" style={{ margin: '-8px 0 0' }}>İpucu: Hızlı ekle'ye "250 market", "dün 1.200 benzin kart" ya da "+45000 maaş" yazabilirsin.</p>
+      <div className="wl-tools">
+        <p className="hint" style={{ margin: 0, flex: '1 1 220px' }}>İpucu: Hızlı ekle'ye "250 market", "dün 1.200 benzin kart" ya da "+45000 maaş" yazabilir, fişin fotoğrafını çekebilirsin.</p>
+        <button type="button" className="btn" onClick={() => actions.scanReceipt()}>📷 Fiş tara</button>
+        <button type="button" className="btn" onClick={() => actions.exportWallet({ start, end, label, view })}>⬇ Excel</button>
+      </div>
 
       {budget.length ? (
         <Section title="Bütçe" meta={MONTHS[start.getMonth()]} action={<button type="button" className="linkbtn" onClick={actions.openBudget}>Düzenle</button>}>
@@ -214,7 +218,7 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
                     <span className="sp-icon" aria-hidden="true">{c.emoji}</span>
                     <span className="wl-tx-body">
                       <span className="title">{r.note || c.label}</span>
-                      <span className="meta">{r.note ? c.label : ''}{r.method ? (r.note ? ' · ' : '') + methodLabel[r.method] : ''}{r.fixed_id ? ' · sabit' : ''}</span>
+                      <span className="meta">{r.note ? c.label : ''}{r.method ? (r.note ? ' · ' : '') + methodLabel[r.method] : ''}{r.fixed_id ? ' · sabit' : ''}{r.receipt_path ? ' · 🧾 fiş' : ''}</span>
                     </span>
                     <span className={'wl-amt' + (r.kind === 'gelir' ? ' in' : '')}>{r.kind === 'gelir' ? '+' : '−'}{tl(r.amount, Number(r.amount) % 1 ? 2 : 0)}</span>
                   </button>
@@ -249,10 +253,76 @@ function MethodSeg({ value, onChange }) {
   );
 }
 
-export function MoneySheet({ initial, onClose, onSave, onDelete }) {
+// Fiş görseli: yeni çekilen (önizleme) ya da kayıtlı (imzalı bağlantı)
+function ReceiptThumb({ preview, path, getUrl }) {
+  const [url, setUrl] = useState(preview || '');
+  useEffect(() => {
+    if (preview || !path || !getUrl) return undefined;
+    let alive = true;
+    getUrl(path).then((u) => alive && setUrl(u)).catch(() => alive && setUrl(''));
+    return () => { alive = false; };
+  }, [preview, path, getUrl]);
+  if (!url) return path ? <span className="hint">Fiş görseli yükleniyor…</span> : null;
+  return (
+    <a className="wl-receipt" href={url} target="_blank" rel="noopener noreferrer" aria-label="Fişi büyük aç">
+      <img src={url} alt="Fiş fotoğrafı" />
+      <span>Fişi aç ↗</span>
+    </a>
+  );
+}
+
+export function ReceiptScanSheet({ file, onClose, onDone }) {
+  const [state, setState] = useState({ step: 'Fotoğraf hazırlanıyor…', p: 0, err: '', preview: '' });
+  useEffect(() => {
+    let alive = true;
+    let blob = null, preview = '';
+    (async () => {
+      try {
+        const { shrinkImage, readText, parseReceipt } = await import('./receipt.js');
+        blob = await shrinkImage(file);
+        preview = URL.createObjectURL(blob);
+        if (!alive) return;
+        setState((s) => ({ ...s, preview, step: 'Fiş okunuyor…', p: 0.05 }));
+        const text = await readText(blob, (status, p) => {
+          if (!alive) return;
+          setState((s) => ({ ...s, step: /recogniz/.test(status) ? 'Fiş okunuyor…' : 'Okuyucu hazırlanıyor (ilk seferde biraz sürer)…', p: /recogniz/.test(status) ? 0.3 + p * 0.7 : Math.min(0.3, p * 0.3) }));
+        });
+        if (!alive) return;
+        const r = parseReceipt(text);
+        onDone({ kind: 'gider', amount: r.amount || undefined, day: r.day, category: r.category, note: r.merchant || null, method: r.method || '', _receipt: { blob, preview }, _scanned: true, _found: !!r.amount });
+      } catch (e) {
+        console.error(e);
+        if (alive) setState((s) => ({ ...s, err: 'Fiş okunamadı. Tutarı elle girebilirsin; fotoğraf yine kayda eklenir.' }));
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file]);
+  return (
+    <Sheet title="Fiş tara" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {state.preview ? <img className="wl-scan-img" src={state.preview} alt="Çekilen fiş" /> : null}
+        {state.err ? (
+          <>
+            <p className="hint" style={{ margin: 0, color: 'var(--danger)' }}>{state.err}</p>
+            <button type="button" className="btn big primary" onClick={() => onDone({ kind: 'gider', _receipt: state.preview ? { blob: null, file, preview: state.preview } : null })}>Elle gir</button>
+          </>
+        ) : (
+          <>
+            <span className="hint" aria-live="polite">{state.step}</span>
+            <div className="progress"><div className="bar"><div style={{ width: Math.round(state.p * 100) + '%' }} /></div><span className="n">%{Math.round(state.p * 100)}</span></div>
+            <p className="hint" style={{ margin: 0 }}>Okuma telefonunda yapılır; fotoğraf yalnız kaydettiğinde senin hesabına yüklenir.</p>
+          </>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
+export function MoneySheet({ initial, onClose, onSave, onDelete, onScan, getReceiptUrl }) {
   const isEdit = !!initial.id;
   const [kind, setKind] = useState(initial.kind || 'gider');
-  const [amount, setAmount] = useState(initial.amount ? Number(initial.amount).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : '');
+  const [amount, setAmount] = useState(initial.amount ? Number(initial.amount).toLocaleString('tr-TR', Number.isInteger(Number(initial.amount)) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '');
   const [category, setCategory] = useState(initial.category || (initial.kind === 'gelir' ? 'maas' : ''));
   const [day, setDay] = useState(initial.day || toDateInput(new Date()));
   const [method, setMethod] = useState(initial.method || '');
@@ -265,19 +335,26 @@ export function MoneySheet({ initial, onClose, onSave, onDelete }) {
     if (!val || busy) return;
     setBusy(true);
     try {
-      await onSave({ id: initial.id, kind, amount: val, category: category || (kind === 'gelir' ? 'diger_gelir' : 'diger'), day, method: method || null, note: note.trim() || null, ...(initial.fixed_id ? { fixed_id: initial.fixed_id } : {}) });
+      await onSave({ id: initial.id, kind, amount: val, category: category || (kind === 'gelir' ? 'diger_gelir' : 'diger'), day, method: method || null, note: note.trim() || null, ...(initial.fixed_id ? { fixed_id: initial.fixed_id } : {}), ...(initial._receipt ? { _receipt: initial._receipt } : {}) });
     } finally { setBusy(false); }
   };
   return (
     <Sheet title={isEdit ? (kind === 'gelir' ? 'Gelir' : 'Gider') : kind === 'gelir' ? 'Gelir ekle' : 'Gider ekle'} onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {initial._receipt || initial.receipt_path ? (
+          <div className="wl-receipt-row">
+            <ReceiptThumb preview={initial._receipt && initial._receipt.preview} path={initial.receipt_path} getUrl={getReceiptUrl} />
+            {initial._scanned ? <span className="hint">{initial._found ? 'Fişten okundu — tutarı, tarihi ve kategoriyi kontrol et.' : 'Toplam tutar okunamadı, elle yaz.'}</span> : null}
+          </div>
+        ) : null}
         <div className="seg" role="group" aria-label="Tür">
           <button type="button" className={kind === 'gider' ? 'on' : ''} onClick={() => switchKind('gider')}>Gider</button>
           <button type="button" className={kind === 'gelir' ? 'on' : ''} onClick={() => switchKind('gelir')}>Gelir</button>
         </div>
         <div className="field">
           <label htmlFor="m-amount">Tutar (₺)</label>
-          <input id="m-amount" className="wl-amount-in" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus={!isEdit} required />
+          <input id="m-amount" className="wl-amount-in" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus={!isEdit && !initial._scanned} required />
+          {!isEdit && !initial._receipt && kind === 'gider' && onScan ? <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={onScan}>📷 Fiş fotoğrafından doldur</button> : null}
         </div>
         <div className="field">
           <span className="lbl">Kategori</span>

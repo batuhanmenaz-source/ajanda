@@ -148,6 +148,11 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions }) 
       </section>
 
       <button type="button" className="btn primary big" onClick={() => actions.openRevenue(toDateInput(isCurrent ? today : new Date(month.getFullYear(), month.getMonth(), dim)))}>+ Ciro gir</button>
+      <div className="wl-tools" style={{ marginTop: -8 }}>
+        <span className="hint" style={{ flex: '1 1 160px' }}>Excel'e aktar:</span>
+        <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'ay')}>⬇ {MONTHS[month.getMonth()]}</button>
+        <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'yil')}>⬇ {month.getFullYear()} tümü</button>
+      </div>
 
       {/* Günlük grafik */}
       <section className="section">

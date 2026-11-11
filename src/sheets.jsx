@@ -41,7 +41,19 @@ function condense(t) {
   return first.replace(/\s+/g, ' ');
 }
 
-export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden, shared: sharedProp }) {
+// Sesle ekleme (Chrome / Samsung Internet; Türkçe)
+const SpeechRec = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+// Konuşma metnini hızlı ekle diline yaklaştır: "artı 45 bin maaş" → "+45000 maaş", "2 bin 500 lira" → "2500 lira"
+export function normalizeSpeech(t) {
+  let x = (t || '').trim();
+  x = x.replace(/(\d+)\s*bin\s*(\d{1,3})?(?!\d)/gi, (_, a, b) => String(Number(a) * 1000 + (b ? Number(b) : 0)));
+  x = x.replace(/(^|\s)bin\s+(\d{1,3})(?!\d)/gi, (_, sp, b) => sp + String(1000 + Number(b)));
+  x = x.replace(/^artı\s+/i, '+');
+  x = x.replace(/(\d+)\s*türk lirası/gi, '$1 lira');
+  return x;
+}
+
+export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden, shared: sharedProp, autoVoice }) {
   // Paylaşılan ya da panodan yapıştırılan metin
   const [shared, setShared] = useState(sharedProp || '');
   const [clipErr, setClipErr] = useState('');
@@ -50,8 +62,33 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
   const [typeOverride, setTypeOverride] = useState(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef(null);
-  // Paylaşımda klavye hemen açılıp metni kapatmasın
-  useEffect(() => { if (shared) return undefined; const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 50); return () => clearTimeout(t); }, []);
+  const [listening, setListening] = useState(false);
+  const [voiceErr, setVoiceErr] = useState('');
+  const recRef = useRef(null);
+  const startVoice = () => {
+    if (!SpeechRec) return;
+    if (listening && recRef.current) { recRef.current.stop(); return; }
+    setVoiceErr('');
+    const r = new SpeechRec();
+    r.lang = 'tr-TR'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+    r.onresult = (e) => { let t = ''; for (const res of e.results) t += res[0].transcript; setQ(normalizeSpeech(t)); };
+    r.onerror = (e) => {
+      setListening(false);
+      setVoiceErr(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'Mikrofon izni verilmedi. Tarayıcı ayarlarından Ajanda\'ya mikrofon izni ver.' : e.error === 'no-speech' ? 'Ses duyulmadı, tekrar dene.' : e.error === 'network' ? 'Ses tanıma için internet gerekiyor.' : 'Ses tanınamadı, tekrar dene.');
+    };
+    r.onend = () => setListening(false);
+    recRef.current = r;
+    try { r.start(); setListening(true); } catch { setListening(false); }
+  };
+  useEffect(() => () => { if (recRef.current) try { recRef.current.abort(); } catch { /* yok say */ } }, []);
+  // Paylaşımda klavye hemen açılıp metni kapatmasın; sesle açıldıysa dinlemeye başla
+  useEffect(() => {
+    if (shared) return undefined;
+    if (autoVoice && SpeechRec) { startVoice(); return undefined; }
+    const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 50);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [yarimOverride, setYarimOverride] = useState(defaultYarim ? true : null);
   const p = useMemo(() => {
@@ -92,8 +129,17 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
         ) : null}
         <div className="field">
           <label htmlFor="quick">{shared ? 'Başlığı düzenle, türünü seç; tarih ve saati metinden kendisi anlar.' : 'Yaz; tarih, saat, pazaryeri ve türü kendisi anlar.'}</label>
-          <input id="quick" ref={inputRef} type="text" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)}
-            onPaste={(e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; if (!shared && (t.length > 90 || /\n/.test(t))) { e.preventDefault(); setShared(t.trim().slice(0, 4000)); setQ(condense(t)); } }} placeholder="ör. yarın 10:00 HB fiyat güncelle" enterKeyHint="done" />
+          <div className="qa-input">
+            <input id="quick" ref={inputRef} type="text" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)}
+              onPaste={(e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; if (!shared && (t.length > 90 || /\n/.test(t))) { e.preventDefault(); setShared(t.trim().slice(0, 4000)); setQ(condense(t)); } }} placeholder={listening ? 'Dinliyorum…' : 'ör. yarın 10:00 HB fiyat güncelle'} enterKeyHint="done" />
+            {SpeechRec ? (
+              <button type="button" className={'mic' + (listening ? ' on' : '')} onClick={startVoice} aria-label={listening ? 'Dinlemeyi durdur' : 'Sesle söyle'} aria-pressed={listening}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+              </button>
+            ) : null}
+          </div>
+          {listening ? <span className="hint" aria-live="polite">Dinliyorum… "yarın akşam 8'de Hepsiburada'yı ara" ya da "250 lira market" gibi söyle.</span> : null}
+          {voiceErr ? <span className="hint" style={{ color: 'var(--danger)' }}>{voiceErr}</span> : null}
         </div>
         <div className="typechips" role="group" aria-label="Tür">
           {['Hatırlatma', 'Arama', 'Not', 'Kampanya', 'Etkinlik', 'Para'].map((t) => (
@@ -570,6 +616,18 @@ export function MissedSetupSheet({ token, onClose, onCreateToken, onTest }) {
           <CopyBox label="Gizli anahtar (token)" value={token} />
           <button type="button" className="btn big" disabled={busy} onClick={test}>{busy ? 'Deneniyor…' : 'Test kaydı gönder'}</button>
           {result ? <p className="hint" style={{ margin: 0, fontSize: 14, color: result.startsWith('✓') ? 'var(--green)' : 'var(--danger)' }}>{result}</p> : null}
+          <div className="setup-box">
+            <span className="lbl" style={{ fontSize: 15 }}>Arama bitince otomatik "Arandı"</span>
+            <p className="hint" style={{ margin: 0, fontSize: 14 }}>Aranacaklar listesindeki birini telefonla aradığında kayıt kendiliğinden "Arandı" olur; o numaradan gelen cevapsız çağrı da kapanır. MacroDroid'de yeni bir makro kur:</p>
+            <ol className="steps">
+              <li><b>Tetikleyici:</b> Arama → <b>Arama Bitti</b> → <b>Giden</b> → Herhangi bir numara.</li>
+              <li><b>Eylem:</b> Bağlanılabilirlik → <b>HTTP İsteği</b> → Yöntem: <b>POST</b>.</li>
+              <li><b>URL</b> kutusuna aşağıdaki satırın tamamını yapıştır (anahtar ve numara içinde hazır).</li>
+              <li>Kaydet. Bir sonraki aramadan itibaren çalışır.</li>
+            </ol>
+            <CopyBox label="URL (tamamını kopyala)" value={window.location.origin + '/api/call-done?token=' + token + '&number=[call_number]'} />
+            <p className="hint" style={{ margin: 0 }}>Not: Karşı taraf açmasa bile arama bitince işaretlenir; gerekirse kaydın işaretini kaldırabilirsin.</p>
+          </div>
           <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => { if (window.confirm('Yeni anahtar oluşturulursa MacroDroid\'deki eski anahtar çalışmaz. Devam edilsin mi?')) onCreateToken(); }}>Yeni anahtar oluştur</button>
         </>
       ) : (
