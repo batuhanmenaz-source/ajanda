@@ -19,12 +19,13 @@ Google Takvim, hatırlatmalar, pazaryeri notları, kampanya takvimi ve aramalar�
 - **Telefon:** Sesle ekleme (Hızlı ekle'deki mikrofon), ana ekran kısayolları (simgeye uzun bas), fiş fotoğrafından harcama (okuma telefonda yapılır), MacroDroid ile cevapsız çağrılar ve arama bitince otomatik "Arandı".
 - **Hava durumu:** Bugün sayfasında telefonun konumuna göre (Open-Meteo); yağmur/soğuk uyarısı, saatlik tahmin.
 - **Bildirim özeti:** MacroDroid `/api/summary` adresini aralıklarla çağırıp kalıcı bildirimde gösterir (sıradaki iş, dünkü ciro, kampanya, özel gün).
+- **Hatırlatma seçimi:** Her kayıtta ne zaman hatırlatılacağı seçilir (tam zamanında, dakika/saat önce, 1–7 gün önce, başladığı gün), kampanyalarda "başlayana kadar her gün", hatırlatmalarda "yapılana kadar her gün"; notlara hatırlatma; Hesap'ta türlere göre varsayılanlar. Google Takvim bir kayıt için en fazla 5 bildirim gönderir.
 - **Excel:** Cüzdan (seçili hafta/ay) ve Ciro (ay ya da yıl) .xlsx olarak indirilir.
 - **Hızlı ekle:** "yarın 10:00 HB fiyat güncelle", "Cuma 15:00 kargo firmasını ara", "not: Trendyol komisyon kontrolü" gibi yazılanları tarih, saat, pazaryeri ve türüne göre ayırır.
 
 ## Kurulum özeti
 
-1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`13` numaralı dosyaları sırayla çalıştır.
+1. Supabase > SQL Editor: `supabase/` klasöründeki `01`–`14` numaralı dosyaları sırayla çalıştır.
 2. Supabase > Authentication > Providers > Google: Google Cloud'daki istemci kimliği ve gizli anahtarı gir.
 3. Vercel'de bu depoyu içe aktar ve şu ortam değişkenlerini tanımla:
 

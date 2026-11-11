@@ -5,6 +5,7 @@ import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START } from './constants.js';
 import { whatsappLink, DEFAULT_LOVE_MESSAGE, prettyPhone, normalizePhone } from './whatsapp.js';
 import { mapsLink, mapsTarget } from './location.js';
 import { occursOn, ruleLabel } from './recur.js';
+import { prepDays } from './alerts.js';
 import { specialOn, specialLabel, specialUpcoming, SPECIAL_ICON } from './special.js';
 import {
   findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, ContactsView
@@ -93,10 +94,15 @@ export function dayItems(day, { data, events }) {
       title: c.name + (!multi ? '' : sameDay(day, s) ? ' başlıyor' : sameDay(day, e) ? ' son gün' : isEvent ? ' (' + nth + '/' + total + '. gün)' : ' aktif'),
       src: isEvent ? 'Etkinlik' : 'Kampanya', color: isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, sub: [c.marketplace, multi ? rangeLabel(s, e) : ''].filter(Boolean).join(' · '), loc: c.location, geo: c.location_geo, item: c, kind: 'campaign'
     });
-    if (isEvent) return;
+    // Hatırlatma günleri (seçilen ya da eski sabit 3 ve 1 gün önce)
+    const pd = c.alerts ? prepDays(c.alerts) : isEvent ? [] : [1, 3];
+    const at = (c.alerts && c.alerts.at) || '09:00';
     const d = daysBetween(day, s);
-    if (d === 1 || d === 3) out.push({ key: 'kp' + c.id + d, time: '09:00', title: 'Hazırlık: ' + c.name + (d === 1 ? ' (yarın başlıyor)' : ' (3 gün kaldı)'), src: 'Kampanya', color: SRC_COLORS.Kampanya, sub: c.marketplace, item: c, kind: 'campaign' });
+    if (pd.includes(d)) out.push({ key: 'kp' + c.id + d, time: at, title: (isEvent ? 'Hatırlatma: ' : 'Hazırlık: ') + c.name + (d === 1 ? ' (yarın başlıyor)' : ' (' + d + ' gün kaldı)'), src: isEvent ? 'Etkinlik' : 'Kampanya', color: isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, sub: c.marketplace, item: c, kind: 'campaign' });
   });
+  (data.notes || []).filter((n) => n.remind_at && sameDay(new Date(n.remind_at), day)).forEach((n) =>
+    out.push({ key: 'n' + n.id, time: fmtTime(new Date(n.remind_at)), title: '📝 ' + n.title, src: 'Not', color: SRC_COLORS.Not || '#868E96', sub: n.marketplace || '', item: n, kind: 'note' })
+  );
   (data.special_dates || []).filter((x) => specialOn(x, day)).forEach((x) =>
     out.push({ key: 's' + x.id + day.getFullYear(), time: 'Tüm gün', title: (SPECIAL_ICON[x.kind] || '⭐') + ' ' + specialLabel(x, day) + (x.for_yarim ? ' ❤️' : ''), src: 'Özel gün', color: x.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Özel gün'], sub: x.for_yarim ? 'Yarim' : '', item: x, kind: 'special' })
   );
@@ -569,7 +575,7 @@ function DayItemRow({ e, actions, compact }) {
   return (
     <div className={'ditem' + (compact ? ' compact' : '')}>
       <button type="button" className={'rowbtn row timeline' + (compact ? ' compact' : '')}
-        onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : e.kind === 'special' ? actions.openSpecial(e.item) : e.kind === 'collab' ? actions.openCollab(e.item) : null)}>
+        onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : e.kind === 'special' ? actions.openSpecial(e.item) : e.kind === 'collab' ? actions.openCollab(e.item) : e.kind === 'note' ? actions.openNote(e.item) : null)}>
         <span className="tcol">{e.time}</span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>

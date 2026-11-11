@@ -204,7 +204,7 @@ export async function deleteEvent(id) {
   }
 }
 
-export function timedEvent({ summary, description, start, minutes = 15, location, recurrence }) {
+export function timedEvent({ summary, description, start, minutes = 15, location, recurrence, overrides }) {
   const end = new Date(start.getTime() + minutes * 60000);
   return {
     summary,
@@ -213,12 +213,12 @@ export function timedEvent({ summary, description, start, minutes = 15, location
     ...(recurrence ? { recurrence: [recurrence] } : {}),
     start: { dateTime: start.toISOString(), timeZone: TZ },
     end: { dateTime: end.toISOString(), timeZone: TZ },
-    reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
+    reminders: { useDefault: false, overrides: (overrides || [0]).map((m) => ({ method: 'popup', minutes: m })) }
   };
 }
 
 // remindMinutes: tüm gün etkinliğinde gün başından (00:00) kaç dakika önce bildirim gelsin
-export function allDayEvent({ summary, description, startDate, endDate, location, recurrence, remindMinutes }) {
+export function allDayEvent({ summary, description, startDate, endDate, location, recurrence, remindMinutes, overrides }) {
   return {
     summary,
     description: description || '',
@@ -227,7 +227,7 @@ export function allDayEvent({ summary, description, startDate, endDate, location
     start: { date: toDateInput(startDate) },
     end: { date: toDateInput(addDays(endDate, 1)) },
     transparency: 'transparent',
-    reminders: { useDefault: false, overrides: remindMinutes != null ? [{ method: 'popup', minutes: remindMinutes }] : [] }
+    reminders: { useDefault: false, overrides: (overrides || (remindMinutes != null ? [remindMinutes] : [])).map((m) => ({ method: 'popup', minutes: m })) }
   };
 }
 

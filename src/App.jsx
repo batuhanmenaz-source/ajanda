@@ -6,7 +6,8 @@ import { MoneySheet, FixedSheet, BudgetSheet, ReceiptScanSheet } from './wallet.
 import { nextFixedDue } from './money.js';
 import { Sheet } from './ui.jsx';
 import { RevenueSheet, TargetSheet, marketplaceOrder, tl } from './revenue.jsx';
-import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet, YarimToggle } from './sheets.jsx';
+import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet, YarimToggle, AlertDefaultsSheet } from './sheets.jsx';
+import { alertDefaults as mergeAlertDefaults } from './alerts.js';
 import { HabitSheet, ListSheet, ContactSheet, CollabSheet, SpecialDateSheet, findContact, nextFriday17, SUMMARY_TITLE } from './life.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES, DEFAULT_PREPS } from './constants.js';
@@ -14,7 +15,7 @@ import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, whenL
 import { nextOccurrence } from './recur.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent } from './google.js';
 import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
-import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab } from './sync.js';
+import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote } from './sync.js';
 
 const TABS = [
   { id: 'bugun', label: 'Bugün', icon: Icon.Today },
@@ -49,6 +50,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const [scope, setScopeState] = useState(() => { try { return localStorage.getItem('ajanda-scope') || 'tum'; } catch { return 'tum'; } });
   const setScope = (v) => { setScopeState(v); try { localStorage.setItem('ajanda-scope', v); } catch { /* yok say */ } };
   const [budgets, setBudgets] = useState({});
+  // Türlere göre varsayılan hatırlatmalar (Hesap → Varsayılan hatırlatmalar)
+  const [alertDefs, setAlertDefs] = useState(() => mergeAlertDefaults(null));
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
   const [google, setGoogle] = useState(demo ? 'off' : 'checking');
@@ -161,7 +164,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -252,12 +255,14 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         if (ids) { await store.update('campaigns', c.id, ids); patchLocal('campaigns', c.id, ids); }
       }
       for (const x of data.special_dates.filter((y) => !y.google_event_id)) {
-        const id = await gsync(() => syncSpecialDate(x));
-        if (id) { await store.update('special_dates', x.id, { google_event_id: id }); patchLocal('special_dates', x.id, { google_event_id: id }); }
+        await applySync('special_dates', x, await gsync(() => syncSpecialDate(x)));
       }
       for (const x of data.collabs.filter((y) => !y.google_event_id && y.publish_date && y.publish_date >= toDateInput(t) && y.status !== 'iptal')) {
-        const id = await gsync(() => syncCollab(x, (data.contacts.find((k) => k.id === x.contact_id) || {}).name));
-        if (id) { await store.update('collabs', x.id, { google_event_id: id }); patchLocal('collabs', x.id, { google_event_id: id }); }
+        await applySync('collabs', x, await gsync(() => syncCollab(x, (data.contacts.find((k) => k.id === x.contact_id) || {}).name)));
+      }
+      for (const n of data.notes.filter((y) => y.remind_at && !y.google_event_id && new Date(y.remind_at) > t)) {
+        const id = await gsync(() => syncNote(n));
+        if (id) { await store.update('notes', n.id, { google_event_id: id }); patchLocal('notes', n.id, { google_event_id: id }); }
       }
     })().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,7 +300,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/receipt_path|fisler|bucket/i.test(msg)) say('Kaydedilemedi: Fiş fotoğrafı için Supabase\'de 12 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/alerts|remind_at|aux_event_id|alert_defaults/.test(msg)) say('Kaydedilemedi: Hatırlatma seçimleri için Supabase\'de 14 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/receipt_path|fisler|bucket/i.test(msg)) say('Kaydedilemedi: Fiş fotoğrafı için Supabase\'de 12 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/money|scope|budgets/.test(msg) && /schema cache|does not exist|relation|column/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 11 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/contacts|collabs|special_dates|list_items|lists|habits|habit_logs/.test(msg) && /schema cache|does not exist|relation/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 10 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/location_geo/.test(msg)) say('Kaydedilemedi: Harita konumu için Supabase\'de 08 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -372,15 +378,28 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   // ---------- Notlar ----------
   const saveNote = async (fields) => {
     try {
-      if (fields.id) { const row = await store.update('notes', fields.id, fields); patchLocal('notes', row.id, row); }
-      else { const { id: _drop, ...rest } = fields; const row = await store.insert('notes', rest); addLocal('notes', [row]); }
+      let row;
+      if (fields.id) { row = await store.update('notes', fields.id, fields); patchLocal('notes', row.id, row); }
+      else { const { id: _drop, ...rest } = fields; row = await store.insert('notes', rest); addLocal('notes', [row]); }
+      // Hatırlat tarihi verildiyse (ya da kaldırıldıysa) takvimi güncelle
+      if (row.remind_at || row.google_event_id) {
+        const id = await gsync(() => syncNote(row));
+        if (id !== undefined && id !== (row.google_event_id || null)) { await store.update('notes', row.id, { google_event_id: id }); patchLocal('notes', row.id, { google_event_id: id }); }
+      }
       setSheet(null);
-      say('Not kaydedildi');
+      say(row.remind_at ? 'Not kaydedildi · 🔔 ' + whenLabel(new Date(row.remind_at)) : 'Not kaydedildi');
     } catch (e) { fail(e); }
   };
   const deleteNote = async (n) => {
     if (!window.confirm('Not silinsin mi?')) return;
-    try { await store.remove('notes', n.id); removeLocal('notes', n.id); setSheet(null); say('Not silindi'); } catch (e) { fail(e); }
+    try {
+      if (n.google_event_id) await gsync(() => deleteEvent(n.google_event_id));
+      await store.remove('notes', n.id); removeLocal('notes', n.id); setSheet(null); say('Not silindi');
+    } catch (e) { fail(e); }
+  };
+  const saveAlertDefaults = async (v) => {
+    try { const s2 = await store.saveSettings({ alert_defaults: v }); setAlertDefs(mergeAlertDefaults(s2.alert_defaults || v)); setSheet(null); say('Varsayılan hatırlatmalar kaydedildi'); }
+    catch (e) { fail(e); }
   };
   const saveDaily = async (date, body) => {
     try {
@@ -446,19 +465,27 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       let row;
       if (fields.id) { row = await store.update(table, fields.id, fields); patchLocal(table, row.id, row); }
       else { const { id: _drop, ...rest } = fields; row = await store.insert(table, rest); addLocal(table, [row]); }
-      let id;
-      if (table === 'special_dates') id = await gsync(() => syncSpecialDate(row));
-      if (table === 'collabs') id = await gsync(() => syncCollab(row, contactName(row.contact_id)));
-      if (id !== undefined && id !== row.google_event_id) { await store.update(table, row.id, { google_event_id: id }); patchLocal(table, row.id, { google_event_id: id }); }
+      if (table === 'special_dates') await applySync(table, row, await gsync(() => syncSpecialDate(row)));
+      if (table === 'collabs') await applySync(table, row, await gsync(() => syncCollab(row, contactName(row.contact_id))));
       setSheet(null);
       if (okMsg) say(okMsg);
       return row;
     } catch (e) { fail(e); return null; }
   };
+  // Google'dan dönen kimlikleri (ana ve yardımcı etkinlik) kayda işle
+  const applySync = async (table, row, res) => {
+    if (!res || typeof res !== 'object') return;
+    const patch = {};
+    if (res.google_event_id !== undefined && res.google_event_id !== (row.google_event_id || null)) patch.google_event_id = res.google_event_id;
+    if (res.aux_event_id !== undefined && res.aux_event_id !== (row.aux_event_id || null)) patch.aux_event_id = res.aux_event_id;
+    if (!Object.keys(patch).length) return;
+    try { await store.update(table, row.id, patch); patchLocal(table, row.id, patch); } catch (e) { console.error(e); }
+  };
   const deleteRow = async (table, row, question) => {
     if (question && !window.confirm(question)) return;
     try {
       if (row.google_event_id) await gsync(() => deleteEvent(row.google_event_id));
+      if (row.aux_event_id) await gsync(() => deleteEvent(row.aux_event_id));
       if (table === 'contacts') for (const c of data.collabs.filter((x) => x.contact_id === row.id && x.google_event_id)) await gsync(() => deleteEvent(c.google_event_id));
       await store.remove(table, row.id);
       removeLocal(table, row.id);
@@ -588,16 +615,16 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
       const en = p.endDate ? startOfDay(p.endDate) : st;
       await saveCampaign(
-        { name: p.title || (p.type === 'Kampanya' ? 'Kampanya' : 'Etkinlik'), marketplace: p.mp || null, start_date: toDateInput(st), end_date: toDateInput(en), notes: null, kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik' },
+        { name: p.title || (p.type === 'Kampanya' ? 'Kampanya' : 'Etkinlik'), marketplace: p.mp || null, start_date: toDateInput(st), end_date: toDateInput(en), notes: null, kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik', alerts: alertDefs[p.type === 'Kampanya' ? 'campaign' : 'event'] },
         p.type === 'Kampanya' ? DEFAULT_PREPS : null
       );
     } else if (p.type === 'Not') {
       await saveNote({ marketplace: p.mp || null, brand: p.brand || null, title: p.title || 'Not', body: p.shared || '' });
       goTab('notlar');
     } else if (p.type === 'Arama') {
-      await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due, for_yarim: !!p.yarim, ...sc });
+      await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due, for_yarim: !!p.yarim, ...sc, ...(due ? { alerts: alertDefs.call } : {}) });
     } else {
-      await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.yarim ? null : (p.mp || null), due_at: due, for_yarim: !!p.yarim, ...sc, ...(p.repeat ? { repeat_rule: p.repeat } : {}) });
+      await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.yarim ? null : (p.mp || null), due_at: due, for_yarim: !!p.yarim, ...sc, ...(p.repeat ? { repeat_rule: p.repeat } : {}), ...(due ? { alerts: alertDefs.reminder } : {}) });
     }
   };
   const quickDetail = (p) => {
@@ -850,10 +877,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       </nav>
 
       {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} shared={sheet.shared} autoVoice={!!sheet.voice} />}
-      {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} contacts={data.contacts} />}
-      {sheet && sheet.kind === 'special' && <SpecialDateSheet initial={sheet.item} yarimHidden={yarimHidden} YarimToggle={YarimToggle} onClose={() => setSheet(null)}
+      {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} contacts={data.contacts} alertDefaults={alertDefs} />}
+      {sheet && sheet.kind === 'special' && <SpecialDateSheet initial={sheet.item} yarimHidden={yarimHidden} YarimToggle={YarimToggle} alertDefaults={alertDefs} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('special_dates', f, 'Özel gün kaydedildi')} onDelete={(x) => deleteRow('special_dates', x, '"' + x.title + '" silinsin mi?')} />}
-      {sheet && sheet.kind === 'collab' && <CollabSheet initial={sheet.item} contacts={data.contacts} onClose={() => setSheet(null)}
+      {sheet && sheet.kind === 'collab' && <CollabSheet initial={sheet.item} contacts={data.contacts} alertDefaults={alertDefs} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('collabs', f, 'İş birliği kaydedildi')} onDelete={(x) => deleteRow('collabs', x, 'Bu iş birliği silinsin mi?')} />}
       {sheet && sheet.kind === 'contact' && <ContactSheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('contacts', f, 'Kişi kaydedildi')}
@@ -869,8 +896,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'scan' && <ReceiptScanSheet file={sheet.file} onClose={() => setSheet(null)} onDone={(item) => setSheet({ kind: 'money', item })} />}
       {sheet && sheet.kind === 'fixed' && <FixedSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveFixed} onDelete={deleteFixed} />}
       {sheet && sheet.kind === 'budget' && <BudgetSheet budgets={budgets} onClose={() => setSheet(null)} onSave={saveBudgets} />}
-      {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} />}
-      {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} />}
+      {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} alertDefaults={alertDefs} />}
+      {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} alertDefaults={alertDefs} />}
+      {sheet && sheet.kind === 'alertDefaults' && <AlertDefaultsSheet defaults={alertDefs} onClose={() => setSheet(null)} onSave={saveAlertDefaults} />}
       {sheet && sheet.kind === 'yarim' && (
         <Sheet title="Yarim" onClose={() => setSheet(null)}>
           <YarimPanel data={data} now={now} actions={actions} love={love} />
@@ -894,7 +922,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
       )}
       {sheet && sheet.kind === 'account' && (
-        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
+        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
           backup={backup} onBackupNow={() => runDriveBackup(false)} onDownload={downloadBackup} onRestore={restoreBackup}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}

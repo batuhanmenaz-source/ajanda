@@ -23,7 +23,8 @@ export const SRC_COLORS = {
   Yarim: '#D6336C',
   Etkinlik: '#9C36B5',
   'Özel gün': '#D4A000',
-  Influencer: '#0C8599'
+  Influencer: '#0C8599',
+  Not: '#868E96'
 };
 
 export const YARIM = { name: 'Yarim', heart: '❤️', color: '#D6336C', bg: '#FFE8EF', border: '#F9C6D6', ink: '#A61E4D' };

@@ -3,6 +3,8 @@ import { RULES, ruleLabel } from './recur.js';
 import { Sheet } from './ui.jsx';
 import { parseQuick } from './parse.js';
 import { parseMoney, catOf } from './money.js';
+import { AlertPicker } from './alertpicker.jsx';
+import { DEFAULT_ALERTS, ALERT_TYPES, normAlerts } from './alerts.js';
 import { MARKETPLACES, BRANDS, DEFAULT_PREPS, mpColor } from './constants.js';
 import { toDateInput, toTimeInput, combine, whenLabel, dayLabel, addDays, startOfDay, fromDateInput, rangeLabel } from './dates.js';
 import { normalizePhone, prettyPhone, DEFAULT_LOVE_MESSAGE } from './whatsapp.js';
@@ -280,7 +282,7 @@ function LocationField({ id, value, onChange }) {
 }
 
 // ---------- Hatırlatma / Arama ----------
-export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, contacts = [] }) {
+export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, contacts = [], alertDefaults = DEFAULT_ALERTS }) {
   const isEdit = !!(initial && initial.id);
   const [kind, setKind] = useState(initial.kind || 'reminder');
   const d0 = initial.due_at ? new Date(initial.due_at) : null;
@@ -294,6 +296,11 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
   const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const [repeat, setRepeat] = useState(initial.repeat_rule || '');
   const [scope, setScope] = useState(initial.scope || '');
+  // Hatırlatma seçimi: kayıtlıysa o, eski kayıtsa "tam zamanında", yeniyse türün varsayılanı
+  const [alerts, setAlerts] = useState(() => normAlerts(initial.alerts || (isEdit ? { list: ['0'] } : alertDefaults[initial.kind === 'call' ? 'call' : 'reminder'])));
+  const [alertsTouched, setAlertsTouched] = useState(false);
+  const changeAlerts = (v) => { setAlerts(v); setAlertsTouched(true); };
+  const switchKind = (k) => { setKind(k); if (!isEdit && !alertsTouched) setAlerts(normAlerts(alertDefaults[k === 'call' ? 'call' : 'reminder'])); };
   const [busy, setBusy] = useState(false);
   // Sütun henüz yoksa (11 numaralı SQL) kaydı bozmamak için yalnız seçildiyse gönder
   const scopeField = scope || initial.scope ? { scope: yarim ? null : (scope || null) } : {};
@@ -309,8 +316,9 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
     setBusy(true);
     const due = date ? combine(date, time).toISOString() : null;
     try {
-      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...scopeField, ...(repeat || initial.repeat_rule ? { repeat_rule: due ? (repeat || null) : null } : {}), ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) });
-      else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim, ...scopeField, missedId: initial.missedId });
+      const al = { ...alerts, nag: alerts.nag && !(kind === 'reminder' && repeat) };
+      if (kind === 'reminder') await onSave('reminders', { id: initial.id, title: title.trim(), marketplace: yarim ? null : (mp || null), due_at: due, for_yarim: yarim, ...scopeField, ...(due ? { alerts: al } : {}), ...(repeat || initial.repeat_rule ? { repeat_rule: due ? (repeat || null) : null } : {}), ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) });
+      else await onSave('calls', { id: initial.id, who: title.trim(), topic: topic.trim() || null, phone: phone.trim() || null, due_at: due, for_yarim: yarim, ...scopeField, ...(due ? { alerts: al } : {}), missedId: initial.missedId });
     } finally { setBusy(false); }
   };
 
@@ -321,8 +329,8 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!isEdit && (
           <div className="seg" role="group" aria-label="Tür">
-            <button type="button" className={kind === 'reminder' ? 'on' : ''} onClick={() => setKind('reminder')}>Hatırlatma</button>
-            <button type="button" className={kind === 'call' ? 'on' : ''} onClick={() => setKind('call')}>Arama</button>
+            <button type="button" className={kind === 'reminder' ? 'on' : ''} onClick={() => switchKind('reminder')}>Hatırlatma</button>
+            <button type="button" className={kind === 'call' ? 'on' : ''} onClick={() => switchKind('call')}>Arama</button>
           </div>
         )}
         <div className="field">
@@ -403,8 +411,9 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
             {repeat ? <span className="hint">Tamamladığında bir sonraki tarihe kayar; Google Takvim'de her tekrarda bildirim gelir.</span> : null}
           </div>
         ) : null}
+        {date ? <AlertPicker id="f-al" value={alerts} onChange={changeAlerts} mode="timed" allowNag nagDisabled={kind === 'reminder' && !!repeat} /> : null}
         {kind === 'reminder' && <LocationField id="f-loc" value={loc} onChange={setLoc} />}
-        <p className="hint" style={{ margin: 0 }}>Tarih ve saat verilirse Google Takvim'deki "Ajanda" takvimine eklenir; bildirim telefonuna o saatte gelir.</p>
+        <p className="hint" style={{ margin: 0 }}>{date ? 'Google Takvim\'deki "Ajanda" takvimine eklenir; bildirimler seçtiğin zamanlarda telefonuna gelir.' : 'Tarih verirsen Google Takvim\'e eklenir ve ne zaman hatırlatılacağını seçebilirsin.'}</p>
         <div className="actions">
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(kind === 'reminder' ? 'reminders' : 'calls', initial)}>Sil</button>}
           <button type="submit" className="btn big primary" disabled={busy || !title.trim()}>Kaydet</button>
@@ -415,20 +424,30 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
 }
 
 // ---------- Not ----------
-export function NoteSheet({ initial, onClose, onSave, onDelete }) {
+export function NoteSheet({ initial, onClose, onSave, onDelete, alertDefaults = DEFAULT_ALERTS }) {
   const isEdit = !!initial.id;
   const [mp, setMp] = useState(initial.marketplace || '');
   const [brand, setBrand] = useState(initial.brand || '');
   const [title, setTitle] = useState(initial.title || '');
   const [body, setBody] = useState(initial.body || '');
   const [busy, setBusy] = useState(false);
+  // İsteğe bağlı "Hatırlat" tarihi
+  const r0 = initial.remind_at ? new Date(initial.remind_at) : null;
+  const [remind, setRemind] = useState(!!r0);
+  const [rDate, setRDate] = useState(r0 ? toDateInput(r0) : toDateInput(addDays(startOfDay(new Date()), 1)));
+  const [rTime, setRTime] = useState(r0 ? toTimeInput(r0) : '09:00');
+  const [alerts, setAlerts] = useState(() => normAlerts(initial.alerts || alertDefaults.note));
 
   const submit = async (e) => {
     e.preventDefault();
     if (!title.trim() || busy) return;
     setBusy(true);
     try {
-      await onSave({ id: initial.id, marketplace: mp || null, brand: brand || null, title: title.trim(), body: body.trim(), updated_at: new Date().toISOString() });
+      await onSave({
+        id: initial.id, marketplace: mp || null, brand: brand || null, title: title.trim(), body: body.trim(), updated_at: new Date().toISOString(),
+        // Sütunlar yoksa (14 numaralı SQL) bozmamak için yalnız gerektiğinde gönder
+        ...(remind || initial.remind_at ? { remind_at: remind ? combine(rDate, rTime).toISOString() : null, alerts: remind ? alerts : null } : {})
+      });
     } finally { setBusy(false); }
   };
 
@@ -456,6 +475,25 @@ export function NoteSheet({ initial, onClose, onSave, onDelete }) {
           <label htmlFor="n-body">Not</label>
           <textarea id="n-body" value={body} onChange={(e) => setBody(e.target.value)} />
         </div>
+        <label className="wl-check">
+          <input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} />
+          <span>Bu notu bana hatırlat (takvime de eklenir)</span>
+        </label>
+        {remind ? (
+          <>
+            <div className="row2">
+              <div className="field">
+                <label htmlFor="n-rdate">Tarih</label>
+                <input id="n-rdate" type="date" value={rDate} onChange={(e) => setRDate(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label htmlFor="n-rtime">Saat</label>
+                <input id="n-rtime" type="time" value={rTime} onChange={(e) => setRTime(e.target.value)} required />
+              </div>
+            </div>
+            <AlertPicker id="n-al" value={alerts} onChange={setAlerts} mode="timed" />
+          </>
+        ) : null}
         <div className="actions">
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(initial)}>Sil</button>}
           <button type="submit" className="btn big primary" disabled={busy || !title.trim()}>Kaydet</button>
@@ -466,7 +504,7 @@ export function NoteSheet({ initial, onClose, onSave, onDelete }) {
 }
 
 // ---------- Kampanya ----------
-export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
+export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefaults = DEFAULT_ALERTS }) {
   const isEdit = !!initial.id;
   const today = toDateInput(new Date());
   const [name, setName] = useState(initial.name || '');
@@ -484,6 +522,12 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
   const [sTime, setSTime] = useState(initial.start_time || '10:00');
   const [eTime, setETime] = useState(initial.end_time || '23:59');
   const badTime = timed && start === end && eTime <= sTime;
+  // Hatırlatmalar: kayıtlıysa o; eski kampanyada eski sabit davranış (3 ve 1 gün önce); yeni kayıtta varsayılan
+  const legacy = (k) => (k === 'etkinlik' ? { list: [] } : { list: ['3d', '1d'], at: '09:00' });
+  const [alerts, setAlerts] = useState(() => normAlerts(initial.alerts || (isEdit ? legacy(initial.kind) : alertDefaults[initial.kind === 'etkinlik' ? 'event' : 'campaign'])));
+  const [alertsTouched, setAlertsTouched] = useState(false);
+  const changeAlerts = (v) => { setAlerts(v); setAlertsTouched(true); };
+  const switchKind = (k) => { setKind(k); if (!isEdit && !alertsTouched) setAlerts(normAlerts(alertDefaults[k === 'etkinlik' ? 'event' : 'campaign'])); };
   const invalid = !name.trim() || !start || !end || end < start || badTime;
   const days = start && end && end >= start ? Math.round((fromDateInput(end) - fromDateInput(start)) / 86400000) + 1 : 0;
   const setLen = (n) => { if (!start) return; setEnd(toDateInput(addDays(fromDateInput(start), n - 1))); };
@@ -496,7 +540,8 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
       await onSave(
         { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind,
           // Sütunlar henüz yoksa (13 numaralı SQL) bozmamak için yalnız gerektiğinde gönder
-          ...(timed || initial.start_time || initial.end_time ? { start_time: timed ? sTime : null, end_time: timed ? eTime : null } : {}), ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
+          ...(timed || initial.start_time || initial.end_time ? { start_time: timed ? sTime : null, end_time: timed ? eTime : null } : {}),
+          alerts, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
         isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
       );
     } finally { setBusy(false); }
@@ -507,8 +552,8 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!isEdit && (
           <div className="seg" role="group" aria-label="Tür">
-            <button type="button" className={!isEvent ? 'on' : ''} onClick={() => setKind('kampanya')}>Kampanya</button>
-            <button type="button" className={isEvent ? 'on' : ''} onClick={() => setKind('etkinlik')}>Etkinlik</button>
+            <button type="button" className={!isEvent ? 'on' : ''} onClick={() => switchKind('kampanya')}>Kampanya</button>
+            <button type="button" className={isEvent ? 'on' : ''} onClick={() => switchKind('etkinlik')}>Etkinlik</button>
           </div>
         )}
         <div className="field">
@@ -562,19 +607,42 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete }) {
             <textarea id="c-preps" value={preps} onChange={(e) => setPreps(e.target.value)} />
           </div>
         )}
+        <AlertPicker id="c-al" value={alerts} onChange={changeAlerts} mode={timed ? 'timed' : 'allday'} allowDaily />
         <LocationField id="c-loc" value={loc} onChange={setLoc} />
         <div className="field">
           <label htmlFor="c-notes">Not (isteğe bağlı)</label>
           <input id="c-notes" type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
-        <p className="hint" style={{ margin: 0 }}>{isEvent
-          ? (timed ? 'Etkinlik Google Takvim\'e başlangıç ve bitiş saatiyle eklenir; başladığı an bildirim gelir.' : 'Etkinlik Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir.')
-          : (timed ? 'Kampanya Google Takvim\'e başlangıç ve bitiş saatiyle eklenir; başladığı an bildirim gelir.' : 'Kampanya Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir.') + ' Başlangıçtan 3 gün ve 1 gün önce saat 09:00\'da hazırlık hatırlatması gelir.'}</p>
+        <p className="hint" style={{ margin: 0 }}>{timed ? 'Google Takvim\'e başlangıç ve bitiş saatiyle eklenir.' : 'Google Takvim\'e seçtiğin günleri kaplayan tüm gün etkinliği olarak eklenir.'} Bildirimler yukarıda seçtiğin zamanlarda gelir.</p>
         <div className="actions">
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(initial)}>Sil</button>}
           <button type="submit" className="btn big primary" disabled={busy || invalid}>Kaydet</button>
         </div>
       </form>
+    </Sheet>
+  );
+}
+
+// ---------- Varsayılan hatırlatmalar ----------
+export function AlertDefaultsSheet({ defaults, onClose, onSave }) {
+  const [vals, setVals] = useState(() => ({ ...defaults }));
+  const [busy, setBusy] = useState(false);
+  const mode = (k) => (k === 'campaign' || k === 'event' || k === 'special' || k === 'collab' ? 'allday' : 'timed');
+  return (
+    <Sheet title="Varsayılan hatırlatmalar" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <p className="hint" style={{ margin: 0 }}>Yeni kayıtlar bu ayarlarla açılır; her kayıtta ayrıca değiştirebilirsin. Kayıtlı olanlar etkilenmez. Kampanya ve etkinlikte saat verirsen "tam zamanında / dakika önce" seçenekleri de çıkar.</p>
+        {ALERT_TYPES.map(([k, l]) => (
+          <div key={k} className="setup-box" style={{ gap: 8 }}>
+            <AlertPicker id={'d-' + k} title={l} value={vals[k]} onChange={(v) => setVals({ ...vals, [k]: v })} mode={mode(k)}
+              allowDaily={k === 'campaign' || k === 'event'} allowNag={k === 'reminder' || k === 'call'} />
+          </div>
+        ))}
+        <div className="actions">
+          <button type="button" className="btn big" onClick={() => setVals({ ...DEFAULT_ALERTS })}>İlk haline döndür</button>
+          <button type="button" className="btn big primary" disabled={busy} onClick={async () => { setBusy(true); try { await onSave(vals); } finally { setBusy(false); } }}>Kaydet</button>
+        </div>
+      </div>
     </Sheet>
   );
 }
@@ -727,7 +795,7 @@ function BackupSection({ demo, backup, onBackupNow, onDownload, onRestore, onRec
 }
 
 // ---------- Hesap ----------
-export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
+export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, onAlertDefaults, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
   const gText = { ok: 'Bağlı', checking: 'Kontrol ediliyor…', needs_login: 'Yeniden bağlanmalı', error: 'Ulaşılamıyor', off: 'Örnek modda kapalı' }[google] || google;
   return (
     <Sheet title="Hesap" onClose={onClose}>
@@ -738,6 +806,7 @@ export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefr
       <BackupSection demo={demo} backup={backup} onBackupNow={onBackupNow} onDownload={onDownload} onRestore={onRestore} onReconnect={onReconnect} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!demo && <button type="button" className="btn big" onClick={onReconnect}>Google Takvim'i yeniden bağla</button>}
+        {onAlertDefaults ? <button type="button" className="btn big" onClick={onAlertDefaults}>🔔 Varsayılan hatırlatmalar</button> : null}
         <button type="button" className="btn big" onClick={onMissedSetup}>Telefon bağlantısı (MacroDroid: cevapsız çağrı, arama, bildirim özeti)</button>
         <button type="button" className="btn big" onClick={onToggleYarim} aria-pressed={!yarimHidden}>{yarimHidden ? 'Yarim alanını göster' : 'Yarim alanını bu cihazda gizle'}</button>
         <button type="button" className="btn big" onClick={onRefresh}>Verileri yenile</button>

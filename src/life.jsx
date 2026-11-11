@@ -9,6 +9,8 @@ import { tl, tlShort, parseTL } from './revenue.jsx';
 import { SPECIAL_KINDS, SPECIAL_ICON, specialNext, specialLabel, specialUpcoming } from './special.js';
 import { budgetStatus, catOf, sumBy } from './money.js';
 import { inScope } from './scope.js';
+import { AlertPicker } from './alertpicker.jsx';
+import { DEFAULT_ALERTS, normAlerts, alertsLabel } from './alerts.js';
 import {
   addDays, startOfDay, sameDay, weekStart, daysBetween, toDateInput, fromDateInput, fmtShort, fmtLong, rangeLabel, MONTHS, WEEKDAYS
 } from './dates.js';
@@ -597,7 +599,7 @@ export function InfluencerView({ data, now, actions }) {
   );
 }
 
-export function CollabSheet({ initial, contacts, onClose, onSave, onDelete }) {
+export function CollabSheet({ initial, contacts, onClose, onSave, onDelete, alertDefaults = DEFAULT_ALERTS }) {
   const isEdit = !!initial.id;
   const people = (contacts || []).filter((c) => c.is_influencer).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
   const [who, setWho] = useState(initial.contact_id || (people[0] && people[0].id) || '');
@@ -609,13 +611,15 @@ export function CollabSheet({ initial, contacts, onClose, onSave, onDelete }) {
   const [status, setStatus] = useState(initial.status || 'planlandi');
   const [link, setLink] = useState(initial.link || '');
   const [notes, setNotes] = useState(initial.notes || '');
+  // Eski kayıtta eski davranış (bir gün önce 09:00), yeni kayıtta varsayılan
+  const [alerts, setAlerts] = useState(() => normAlerts(initial.alerts || (initial.id ? { list: ['1d'], at: '09:00' } : alertDefaults.collab)));
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
     e.preventDefault();
     if (!who || busy) return;
     setBusy(true);
     try {
-      await onSave({ id: initial.id, contact_id: who, title: title.trim() || null, brand: brand || null, marketplace: mp || null, publish_date: date || null, fee: parseTL(fee) || null, status, link: link.trim() || null, notes: notes.trim() || null });
+      await onSave({ id: initial.id, contact_id: who, title: title.trim() || null, brand: brand || null, marketplace: mp || null, publish_date: date || null, fee: parseTL(fee) || null, status, link: link.trim() || null, notes: notes.trim() || null, ...(date ? { alerts } : {}) });
     } finally { setBusy(false); }
   };
   return (
@@ -672,7 +676,7 @@ export function CollabSheet({ initial, contacts, onClose, onSave, onDelete }) {
           <label htmlFor="b-notes">Not</label>
           <input id="b-notes" type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Kod, kupon, brief…" />
         </div>
-        <p className="hint" style={{ margin: 0 }}>Yayın tarihi verirsen Google Takvim'e eklenir; bir gün önce 09:00'da hatırlatılır.</p>
+        {date ? <AlertPicker id="b-al" value={alerts} onChange={setAlerts} mode="allday" title="Yayın gününü hatırlat" /> : <p className="hint" style={{ margin: 0 }}>Yayın tarihi verirsen Google Takvim'e eklenir ve ne zaman hatırlatılacağını seçebilirsin.</p>}
         <div className="actions">
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(initial)}>Sil</button>}
           <button type="submit" className="btn big primary" disabled={busy || !who}>Kaydet</button>
@@ -693,7 +697,7 @@ export function SpecialDatesSection({ data, now, actions }) {
             <span className="sp-icon" aria-hidden="true">{SPECIAL_ICON[s.kind] || '⭐'}</span>
             <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: '1 1 auto' }}>
               <span className="title">{specialLabel(s, date)}{s.for_yarim ? ' ❤️' : ''}</span>
-              <span className="meta"><span>{fmtShort(date)}</span><span>{s.remind_days} gün önce hatırlatılır</span></span>
+              <span className="meta"><span>{fmtShort(date)}</span><span>🔔 {alertsLabel(s.alerts || { list: [Math.max(1, Number(s.remind_days) || 1) + 'd'], at: '09:00' }, { allDay: true })}</span></span>
             </span>
             <span className={'badge' + (inDays <= 7 ? ' live' : '')}>{inDays === 0 ? 'Bugün' : inDays === 1 ? 'Yarın' : inDays + ' gün'}</span>
           </button>
@@ -703,7 +707,7 @@ export function SpecialDatesSection({ data, now, actions }) {
   );
 }
 
-export function SpecialDateSheet({ initial, onClose, onSave, onDelete, yarimHidden, YarimToggle }) {
+export function SpecialDateSheet({ initial, onClose, onSave, onDelete, yarimHidden, YarimToggle, alertDefaults = DEFAULT_ALERTS }) {
   const isEdit = !!initial.id;
   const t = new Date();
   const [title, setTitle] = useState(initial.title || '');
@@ -711,7 +715,7 @@ export function SpecialDateSheet({ initial, onClose, onSave, onDelete, yarimHidd
   const [month, setMonth] = useState(String(initial.month || t.getMonth() + 1));
   const [day, setDay] = useState(String(initial.day || t.getDate()));
   const [year, setYear] = useState(initial.year ? String(initial.year) : '');
-  const [remind, setRemind] = useState(String(initial.remind_days || 1));
+  const [alerts, setAlerts] = useState(() => normAlerts(initial.alerts || (initial.id ? { list: [Math.max(1, Number(initial.remind_days) || 1) + 'd'], at: '09:00' } : alertDefaults.special)));
   const [yarim, setYarim] = useState(!!initial.for_yarim);
   const [busy, setBusy] = useState(false);
   const maxDay = new Date(2024, Number(month), 0).getDate();
@@ -722,7 +726,7 @@ export function SpecialDateSheet({ initial, onClose, onSave, onDelete, yarimHidd
     if (!title.trim() || busy || !validYear) return;
     setBusy(true);
     try {
-      await onSave({ id: initial.id, title: title.trim(), kind, month: Number(month), day: Math.min(Number(day), maxDay), year: year ? yNum : null, remind_days: Number(remind), for_yarim: yarim });
+      await onSave({ id: initial.id, title: title.trim(), kind, month: Number(month), day: Math.min(Number(day), maxDay), year: year ? yNum : null, remind_days: Math.max(1, ...normAlerts(alerts).list.map((t) => (/^(\d+)d$/.exec(t) || [])[1]).filter(Boolean).map(Number), 1), alerts, for_yarim: yarim });
     } finally { setBusy(false); }
   };
   const preview = useMemo(() => {
@@ -761,12 +765,7 @@ export function SpecialDateSheet({ initial, onClose, onSave, onDelete, yarimHidd
           </div>
         </div>
         <span className="hint" style={{ marginTop: -6 }}>Sıradaki: {preview}{year && validYear ? ' · yıl girildiği için yaş/yıl sayısı görünür' : ''}</span>
-        <div className="field">
-          <label htmlFor="s-rem">Hatırlatma</label>
-          <select id="s-rem" value={remind} onChange={(e) => setRemind(e.target.value)}>
-            {[1, 2, 3, 7, 14].map((n) => <option key={n} value={n}>{n === 1 ? '1 gün önce 09:00' : n + ' gün önce 09:00'}</option>)}
-          </select>
-        </div>
+        <AlertPicker id="s-al" value={alerts} onChange={setAlerts} mode="allday" />
         {yarimHidden && !yarim ? null : (
           <div className="typechips">
             <YarimToggle on={yarim} onClick={() => setYarim(!yarim)} />
