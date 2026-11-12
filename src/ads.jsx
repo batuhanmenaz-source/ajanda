@@ -41,13 +41,17 @@ export function dur(ms) {
   return mm + ' dk';
 }
 const when = (d, now) => whenLabel(d, now);
+// Komisyon: "%20", "%12,5"
+export const pct = (v) => (v == null || v === '' ? '' : '%' + Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 }));
+export const hasPct = (c) => c.commission != null && c.commission !== '';
+const mpStyle = (c) => (c.marketplace ? { '--mp': mpColor(c.marketplace) } : undefined);
 
 function AdCard({ c, now, contacts, onOpen }) {
   const st = adStatus(c, now);
   const s = adStart(c), e = adEnd(c);
   const p = st === 'live' ? Math.min(1, Math.max(0, (now - s) / Math.max(1, e - s))) : 0;
   return (
-    <button type="button" className={'card ad ad-' + st} onClick={() => onOpen(c)}>
+    <button type="button" className={'card ad ad-' + st + (c.marketplace ? ' has-mp' : '')} style={mpStyle(c)} onClick={() => onOpen(c)}>
       <span className="ad-top">
         <span className="ad-who">{PICON[c.platform] || '🎬'} {adWho(c, contacts)}</span>
         {st === 'live' ? <span className="ad-badge live">● Yayında</span> : st === 'soon' ? <span className="ad-badge">Yaklaşan</span> : st === 'iptal' ? <span className="ad-badge">İptal</span> : <span className="ad-badge muted">Bitti</span>}
@@ -56,6 +60,7 @@ function AdCard({ c, now, contacts, onOpen }) {
       <span className="ad-meta">
         {c.brand ? <span>{c.brand}</span> : null}
         {c.marketplace ? <span className="tag"><span className="dot" style={{ background: mpColor(c.marketplace) }} />{c.marketplace}</span> : null}
+        {hasPct(c) ? <span className="ad-pct">{pct(c.commission)} komisyon</span> : null}
         {c.fee ? <span>{tl(c.fee)}</span> : null}
       </span>
       {s ? (
@@ -74,33 +79,74 @@ function AdCard({ c, now, contacts, onOpen }) {
 }
 
 export function AdsView({ data, now, actions }) {
-  const all = (data.collabs || []).filter((c) => adStart(c));
+  const every = (data.collabs || []).filter((c) => adStart(c));
+  const [fPct, setFPct] = useState('');
+  const [fMp, setFMp] = useState('');
+  const pcts = [...new Set(every.filter(hasPct).map((c) => Number(c.commission)))].sort((a, b) => a - b);
+  const mps = MARKETPLACES.map((m) => m.name).filter((n) => every.some((c) => c.marketplace === n));
+  const filtering = fPct !== '' || fMp !== '';
+  const all = every.filter((c) => (fPct === '' || (fPct === 'yok' ? !hasPct(c) : hasPct(c) && Number(c.commission) === Number(fPct))) && (!fMp || c.marketplace === fMp));
   const live = all.filter((c) => adStatus(c, now) === 'live').sort((a, b) => adEnd(a) - adEnd(b));
   const soon = all.filter((c) => adStatus(c, now) === 'soon').sort((a, b) => adStart(a) - adStart(b));
-  const past = all.filter((c) => ['past', 'iptal'].includes(adStatus(c, now))).sort((a, b) => adStart(b) - adStart(a)).slice(0, 40);
+  const past = all.filter((c) => ['past', 'iptal'].includes(adStatus(c, now))).sort((a, b) => adStart(b) - adStart(a)).slice(0, filtering ? 300 : 40);
   const [showPast, setShowPast] = useState(false);
-  const mk = toDateInput(now).slice(0, 7);
-  const month = all.filter((c) => c.status !== 'iptal' && toDateInput(adStart(c)).startsWith(mk));
-  const budget = month.reduce((s, c) => s + (Number(c.fee) || 0), 0);
+  const mk = toDateInput(now).slice(0, 7), yk = mk.slice(0, 4);
+  const valid = all.filter((c) => c.status !== 'iptal');
+  const month = valid.filter((c) => toDateInput(adStart(c)).startsWith(mk));
+  const year = valid.filter((c) => toDateInput(adStart(c)).startsWith(yk));
+  const sumFee = (xs) => xs.reduce((s, c) => s + (Number(c.fee) || 0), 0);
+  const budget = sumFee(month);
+  const card = (c) => <AdCard key={c.id} c={c} now={now} contacts={data.contacts} onOpen={actions.openCollab} />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="ad-sum card">
-        <div><span className="rv-k">Yayında</span><span className="rp-v">{live.length}</span></div>
-        <div><span className="rv-k">Yaklaşan</span><span className="rp-v">{soon.length}</span></div>
-        <div><span className="rv-k">Bu ay bütçe</span><span className="rp-v">{budget ? tlShort(budget) : '—'}</span></div>
-      </div>
+      {pcts.length || mps.length > 1 ? (
+        <div className="ad-filters">
+          {pcts.length ? (
+            <div className="typechips" role="group" aria-label="Komisyona göre">
+              <span className="ad-flabel">Komisyon</span>
+              <button type="button" className={'chip' + (fPct === '' ? ' on' : '')} aria-pressed={fPct === ''} onClick={() => setFPct('')}>Tümü</button>
+              {pcts.map((v) => <button key={v} type="button" className={'chip' + (Number(fPct) === v && fPct !== '' ? ' on' : '')} aria-pressed={Number(fPct) === v && fPct !== ''} onClick={() => setFPct(String(v))}>{pct(v)}</button>)}
+              {every.some((c) => !hasPct(c)) ? <button type="button" className={'chip' + (fPct === 'yok' ? ' on' : '')} aria-pressed={fPct === 'yok'} onClick={() => setFPct('yok')}>Girilmemiş</button> : null}
+            </div>
+          ) : null}
+          {mps.length > 1 ? (
+            <div className="typechips" role="group" aria-label="Pazaryerine göre">
+              <span className="ad-flabel">Pazaryeri</span>
+              <button type="button" className={'chip' + (!fMp ? ' on' : '')} aria-pressed={!fMp} onClick={() => setFMp('')}>Tümü</button>
+              {mps.map((n) => <button key={n} type="button" className={'chip' + (fMp === n ? ' on' : '')} aria-pressed={fMp === n} onClick={() => setFMp(n)}><span className="dot" style={{ background: mpColor(n) }} />{n}</button>)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {filtering ? (
+        <div className="ad-result card">
+          <span className="ad-rlabel">{[fPct === 'yok' ? 'Komisyon girilmemiş' : fPct !== '' ? pct(fPct) + ' komisyon' : '', fMp].filter(Boolean).join(' · ')}</span>
+          <div className="ad-sum">
+            <div><span className="rv-k">Toplam reklam</span><span className="rp-v">{valid.length}</span></div>
+            <div><span className="rv-k">Bu yıl</span><span className="rp-v">{year.length}</span></div>
+            <div><span className="rv-k">Bütçe</span><span className="rp-v">{sumFee(valid) ? tlShort(sumFee(valid)) : '—'}</span></div>
+          </div>
+          <button type="button" className="linkbtn" onClick={() => { setFPct(''); setFMp(''); }}>Filtreyi temizle</button>
+        </div>
+      ) : (
+        <div className="ad-sum card">
+          <div><span className="rv-k">Yayında</span><span className="rp-v">{live.length}</span></div>
+          <div><span className="rv-k">Yaklaşan</span><span className="rp-v">{soon.length}</span></div>
+          <div><span className="rv-k">Bu ay bütçe</span><span className="rp-v">{budget ? tlShort(budget) : '—'}</span></div>
+        </div>
+      )}
       <button type="button" className="btn primary big" onClick={() => actions.openCollab({})}>+ Reklam ekle</button>
       <Section title="Yayında" meta={live.length ? 'bitişe göre' : ''}>
-        {live.length ? <div className="ad-grid">{live.map((c) => <AdCard key={c.id} c={c} now={now} contacts={data.contacts} onOpen={actions.openCollab} />)}</div>
-          : <div className="card"><p className="empty">Şu an yayında reklam yok.</p></div>}
+        {live.length ? <div className="ad-grid">{live.map(card)}</div>
+          : <div className="card"><p className="empty">{filtering ? 'Bu filtrede yayında reklam yok.' : 'Şu an yayında reklam yok.'}</p></div>}
       </Section>
       <Section title="Yaklaşan" meta={soon.length ? soon.length + ' reklam' : ''}>
-        {soon.length ? <div className="ad-grid">{soon.map((c) => <AdCard key={c.id} c={c} now={now} contacts={data.contacts} onOpen={actions.openCollab} />)}</div>
-          : <div className="card"><p className="empty">Planlanmış reklam yok.</p></div>}
+        {soon.length ? <div className="ad-grid">{soon.map(card)}</div>
+          : <div className="card"><p className="empty">{filtering ? 'Bu filtrede yaklaşan reklam yok.' : 'Planlanmış reklam yok.'}</p></div>}
       </Section>
       {past.length ? (
-        <Section title="Bitenler" action={<button type="button" className="linkbtn" onClick={() => setShowPast(!showPast)}>{showPast ? 'Gizle' : 'Göster (' + past.length + ')'}</button>}>
-          {showPast ? <div className="ad-grid">{past.map((c) => <AdCard key={c.id} c={c} now={now} contacts={data.contacts} onOpen={actions.openCollab} />)}</div> : null}
+        <Section title="Bitenler" action={filtering ? null : <button type="button" className="linkbtn" onClick={() => setShowPast(!showPast)}>{showPast ? 'Gizle' : 'Göster (' + past.length + ')'}</button>} meta={filtering ? past.length + ' reklam' : ''}>
+          {showPast || filtering ? <div className="ad-grid">{past.map(card)}</div> : null}
         </Section>
       ) : null}
     </div>
@@ -120,10 +166,10 @@ export function AdsTodayCard({ data, now, actions, onAll }) {
           const st = adStatus(c, now);
           return (
             <button key={c.id} type="button" className="row rowbtn ad-row" onClick={() => actions.openCollab(c)}>
-              <span className={'ad-dot' + (st === 'live' ? ' live' : '')} aria-hidden="true" />
+              <span className={'ad-dot' + (st === 'live' ? ' live' : '')} style={c.marketplace ? { background: mpColor(c.marketplace), '--mp': mpColor(c.marketplace) } : undefined} aria-hidden="true" />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 auto' }}>
                 <span className="title">{adWho(c, data.contacts)}{c.title ? ' — ' + c.title : ''}</span>
-                <span className="meta">{st === 'live' ? 'Bitiş ' + when(adEnd(c), now) : 'Başlangıç ' + fmtTime(adStart(c))}{c.marketplace ? ' · ' + c.marketplace : ''}</span>
+                <span className="meta">{st === 'live' ? 'Bitiş ' + when(adEnd(c), now) : 'Başlangıç ' + fmtTime(adStart(c))}{c.marketplace ? ' · ' + c.marketplace : ''}{hasPct(c) ? ' · ' + pct(c.commission) : ''}</span>
               </span>
               <span className="ad-left">{st === 'live' ? dur(adEnd(c) - now) : dur(adStart(c) - now)}<small>{st === 'live' ? 'kaldı' : 'sonra'}</small></span>
             </button>
@@ -148,6 +194,7 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
   const [sTime, setSTime] = useState(initial.start_at ? toTimeInput(s0) : s0 ? '10:00' : toTimeInput(defStart));
   const [eDate, setEDate] = useState(e0 ? toDateInput(e0) : toDateInput(addDays(s0 || defStart, 1)));
   const [eTime, setETime] = useState(e0 ? toTimeInput(e0) : initial.start_at ? toTimeInput(s0) : toTimeInput(defStart));
+  const [comm, setComm] = useState(hasPct(initial) ? String(Number(initial.commission)).replace('.', ',') : '');
   const [fee, setFee] = useState(initial.fee ? Number(initial.fee).toLocaleString('tr-TR') : '');
   const [link, setLink] = useState(initial.link || '');
   const [notes, setNotes] = useState(initial.notes || '');
@@ -160,6 +207,11 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
   const bad = !(end > start);
   const setLen = (h) => { const e = new Date(start.getTime() + h * 3600000); setEDate(toDateInput(e)); setETime(toTimeInput(e)); };
   const lenH = Math.round((end - start) / 3600000);
+  const commNum = comm.trim() === '' ? null : Number(comm.replace('%', '').replace(',', '.').trim());
+  const commBad = commNum != null && (!Number.isFinite(commNum) || commNum < 0 || commNum > 100);
+  const commVal = commBad ? null : commNum;
+  // Daha önce kullanılan oranlar + sık kullanılanlar
+  const commChoices = useMemo(() => [...new Set([10, 15, 20, 25, 30, ...(collabs || []).filter(hasPct).map((c) => Number(c.commission))])].sort((a, b) => a - b).slice(0, 8), [collabs]);
   // Önceki hesaplar (öneri)
   const handles = useMemo(() => {
     const seen = new Set();
@@ -167,7 +219,7 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
   }, [collabs]);
   const submit = async (ev) => {
     ev.preventDefault();
-    if (busy || bad) return;
+    if (busy || bad || commBad) return;
     setBusy(true);
     let h = handle.trim();
     if (h && !h.startsWith('@') && !/\s/.test(h) && !/^https?:/.test(h)) h = '@' + h;
@@ -175,7 +227,7 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
       await onSave({
         id: initial.id, title: title.trim() || null, handle: h || null, platform, brand: brand || null, marketplace: mp || null,
         start_at: start.toISOString(), end_at: end.toISOString(), publish_date: sDate,
-        fee: parseTL(fee) || null, link: link.trim() || null, notes: notes.trim() || null,
+        fee: parseTL(fee) || null, commission: commVal, link: link.trim() || null, notes: notes.trim() || null,
         status: cancel ? 'iptal' : (initial.status && initial.status !== 'iptal' ? initial.status : 'planlandi'),
         alerts: { ...alerts, end: endAlert }
       });
@@ -236,6 +288,14 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
             </select>
           </div>
         </div>
+        <div className="field">
+          <label htmlFor="ad-comm">Komisyon oranı (%)</label>
+          <input id="ad-comm" type="text" inputMode="decimal" value={comm} onChange={(e) => setComm(e.target.value)} placeholder="Örn. 20" aria-invalid={commBad} style={{ maxWidth: 160 }} />
+          <div className="typechips" style={{ marginTop: 6 }} role="group" aria-label="Hazır oranlar">
+            {commChoices.map((v) => <button key={v} type="button" className={'chip' + (commNum === v ? ' on' : '')} aria-pressed={commNum === v} onClick={() => setComm(commNum === v ? '' : String(v).replace('.', ','))}>{pct(v)}</button>)}
+          </div>
+          {commBad ? <span className="hint" style={{ color: 'var(--danger)' }}>0 ile 100 arasında bir oran yaz.</span> : null}
+        </div>
         <div className="row2">
           <div className="field">
             <label htmlFor="ad-fee">Bütçe (₺)</label>
@@ -264,7 +324,7 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
         ) : null}
         <div className="actions">
           {isEdit && <button type="button" className="btn big danger" onClick={() => onDelete(initial)}>Sil</button>}
-          <button type="submit" className="btn big primary" disabled={busy || bad}>Kaydet</button>
+          <button type="submit" className="btn big primary" disabled={busy || bad || commBad}>Kaydet</button>
         </div>
       </form>
     </Sheet>

@@ -223,12 +223,14 @@ export function buildReport({ data, revenue, now, period, mp }) {
   const collabs = (data.collabs || []).filter((c) => c.publish_date && c.publish_date >= A && c.publish_date <= B && c.status !== 'iptal' && (!mp || c.marketplace === mp));
   const byInf = {};
   collabs.forEach((c) => { const k = adWho(c, data.contacts); byInf[k] = byInf[k] || { name: k, n: 0, fee: 0 }; byInf[k].n++; byInf[k].fee += Number(c.fee) || 0; });
+  const byPct = {};
+  collabs.forEach((c) => { const has = c.commission != null && c.commission !== ''; const k = has ? Number(c.commission) : -1; byPct[k] = byPct[k] || { rate: has ? k : null, n: 0, fee: 0 }; byPct[k].n++; byPct[k].fee += Number(c.fee) || 0; });
   // Bekleyenler
   const fups = (data.followups || []).filter((f) => !mp || f.marketplace === mp);
   const openF = fups.filter((f) => !f.done);
   return {
     range: [a, b], camps, best, totals, byMp,
-    inf: { count: collabs.length, fee: collabs.reduce((s, c) => s + (Number(c.fee) || 0), 0), list: Object.values(byInf).sort((x, y) => y.fee - x.fee) },
+    inf: { count: collabs.length, fee: collabs.reduce((s, c) => s + (Number(c.fee) || 0), 0), list: Object.values(byInf).sort((x, y) => y.fee - x.fee), byPct: Object.values(byPct).sort((x, y) => (x.rate == null) - (y.rate == null) || x.rate - y.rate) },
     fup: { open: openF.length, oldest: openF.length ? Math.max(...openF.map((f) => waitDays(f, now))) : 0, stats: responseStats(fups) }
   };
 }
@@ -301,6 +303,8 @@ export function ReportsView({ data, revenue, now, actions }) {
         <div className="card list">
           <div className="row fup-stat"><span className="title">Reklam</span><span className="meta">{rep.inf.count} adet</span><span className="fup-avg">{tl(rep.inf.fee)}</span></div>
           {rep.inf.list.slice(0, 5).map((x) => <div key={x.name} className="row fup-stat"><span className="title">{x.name}</span><span className="meta">{x.n} reklam</span><span className="fup-avg">{tlShort(x.fee)}</span></div>)}
+          {rep.inf.byPct.some((x) => x.rate != null) ? <div className="row fup-stat rp-sub"><span className="title">Komisyona göre</span></div> : null}
+          {rep.inf.byPct.some((x) => x.rate != null) ? rep.inf.byPct.map((x) => <div key={String(x.rate)} className="row fup-stat"><span className="title">{x.rate == null ? 'Girilmemiş' : '%' + x.rate.toLocaleString('tr-TR') + ' komisyon'}</span><span className="meta">{x.n} reklam</span><span className="fup-avg">{x.fee ? tlShort(x.fee) : '—'}</span></div>) : null}
         </div>
       </Section>
 

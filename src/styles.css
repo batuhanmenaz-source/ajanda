@@ -797,7 +797,10 @@ button.pill { min-height: 32px; }
 .ad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
 .card.ad { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; text-align: left; font: inherit; color: inherit; cursor: pointer; width: 100%; }
 .card.ad:hover { border-color: #C9C6BD; }
-.ad-live { border-color: #0C8599; box-shadow: inset 4px 0 0 #0C8599; }
+.card.ad { --mp: #0C8599; }
+.ad-live { border-color: var(--mp); box-shadow: inset 4px 0 0 var(--mp); }
+.card.ad.has-mp { border-color: var(--mp); box-shadow: inset 4px 0 0 var(--mp); }
+.card.ad.has-mp.ad-live { border-width: 2px; padding: 13px 15px; }
 .ad-past, .ad-iptal { opacity: .72; }
 .ad-iptal .ad-title { text-decoration: line-through; }
 .ad-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -811,7 +814,7 @@ button.pill { min-height: 32px; }
 .ad-time { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .ad-time .arrow { color: var(--muted); font-weight: 400; }
 .ad-bar { height: 6px; border-radius: 999px; background: var(--track); overflow: hidden; margin-top: 2px; }
-.ad-bar > span { display: block; height: 100%; border-radius: 999px; background: #0C8599; }
+.ad-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--mp); }
 .ad-count { font-size: 13px; color: var(--muted); }
 .ad-count b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .ad-row { align-items: center; gap: 12px; }
@@ -819,3 +822,14 @@ button.pill { min-height: 32px; }
 .ad-dot.live { background: #0C8599; box-shadow: 0 0 0 4px #E3F4F6; }
 .ad-left { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ad-left small { font-size: 11px; font-weight: 500; color: var(--muted); }
+
+.ad-pct { font-weight: 700; color: var(--ink-2); }
+.ad-filters { display: flex; flex-direction: column; gap: 8px; }
+.ad-filters .typechips { align-items: center; }
+.ad-flabel { font-size: 12px; font-weight: 700; color: var(--muted); min-width: 68px; }
+.ad-filters .chip .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.ad-result { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.ad-result .ad-sum { padding: 0; }
+.ad-rlabel { font-weight: 700; font-size: 15px; }
+.ad-result .linkbtn { align-self: flex-start; }
+.rp-sub .title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: none; }

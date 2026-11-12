@@ -309,7 +309,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/collabs/.test(msg) && /start_at|end_at|platform|handle/.test(msg)) say('Kaydedilemedi: Influencer reklamları için Supabase\'de 17 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/collabs/.test(msg) && /commission/.test(msg)) say('Kaydedilemedi: Komisyon oranı için Supabase\'de 18 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/collabs/.test(msg) && /start_at|end_at|platform|handle/.test(msg)) say('Kaydedilemedi: Influencer reklamları için Supabase\'de 17 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/followups|nudge_/.test(msg)) say('Kaydedilemedi: Bekleyenler için Supabase\'de 16 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/yarim_items|memories|yarim_prefs|anilar/.test(msg)) say('Kaydedilemedi: Yarim bölümü için Supabase\'de 15 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/alerts|remind_at|aux_event_id|alert_defaults/.test(msg)) say('Kaydedilemedi: Hatırlatma seçimleri için Supabase\'de 14 numaralı SQL\'i çalıştırman gerekiyor.');

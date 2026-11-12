@@ -342,11 +342,11 @@ function seedLife() {
       const H = (h) => { const x = new Date(); x.setMinutes(0, 0, 0); return new Date(x.getTime() + h * 3600000); };
       const ad = (s, e, o) => ({ id: uid(), start_at: H(s).toISOString(), end_at: H(e).toISOString(), publish_date: toDateInput(H(s)), status: 'planlandi', alerts: { list: ['30m', '0'], at: '09:00', end: true }, ...o });
       return [
-        ad(-3, 21, { handle: '@elifguzellik', platform: 'Instagram', title: 'Serum Reels + indirim kodu', brand: 'Missha', marketplace: 'Trendyol', fee: 15000 }),
-        ad(-30, 42, { handle: '@ciltbakimgunlugu', platform: 'TikTok', title: '3 video seri', brand: 'DERMA:B', marketplace: 'Hepsiburada', fee: 8000 }),
-        ad(4, 28, { handle: '@makyajkutusu', platform: 'Instagram', title: 'Story serisi', brand: 'ZEROID', marketplace: 'Trendyol', fee: 6000 }),
+        ad(-3, 21, { handle: '@elifguzellik', platform: 'Instagram', title: 'Serum Reels + indirim kodu', brand: 'Missha', marketplace: 'Trendyol', fee: 15000, commission: 20 }),
+        ad(-30, 42, { handle: '@ciltbakimgunlugu', platform: 'TikTok', title: '3 video seri', brand: 'DERMA:B', marketplace: 'Hepsiburada', fee: 8000, commission: 15 }),
+        ad(4, 28, { handle: '@makyajkutusu', platform: 'Instagram', title: 'Story serisi', brand: 'ZEROID', marketplace: 'Trendyol', fee: 6000, commission: 20 }),
         ad(74, 74 + 168, { handle: '@guzelliksirlari', platform: 'YouTube', title: 'Rutin videosu', brand: 'Missha', marketplace: 'Amazon', fee: 22000 }),
-        ad(-300, -228, { handle: '@elifguzellik', platform: 'Instagram', title: 'Kasım kampanyası paylaşımı', brand: 'Missha', marketplace: 'Trendyol', fee: 12000 })
+        ad(-300, -228, { handle: '@elifguzellik', platform: 'Instagram', title: 'Kasım kampanyası paylaşımı', brand: 'Missha', marketplace: 'Trendyol', fee: 12000, commission: 20 })
       ];
     })(),
     special_dates: [

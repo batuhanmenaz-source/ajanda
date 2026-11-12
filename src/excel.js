@@ -149,6 +149,8 @@ export async function exportReport({ rep, label }) {
   const inf = [[H('Hesap'), H('Reklam'), H('Bütçe')]];
   rep.inf.list.forEach((x) => inf.push([S(x.name), N(x.n), N(x.fee, TL)]));
   inf.push([B(S('Toplam')), B(N(rep.inf.count)), B(N(rep.inf.fee, TL))]);
+  const com = [[H('Komisyon oranı'), H('Reklam'), H('Bütçe')]];
+  (rep.inf.byPct || []).forEach((x) => com.push([S(x.rate == null ? 'Girilmemiş' : '%' + x.rate.toLocaleString('tr-TR')), N(x.n), N(x.fee, TL)]));
   const fu = [[H('Kimden'), H('Tamamlanan talep'), H('Ortalama dönüş (gün)'), H('En uzun (gün)')]];
   rep.fup.stats.forEach((s) => fu.push([S(s.party), N(s.n), N(Math.round(s.avg * 10) / 10), N(s.max)]));
   fu.push([S('Açık talep'), N(rep.fup.open), S(''), S('')]);
@@ -156,6 +158,7 @@ export async function exportReport({ rep, label }) {
     { name: 'Kampanyalar', rows: camps, widths: [28, 14, 12, 12, 7, 16, 14, 13, 11], sticky: 1 },
     { name: 'Pazaryerleri', rows: mps, widths: [16, 11, 14, 16, 11, 16], sticky: 1 },
     { name: 'Influencer', rows: inf, widths: [24, 11, 15], sticky: 1 },
+    { name: 'Komisyon', rows: com, widths: [16, 11, 15], sticky: 1 },
     { name: 'Bekleyenler', rows: fu, widths: [24, 16, 20, 14], sticky: 1 }
   ], 'rapor-' + slug(label) + '.xlsx');
 }
