@@ -147,12 +147,13 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   }, [store]);
   useEffect(() => { loadRevenue(); }, [loadRevenue]);
   const revOrder = useMemo(() => marketplaceOrder(revenue, now), [revenue, now]);
-  const saveRevenue = async (day, entries) => {
+  const saveRevenue = async (day, entries, opts = {}) => {
     try {
       const rows = await store.saveRevenueDay(day, entries);
       setRevenue((r) => [...r.filter((x) => x.day !== day), ...rows]);
-      setSheet(null);
-      say('Ciro kaydedildi');
+      if (!opts.keepOpen) setSheet(null);
+      say(opts.keepOpen ? fmtLong(fromDateInput(day)) + ' kaydedildi' : 'Ciro kaydedildi');
+      return true;
     } catch (e) {
       console.error(e);
       say(/revenue/.test((e && e.message) || '') ? 'Kaydedilemedi: Supabase\'de 09 numaralı SQL\'i çalıştırman gerekiyor.' : 'Ciro kaydedilemedi. İnternet bağlantını kontrol et.');

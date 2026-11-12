@@ -1014,3 +1014,19 @@ button.pill { min-height: 32px; }
 .wl-catrow select { width: 64px; flex: 0 0 auto; font-size: 18px; }
 .wl-catrow input { flex: 1 1 auto; min-width: 0; }
 .linkbtn.danger { color: var(--danger); }
+/* Ciro girişi: gün gezintisi ve eksik günler şeridi */
+.rv-daynav { display: flex; align-items: center; gap: 6px; }
+.rv-daynav input { flex: 1 1 auto; min-width: 0; }
+.rv-strip { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 4px; margin-top: 8px; scroll-snap-type: x proximity; }
+.rv-strip::-webkit-scrollbar { display: none; }
+.rv-sd { flex: 0 0 auto; width: 42px; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 0 5px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font: inherit; color: var(--ink); cursor: pointer; scroll-snap-align: center; }
+.rv-sd .w { font-size: 10px; font-weight: 600; color: var(--muted); }
+.rv-sd .n { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.rv-sd .s { font-size: 11px; line-height: 1; height: 11px; font-weight: 700; }
+.rv-sd.ok { background: var(--green-soft); border-color: transparent; }
+.rv-sd.ok .s { color: var(--green); }
+.rv-sd.miss { border-style: dashed; border-color: #E8A33D; }
+.rv-sd.miss .s { color: #E67700; font-size: 16px; }
+.rv-sd.on { background: var(--accent); border: 1px solid var(--accent); color: #fff; }
+.rv-sd.on .w, .rv-sd.on .s { color: #fff; }
+.rv-actions { display: flex; flex-direction: column; gap: 8px; }

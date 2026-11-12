@@ -1,5 +1,5 @@
 // Ciro takibi: aylık özet, günlük grafik, pazaryeri dağılımı, günlük liste ve giriş formu
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Sheet } from './ui.jsx';
 import { MARKETPLACES, mpColor } from './constants.js';
@@ -427,21 +427,64 @@ export function RevenueSheet({ initialDay, revenue, order, onClose, onSave }) {
   const d = fromDateInput(day);
   const yest = toDateInput(addDays(startOfDay(new Date()), -1));
 
-  const submit = async (e) => {
-    e.preventDefault();
+  // Son 28 gün: hangisi girildi, hangisi eksik (bugün henüz girilmediyse eksik sayılmaz)
+  const entered = useMemo(() => new Set(revenue.map((r) => r.day)), [revenue]);
+  const strip = useMemo(() => Array.from({ length: 28 }, (_, i) => toDateInput(addDays(startOfDay(new Date()), i - 27))), []);
+  const isMissing = (k) => !entered.has(k) && k !== today;
+  // Kaydettikten sonra gidilecek gün: ileride en yakın eksik gün, yoksa geride en yakın
+  const nextMissing = (from) => {
+    const after = strip.filter((k) => k > from && isMissing(k));
+    if (after.length) return after[0];
+    const before = strip.filter((k) => k < from && isMissing(k));
+    return before.length ? before[before.length - 1] : null;
+  };
+  const nm = nextMissing(day);
+  const stripRef = useRef(null);
+  useEffect(() => {
+    const el = stripRef.current && stripRef.current.querySelector('[aria-current="date"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [day]);
+
+  const doSave = async (goNext) => {
     if (busy) return;
     setBusy(true);
     try {
-      await onSave(day, order.map((mp) => ({ marketplace: mp, amount: parseTL(vals[mp]), orders: ords[mp] ? parseInt(ords[mp], 10) || null : null })));
+      const target = goNext ? nextMissing(day) : null;
+      const ok = await onSave(day, order.map((mp) => ({ marketplace: mp, amount: parseTL(vals[mp]), orders: ords[mp] ? parseInt(ords[mp], 10) || null : null })), { keepOpen: !!target });
+      if (ok && target) {
+        setDay(target);
+        // Yeni günün ilk kutusuna geç (sayfa başa kayar)
+        setTimeout(() => { const el = document.getElementById('rv-0'); if (el) { el.scrollIntoView({ block: 'center' }); el.focus({ preventScroll: true }); } }, 60);
+      }
     } finally { setBusy(false); }
   };
+  const submit = (e) => { e.preventDefault(); doSave(!!nm); };
 
   return (
     <Sheet title="Ciro gir" onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="field">
           <label htmlFor="rv-day">Gün</label>
-          <input id="rv-day" type="date" value={day} max={today} onChange={(e) => e.target.value && setDay(e.target.value)} />
+          <div className="rv-daynav">
+            <button type="button" className="iconbtn" aria-label="Önceki gün" onClick={() => setDay(toDateInput(addDays(d, -1)))}><Icon.Left /></button>
+            <input id="rv-day" type="date" value={day} max={today} onChange={(e) => e.target.value && setDay(e.target.value)} />
+            <button type="button" className="iconbtn" aria-label="Sonraki gün" disabled={day >= today} onClick={() => setDay(toDateInput(addDays(d, 1)))}><Icon.Right /></button>
+          </div>
+          <div className="rv-strip" ref={stripRef} role="group" aria-label="Son 4 hafta">
+            {strip.map((k) => {
+              const x = fromDateInput(k);
+              const st = entered.has(k) ? 'ok' : isMissing(k) ? 'miss' : 'today';
+              return (
+                <button key={k} type="button" className={'rv-sd ' + st + (k === day ? ' on' : '')} aria-current={k === day ? 'date' : undefined}
+                  aria-label={fmtLong(x) + (st === 'ok' ? ', girildi' : st === 'miss' ? ', eksik' : '')} onClick={() => setDay(k)}>
+                  <span className="w">{['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'][x.getDay()]}</span>
+                  <span className="n">{x.getDate()}</span>
+                  <span className="s" aria-hidden="true">{st === 'ok' ? '✓' : st === 'miss' ? '•' : ''}</span>
+                </button>
+              );
+            })}
+          </div>
+          <span className="hint" style={{ marginTop: 0 }}>{strip.filter(isMissing).length ? 'Son 4 haftada ' + strip.filter(isMissing).length + ' gün eksik (• işaretliler). Dokunarak geç.' : 'Son 4 haftanın tamamı girilmiş.'}</span>
           <div className="typechips">
             <button type="button" className={'chip' + (day === today ? ' on' : '')} onClick={() => setDay(today)}>Bugün</button>
             <button type="button" className={'chip' + (day === yest ? ' on' : '')} onClick={() => setDay(yest)}>Dün</button>
@@ -469,7 +512,12 @@ export function RevenueSheet({ initialDay, revenue, order, onClose, onSave }) {
 
         <div className="rv-total"><span>Günün toplamı</span><b>{tl(total, total % 1 ? 2 : 0)}</b></div>
         <p className="hint" style={{ margin: 0 }}>Pazaryerleri son 30 günün cirosuna göre çok satandan az satana sıralanır. Boş bıraktıkların kaydedilmez; daha önce girdiğin bir değeri silersen o kayıt kaldırılır.</p>
-        <button type="submit" className="btn big primary" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Kaydet'}</button>
+        {nm ? (
+          <div className="rv-actions">
+            <button type="submit" className="btn big primary" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Kaydet, ' + (dayLabel(fromDateInput(nm)) === fmtShort(fromDateInput(nm)) ? fmtShort(fromDateInput(nm)) : dayLabel(fromDateInput(nm)).toLocaleLowerCase('tr-TR')) + ' gününe geç'}</button>
+            <button type="button" className="btn big" disabled={busy} onClick={() => doSave(false)}>Kaydet ve kapat</button>
+          </div>
+        ) : <button type="submit" className="btn big primary" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Kaydet'}</button>}
       </form>
     </Sheet>
   );
