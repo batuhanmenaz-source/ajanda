@@ -41,13 +41,15 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   });
   // İş ve Özel sekmelerinin alt bölümleri
   const ss = (k, d) => { try { return sessionStorage.getItem(k) || d; } catch { return d; } };
-  const [isSeg, setIsSegState] = useState(() => (ss('ajanda-sales', '') === 'ciro' ? 'ciro' : ss('ajanda-is-seg', 'kampanya')));
+  const [isSeg, setIsSegState] = useState(() => (ss('ajanda-sales', '') === 'ciro' ? 'ciro' : ss('ajanda-is-seg', 'ciro')));
   const [ozelSeg, setOzelSegState] = useState(() => ss('ajanda-ozel-seg', 'cuzdan'));
   const [yarimSeg, setYarimSegState] = useState(() => ss('ajanda-yarim-seg', 'ozet'));
   const setYarimSeg = (v) => { setYarimSegState(v); try { sessionStorage.setItem('ajanda-yarim-seg', v); } catch { /* yok say */ } };
   const [yarimPrefs, setYarimPrefs] = useState({});
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const setIsSeg = (v) => { setIsSegState(v); try { sessionStorage.setItem('ajanda-is-seg', v); sessionStorage.removeItem('ajanda-sales'); } catch { /* yok say */ } };
+  // Alt menüden İş'e geçince her zaman Ciro açılır (içindeyken seçilen bölüm korunur)
+  const navTo = (id) => { if (id === 'is' && tab !== 'is') setIsSeg('ciro'); setTab(id); };
   const setOzelSeg = (v) => { setOzelSegState(v); try { sessionStorage.setItem('ajanda-ozel-seg', v); } catch { /* yok say */ } };
   const goTab = (t) => {
     if (t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer' || t === 'bekleyenler' || t === 'raporlar') { setSheet(null); setIsSeg(t); setTab('is'); }
@@ -965,7 +967,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <button type="button" className="btn primary big" onClick={() => setSheet({ kind: 'quick' })}>+ Hızlı ekle</button>
         <nav className="sidenav" aria-label="Ana menü">
           {TABS.map((t) => (
-            <button key={t.id} type="button" className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}>
+            <button key={t.id} type="button" className={tab === t.id ? 'on' : ''} onClick={() => navTo(t.id)} aria-current={tab === t.id ? 'page' : undefined}>
               <t.icon width="20" height="20" />{t.label}
             </button>
           ))}
@@ -1023,7 +1025,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
       <nav className="bottomnav" aria-label="Ana menü">
         {TABS.map((t) => (
-          <button key={t.id} type="button" className={'navbtn' + (tab === t.id ? ' on' : '')} onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}>
+          <button key={t.id} type="button" className={'navbtn' + (tab === t.id ? ' on' : '')} onClick={() => navTo(t.id)} aria-current={tab === t.id ? 'page' : undefined}>
             <t.icon />{t.label}
           </button>
         ))}

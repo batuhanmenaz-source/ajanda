@@ -7,7 +7,7 @@ import { WalletView } from './wallet.jsx';
 import { YarimPage } from './yarim.jsx';
 import { FollowupsView, ReportsView } from './work.jsx';
 
-export const WORK_TABS = [['kampanya', 'Kampanyalar'], ['ciro', 'Ciro'], ['bekleyenler', 'Bekleyenler'], ['notlar', 'Pazaryeri notları'], ['influencer', 'Influencer reklamları'], ['raporlar', 'Raporlar']];
+export const WORK_TABS = [['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['bekleyenler', 'Bekleyenler'], ['notlar', 'Pazaryeri notları'], ['influencer', 'Influencer reklamları'], ['raporlar', 'Raporlar']];
 export const PRIVATE_TABS = [['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
 export function SubTabs({ tabs, value, onChange, label }) {
