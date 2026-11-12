@@ -163,7 +163,7 @@ export function AdsTodayCard({ data, now, actions, onAll }) {
   const list = [...live, ...today];
   return (
     <Section title="Influencer reklamları" meta={meta} tone="#0C8599" action={<button type="button" className="linkbtn" onClick={onAll}>Tümü</button>}>
-      <div className="card adt">
+      <div className={'adt-grid' + (list.length === 1 ? ' one' : '')}>
         {list.slice(0, 4).map((c) => {
           const st = adStatus(c, now);
           const s = adStart(c), e = adEnd(c);
@@ -172,27 +172,25 @@ export function AdsTodayCard({ data, now, actions, onAll }) {
           const sub = c.handle ? c.title : null;
           const soonEnd = st === 'live' && e - now < 6 * 3600000;
           return (
-            <button key={c.id} type="button" className={'adt-row' + (st === 'live' ? ' live' : ' soon') + (soonEnd ? ' ending' : '')} style={c.marketplace ? { '--mp': mpColor(c.marketplace) } : undefined} onClick={() => actions.openCollab(c)}>
-              <span className="adt-main">
-                <span className="adt-name"><span className="adt-pi" aria-hidden="true">{PICON[c.platform] || '🎬'}</span>{name}</span>
-                {sub ? <span className="adt-sub">{sub}</span> : null}
-                <span className="adt-tags">
-                  {c.marketplace ? <span className="adt-mp">{c.marketplace}</span> : null}
-                  {hasPct(c) ? <span className="adt-pct">{pct(c.commission)}</span> : null}
-                  {c.brand ? <span className="adt-brand">{c.brand}</span> : null}
-                </span>
+            <button key={c.id} type="button" className={'adt-tile' + (st === 'live' ? ' live' : ' soon') + (soonEnd ? ' ending' : '')} style={c.marketplace ? { '--mp': mpColor(c.marketplace) } : undefined} onClick={() => actions.openCollab(c)}>
+              <span className="adt-state">{st === 'live' ? <><i aria-hidden="true" />Yayında</> : 'Bugün ' + fmtTime(s)}</span>
+              <span className="adt-name"><span className="adt-pi" aria-hidden="true">{PICON[c.platform] || '🎬'}</span>{name}</span>
+              {sub ? <span className="adt-sub">{sub}</span> : null}
+              <span className="adt-tags">
+                {c.marketplace ? <span className="adt-mp">{c.marketplace}</span> : null}
+                {hasPct(c) ? <span className="adt-pct">{pct(c.commission)}</span> : null}
+                {c.brand ? <span className="adt-brand">{c.brand}</span> : null}
               </span>
-              <span className="adt-side">
-                <span className="adt-state">{st === 'live' ? <><i aria-hidden="true" />Yayında</> : 'Bugün ' + fmtTime(s)}</span>
+              <span className="adt-foot">
                 <span className="adt-left">{st === 'live' ? dur(e - now) : dur(s - now)}</span>
                 <span className="adt-when">{st === 'live' ? 'kaldı · ' + when(e, now) : 'sonra başlıyor'}</span>
-                {st === 'live' ? <span className="adt-bar" aria-hidden="true"><span style={{ width: Math.round(p * 100) + '%' }} /></span> : null}
               </span>
+              <span className="adt-bar" aria-hidden="true"><span style={{ width: Math.round(p * 100) + '%' }} /></span>
             </button>
           );
         })}
-        {list.length > 4 ? <button type="button" className="adt-more" onClick={onAll}>+{list.length - 4} reklam daha</button> : null}
       </div>
+      {list.length > 4 ? <button type="button" className="linkbtn adt-more" onClick={onAll}>+{list.length - 4} reklam daha</button> : null}
     </Section>
   );
 }

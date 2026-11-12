@@ -934,3 +934,23 @@ button.pill { min-height: 32px; }
   .today-grid .tslot { min-width: 0; }
   .today-grid > .today-col { display: contents; }
 }
+/* Bugün: influencer reklamları — iki sütunlu kutucuklar */
+.adt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.adt-grid.one { grid-template-columns: minmax(0, 1fr); }
+.adt-tile { --mp: #0C8599; position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 12px 12px 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: inherit; font: inherit; text-align: left; cursor: pointer; overflow: hidden; }
+.adt-tile::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--mp); }
+.adt-tile:hover { border-color: #C9C6BD; }
+.adt-tile .adt-state { justify-content: flex-start; }
+.adt-tile .adt-name { font-size: 14px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.adt-tile .adt-sub { font-size: 12px; }
+.adt-tile .adt-tags { margin-top: 0; }
+.adt-foot { display: flex; flex-direction: column; gap: 0; margin-top: auto; padding-top: 2px; }
+.adt-tile .adt-left { font-size: 20px; }
+.adt-tile.ending .adt-left { color: var(--danger); }
+.adt-tile .adt-when { white-space: normal; }
+.adt-tile .adt-bar { margin-top: 2px; }
+.adt-tile.soon .adt-bar { visibility: hidden; }
+.adt-more { align-self: center; padding: 4px 0; }
+@media (min-width: 1100px) { .adt-grid:not(.one) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.adt-tile.live .adt-state { color: #0B6E7E; }
+.adt-grid > .adt-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
