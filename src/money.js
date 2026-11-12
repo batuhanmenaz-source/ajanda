@@ -4,7 +4,8 @@ import { addDays, startOfDay, weekStart, toDateInput } from './dates.js';
 export const EXPENSE_CATS = [
   { id: 'market', label: 'Market', emoji: '🛒', words: ['market', 'migros', 'macrocenter', 'carrefoursa', 'hakmar', 'gross', 'a101', 'bim', 'şok', 'sok', 'carrefour', 'file', 'manav', 'kasap', 'fırın', 'ekmek', 'bakkal', 'getir', 'istegelsin'] },
   { id: 'yemek', label: 'Yemek & kahve', emoji: '🍽️', words: ['yemek', 'restoran', 'restaurant', 'kahve', 'cafe', 'kafe', 'starbucks', 'yemeksepeti', 'trendyol yemek', 'öğle', 'akşam yemeği', 'kahvaltı', 'döner', 'pizza', 'burger', 'tatlı'] },
-  { id: 'ulasim', label: 'Yakıt & ulaşım', emoji: '⛽', words: ['benzin', 'yakıt', 'akaryakıt', 'shell', 'opet', 'petrol', 'aytemiz', 'kurşunsuz', 'motorin', 'mazot', 'dizel', 'otopark', 'taksi', 'uber', 'bitaksi', 'metro', 'otobüs', 'istanbulkart', 'ulaşım', 'köprü', 'otoyol', 'hgs', 'ogs', 'servis', 'oto yıkama', 'yıkama', 'lastik'] },
+  { id: 'ulasim', label: 'Yakıt & ulaşım', emoji: '⛽', words: ['benzin', 'yakıt', 'akaryakıt', 'shell', 'opet', 'petrol', 'aytemiz', 'kurşunsuz', 'motorin', 'mazot', 'dizel', 'otopark', 'taksi', 'uber', 'bitaksi', 'metro', 'otobüs', 'istanbulkart', 'ulaşım', 'köprü', 'otoyol', 'hgs', 'ogs'] },
+  { id: 'arac', label: 'Araç', emoji: '🚗', words: ['araç', 'araba', 'oto', 'servis', 'bakım', 'periyodik bakım', 'yağ değişimi', 'oto yıkama', 'yıkama', 'lastik', 'sigorta', 'trafik sigortası', 'kasko', 'tüvtürk', 'araç muayene', 'mtv', 'motorlu taşıtlar', 'yedek parça', 'kaporta', 'boya', 'ceza', 'trafik cezası', 'akü', 'balata'] },
   { id: 'fatura', label: 'Faturalar', emoji: '💡', words: ['fatura', 'elektrik', 'doğalgaz', 'dogalgaz', 'su faturası', 'internet', 'telefon faturası', 'gsm', 'turkcell', 'vodafone', 'türk telekom', 'igdaş', 'enerjisa'] },
   { id: 'ev', label: 'Kira & ev', emoji: '🏠', words: ['kira', 'aidat', 'ev', 'mobilya', 'ikea', 'temizlik', 'tamir', 'tadilat', 'koçtaş'] },
   { id: 'abonelik', label: 'Abonelikler', emoji: '📺', words: ['abonelik', 'netflix', 'spotify', 'youtube', 'disney', 'amazon prime', 'prime', 'icloud', 'exxen', 'blutv', 'gain', 'chatgpt', 'claude', 'spor salonu', 'gym'] },
@@ -22,16 +23,33 @@ export const INCOME_CATS = [
   { id: 'diger_gelir', label: 'Diğer gelir', emoji: '➕', words: ['gelir'] }
 ];
 const ALL = [...EXPENSE_CATS, ...INCOME_CATS];
-const BY_ID = Object.fromEntries(ALL.map((c) => [c.id, c]));
-// Kaldırılan eski kategori: daha önce bununla girilen kayıtlar "Eğlence & tatil" altında görünür
-BY_ID.yarim = BY_ID.eglence;
+let BY_ID = {};
+// Kullanıcının kendi eklediği kategoriler: { id, label, emoji, kind: 'gider'|'gelir', hidden }
+let CUSTOM = [];
+function rebuild() {
+  BY_ID = Object.fromEntries([...ALL, ...CUSTOM].map((c) => [c.id, c]));
+  // Kaldırılan eski kategori: daha önce bununla girilen kayıtlar "Eğlence & tatil" altında görünür
+  BY_ID.yarim = BY_ID.eglence;
+}
+rebuild();
+export function setCustomCats(list) {
+  CUSTOM = (Array.isArray(list) ? list : []).filter((c) => c && c.id && c.label).map((c) => ({ ...c, emoji: c.emoji || '🏷️', words: [low(c.label)] }));
+  rebuild();
+}
+export const customCats = () => CUSTOM;
 export const catOf = (id) => BY_ID[id] || BY_ID.diger;
-export const catsFor = (kind) => (kind === 'gelir' ? INCOME_CATS : EXPENSE_CATS);
+// Kendi kategorilerin "Diğer"in hemen önünde listelenir; silinenler seçimde görünmez ama eski kayıtlarda adı kalır
+export const catsFor = (kind) => {
+  const gelir = kind === 'gelir';
+  const base = gelir ? INCOME_CATS : EXPENSE_CATS;
+  const extra = CUSTOM.filter((c) => (c.kind === 'gelir') === gelir && !c.hidden);
+  return [...base.slice(0, -1), ...extra, base[base.length - 1]];
+};
 
 export const METHODS = [['kart', 'Kart'], ['nakit', 'Nakit']];
 
 // Serbest metinden gider kategorisi tahmini (fiş okuma için)
-export function guessCategory(text) { return findCat(text, EXPENSE_CATS) || 'diger'; }
+export function guessCategory(text) { return findCat(text, catsFor('gider')) || 'diger'; }
 
 const low = (s) => (s || '').toLocaleLowerCase('tr-TR');
 
@@ -78,8 +96,8 @@ export function parseMoney(input, now = new Date()) {
   rest = rest.replace(W('kredi kartıyla|kredi kartından|kredi kartı|kartıyla|kartla|kart'), () => { method = 'kart'; return ' '; })
     .replace(W('nakit'), () => { method = 'nakit'; return ' '; }).replace(/\s+/g, ' ').trim();
 
-  const incomeCat = findCat(r0, INCOME_CATS);
-  const expenseCat = findCat(r0, EXPENSE_CATS);
+  const incomeCat = findCat(r0, catsFor('gelir'));
+  const expenseCat = findCat(r0, catsFor('gider'));
   const explicit = W('harcama|harcadım|ödedim|gider|aldım').test(r0);
   const isIncome = sign === '+' || (!!incomeCat && !expenseCat);
   // Para kaydı olduğuna dair yeterli işaret yoksa (ör. "3 kargo ara") dokunma

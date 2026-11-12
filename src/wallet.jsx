@@ -161,7 +161,7 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
       </section>
 
       <section className="section">
-        <div className="section-head"><h2>Kategoriler</h2><span className="meta">{catFilter ? <button type="button" className="linkbtn" onClick={() => setCatFilter(null)}>Filtreyi kaldır</button> : 'Dokun, hareketleri süz'}</span></div>
+        <div className="section-head"><h2>Kategoriler</h2><span className="meta">{catFilter ? <button type="button" className="linkbtn" onClick={() => setCatFilter(null)}>Filtreyi kaldır</button> : <>Dokun, hareketleri süz · <button type="button" className="linkbtn" onClick={actions.openCats}>Kategorilerim</button></>}</span></div>
         <div className="card list">
           {catList.length ? catList.map(([id, v]) => {
             const c = catOf(id);
@@ -232,15 +232,90 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
   );
 }
 
-function CatChips({ kind, value, onChange }) {
+export const CAT_EMOJIS = ['🏷️', '🚗', '🐾', '👶', '🎓', '💻', '📱', '🏋️', '✈️', '🍼', '🧴', '🎮', '🍷', '🚬', '🛠️', '💼', '🏥', '🎨', '📚', '🐈', '⚽', '💍', '🏖️', '💰'];
+
+// Yeni kategori: emoji + ad (Kategori seçiminin içinde açılır)
+function NewCatForm({ kind, onAdd, onCancel, inline = true }) {
+  const [label, setLabel] = useState('');
+  const [emoji, setEmoji] = useState('🏷️');
+  const [busy, setBusy] = useState(false);
+  const add = async () => {
+    const l = label.trim();
+    if (!l || busy) return;
+    setBusy(true);
+    try { await onAdd({ label: l, emoji, kind }); } finally { setBusy(false); }
+  };
   return (
-    <div className="wl-cats" role="group" aria-label="Kategori">
-      {catsFor(kind).map((c) => (
-        <button key={c.id} type="button" className={'wl-catchip' + (value === c.id ? ' on' : '')} aria-pressed={value === c.id} onClick={() => onChange(c.id)}>
-          <span aria-hidden="true">{c.emoji}</span>{c.label}
-        </button>
-      ))}
+    <div className="wl-newcat">
+      <div className="wl-emojis" role="group" aria-label="Simge">
+        {CAT_EMOJIS.map((e) => <button key={e} type="button" className={emoji === e ? 'on' : ''} aria-pressed={emoji === e} onClick={() => setEmoji(e)}>{e}</button>)}
+      </div>
+      <div className="wl-newcat-row">
+        <span className="wl-newcat-em" aria-hidden="true">{emoji}</span>
+        <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === 'gelir' ? 'Örn. Kira geliri' : 'Örn. Evcil hayvan'} aria-label="Kategori adı" maxLength={28} autoFocus={inline}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} />
+        <button type="button" className="btn primary" disabled={!label.trim() || busy} onClick={add}>Ekle</button>
+        {inline ? <button type="button" className="btn" onClick={onCancel}>Vazgeç</button> : null}
+      </div>
     </div>
+  );
+}
+
+function CatChips({ kind, value, onChange, onAddCat }) {
+  const [adding, setAdding] = useState(false);
+  return (
+    <>
+      <div className="wl-cats" role="group" aria-label="Kategori">
+        {catsFor(kind).map((c) => (
+          <button key={c.id} type="button" className={'wl-catchip' + (value === c.id ? ' on' : '')} aria-pressed={value === c.id} onClick={() => onChange(c.id)}>
+            <span aria-hidden="true">{c.emoji}</span>{c.label}
+          </button>
+        ))}
+        {onAddCat && !adding ? <button type="button" className="wl-catchip add" onClick={() => setAdding(true)}>+ Yeni kategori</button> : null}
+      </div>
+      {adding ? <NewCatForm kind={kind} onCancel={() => setAdding(false)} onAdd={async (c) => { const id = await onAddCat(c); if (id) { onChange(id); setAdding(false); } }} /> : null}
+    </>
+  );
+}
+
+// Kendi kategorilerini yönet: ekle, adını değiştir, kaldır
+export function CatsSheet({ cats, onClose, onSave }) {
+  const [list, setList] = useState(() => (cats || []).map((c) => ({ ...c })));
+  const [kind, setKind] = useState('gider');
+  const [busy, setBusy] = useState(false);
+  const shown = list.filter((c) => (c.kind === 'gelir') === (kind === 'gelir') && !c.hidden);
+  const upd = (id, patch) => setList(list.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const save = async () => {
+    setBusy(true);
+    try { await onSave(list.map((c) => ({ ...c, label: (c.label || '').trim() })).filter((c) => c.label)); } finally { setBusy(false); }
+  };
+  return (
+    <Sheet title="Kategorilerim" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="seg" role="group" aria-label="Tür">
+          <button type="button" className={kind === 'gider' ? 'on' : ''} onClick={() => setKind('gider')}>Gider</button>
+          <button type="button" className={kind === 'gelir' ? 'on' : ''} onClick={() => setKind('gelir')}>Gelir</button>
+        </div>
+        <p className="hint" style={{ margin: 0 }}>Hazır kategorilerin yanına kendi kategorilerini ekleyebilirsin. Kaldırdığın kategori seçimden çıkar ama o kategoriyle girilmiş eski kayıtlar adıyla görünmeye devam eder.</p>
+        {shown.length ? (
+          <div className="card list">
+            {shown.map((c) => (
+              <div key={c.id} className="row wl-catrow">
+                <select value={c.emoji} onChange={(e) => upd(c.id, { emoji: e.target.value })} aria-label="Simge">
+                  {[...new Set([c.emoji, ...CAT_EMOJIS])].map((e) => <option key={e} value={e}>{e}</option>)}
+                </select>
+                <input type="text" value={c.label} maxLength={28} onChange={(e) => upd(c.id, { label: e.target.value })} aria-label="Kategori adı" />
+                <button type="button" className="linkbtn danger" onClick={() => upd(c.id, { hidden: true })}>Kaldır</button>
+              </div>
+            ))}
+          </div>
+        ) : <p className="empty" style={{ margin: 0 }}>Henüz kendi {kind} kategorin yok.</p>}
+        <NewCatForm key={kind + list.length} kind={kind} inline={false} onAdd={async (c) => setList([...list, { ...c, id: 'c_' + Date.now().toString(36) }])} />
+        <div className="actions">
+          <button type="button" className="btn big primary" disabled={busy} onClick={save}>Kaydet</button>
+        </div>
+      </div>
+    </Sheet>
   );
 }
 
@@ -319,7 +394,7 @@ export function ReceiptScanSheet({ file, onClose, onDone }) {
   );
 }
 
-export function MoneySheet({ initial, onClose, onSave, onDelete, onScan, getReceiptUrl }) {
+export function MoneySheet({ initial, onClose, onSave, onDelete, onScan, getReceiptUrl, onAddCat }) {
   const isEdit = !!initial.id;
   const [kind, setKind] = useState(initial.kind || 'gider');
   const [amount, setAmount] = useState(initial.amount ? Number(initial.amount).toLocaleString('tr-TR', Number.isInteger(Number(initial.amount)) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '');
@@ -358,7 +433,7 @@ export function MoneySheet({ initial, onClose, onSave, onDelete, onScan, getRece
         </div>
         <div className="field">
           <span className="lbl">Kategori</span>
-          <CatChips kind={kind} value={category} onChange={setCategory} />
+          <CatChips kind={kind} value={category} onChange={setCategory} onAddCat={onAddCat} />
         </div>
         <div className="row2">
           <div className="field">
@@ -380,7 +455,7 @@ export function MoneySheet({ initial, onClose, onSave, onDelete, onScan, getRece
   );
 }
 
-export function FixedSheet({ initial, onClose, onSave, onDelete }) {
+export function FixedSheet({ initial, onClose, onSave, onDelete, onAddCat }) {
   const isEdit = !!initial.id;
   const [kind, setKind] = useState(initial.kind || 'gider');
   const [title, setTitle] = useState(initial.title || '');
@@ -430,7 +505,7 @@ export function FixedSheet({ initial, onClose, onSave, onDelete }) {
         </div>
         <div className="field">
           <span className="lbl">Kategori</span>
-          <CatChips kind={kind} value={category} onChange={setCategory} />
+          <CatChips kind={kind} value={category} onChange={setCategory} onAddCat={onAddCat} />
         </div>
         {kind === 'gider' ? <div className="field"><span className="lbl">Ödeme şekli</span><MethodSeg value={method} onChange={setMethod} /></div> : null}
         <label className="wl-check">
@@ -447,7 +522,7 @@ export function FixedSheet({ initial, onClose, onSave, onDelete }) {
 }
 
 export function BudgetSheet({ budgets, onClose, onSave }) {
-  const [vals, setVals] = useState(() => Object.fromEntries(EXPENSE_CATS.map((c) => [c.id, budgets && budgets[c.id] ? Number(budgets[c.id]).toLocaleString('tr-TR') : ''])));
+  const [vals, setVals] = useState(() => Object.fromEntries(catsFor('gider').map((c) => [c.id, budgets && budgets[c.id] ? Number(budgets[c.id]).toLocaleString('tr-TR') : ''])));
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
     e.preventDefault();
@@ -461,7 +536,7 @@ export function BudgetSheet({ budgets, onClose, onSave }) {
     <Sheet title="Aylık bütçe" onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p className="hint" style={{ margin: 0 }}>Sınır koymak istediğin kategorilere aylık tutar yaz; boş bırakılanlar takip edilmez. %80'e gelince ve aşınca uyarı görürsün.</p>
-        {EXPENSE_CATS.filter((c) => c.id !== 'diger').map((c) => (
+        {catsFor('gider').filter((c) => c.id !== 'diger').map((c) => (
           <div key={c.id} className="wl-brow">
             <label htmlFor={'b-' + c.id}>{c.emoji} {c.label}</label>
             <input id={'b-' + c.id} type="text" inputMode="decimal" value={vals[c.id]} placeholder="—" onChange={(e) => setVals({ ...vals, [c.id]: e.target.value })} />

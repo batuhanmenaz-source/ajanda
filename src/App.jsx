@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { TodayScreen, CalendarScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
 import { WorkScreen, PrivateScreen, WORK_TABS, PRIVATE_TABS } from './areas.jsx';
-import { MoneySheet, FixedSheet, BudgetSheet, ReceiptScanSheet } from './wallet.jsx';
-import { nextFixedDue } from './money.js';
+import { MoneySheet, FixedSheet, BudgetSheet, ReceiptScanSheet, CatsSheet } from './wallet.jsx';
+import { nextFixedDue, setCustomCats } from './money.js';
 import { Sheet } from './ui.jsx';
 import { RevenueSheet, TargetSheet, marketplaceOrder, tl } from './revenue.jsx';
 import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet, YarimToggle, AlertDefaultsSheet, GoogleEventSheet } from './sheets.jsx';
@@ -61,6 +61,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const [scope, setScopeState] = useState(() => { try { return localStorage.getItem('ajanda-scope') || 'tum'; } catch { return 'tum'; } });
   const setScope = (v) => { setScopeState(v); try { localStorage.setItem('ajanda-scope', v); } catch { /* yok say */ } };
   const [budgets, setBudgets] = useState({});
+  // Kendi gelir/gider kategorilerin (money.js'e de bildirilir; ilk çizimden önce)
+  const [moneyCats, setMoneyCatsState] = useState([]);
+  const setMoneyCats = (l) => { setCustomCats(l); setMoneyCatsState(l || []); };
   // Türlere göre varsayılan hatırlatmalar (Hesap → Varsayılan hatırlatmalar)
   const [alertDefs, setAlertDefs] = useState(() => mergeAlertDefaults(null));
   const [sheet, setSheet] = useState(null);
@@ -185,7 +188,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setMoneyCats(s.money_cats || []); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -327,6 +330,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     else if (/yarim_items|memories|yarim_prefs|anilar/.test(msg)) say('Kaydedilemedi: Yarim bölümü için Supabase\'de 15 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/alerts|remind_at|aux_event_id|alert_defaults/.test(msg)) say('Kaydedilemedi: Hatırlatma seçimleri için Supabase\'de 14 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/receipt_path|fisler|bucket/i.test(msg)) say('Kaydedilemedi: Fiş fotoğrafı için Supabase\'de 12 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/money_cats/.test(msg)) say('Kaydedilemedi: Kendi kategorilerin için Supabase\'de 19 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/money|scope|budgets/.test(msg) && /schema cache|does not exist|relation|column/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 11 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/contacts|collabs|special_dates|list_items|lists|habits|habit_logs/.test(msg) && /schema cache|does not exist|relation/.test(msg)) say('Kaydedilemedi: Bu özellik için Supabase\'de 10 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/location_geo/.test(msg)) say('Kaydedilemedi: Harita konumu için Supabase\'de 08 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -587,6 +591,15 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     const sameMonth = due.getFullYear() === t.getFullYear() && due.getMonth() === t.getMonth();
     const row = await saveRow('money', { kind: f.kind || 'gider', amount: f.amount, category: f.category, note: f.title, method: f.method || null, fixed_id: f.id, day: toDateInput(sameMonth ? t : due) });
     if (row) say(f.title + (f.kind === 'gelir' ? ' geldi olarak işaretlendi' : ' ödendi olarak işaretlendi') + ' ✓');
+  };
+  const saveMoneyCats = async (list) => {
+    try { const s2 = await store.saveSettings({ money_cats: list }); setMoneyCats(s2.money_cats || list); return true; } catch (e) { fail(e); return false; }
+  };
+  const addMoneyCat = async (c) => {
+    const id = 'c_' + Date.now().toString(36);
+    const ok = await saveMoneyCats([...moneyCats, { id, label: c.label, emoji: c.emoji, kind: c.kind }]);
+    if (ok) { say(c.emoji + ' ' + c.label + ' eklendi'); return id; }
+    return null;
   };
   const saveBudgets = async (b) => {
     try { const s2 = await store.saveSettings({ budgets: b }); setBudgets(s2.budgets || b); setSheet(null); say('Bütçe kaydedildi'); }
@@ -851,6 +864,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openMoney: (m) => setSheet({ kind: 'money', item: m }),
     openFixed: (f) => setSheet({ kind: 'fixed', item: f }),
     openBudget: () => setSheet({ kind: 'budget' }),
+    openCats: () => setSheet({ kind: 'cats' }),
     payFixed, scanReceipt, exportWallet, exportRevenue,
     toggleHabit, addListItems, toggleListItem, deleteListItem, clearListDone, addWeeklySummaryReminder,
     toggleTask, addTask, deleteTask, saveDaily
@@ -1063,9 +1077,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         onSave={(f) => saveRow('yarim_items', f, f.kind === 'hediye' ? 'Hediye fikri kaydedildi 🎁' : f.kind === 'plan' ? 'Kaydedildi ✨' : 'Kaydedildi 💗')}
         onDelete={(x) => deleteRow('yarim_items', x, '"' + x.title + '" silinsin mi?')} onCalendar={planToCalendar} />}
       {sheet && sheet.kind === 'money' && <MoneySheet initial={sheet.item} onClose={() => setSheet(null)}
-        onSave={saveMoney} onDelete={deleteMoney} onScan={scanReceipt} getReceiptUrl={store.receiptUrl} />}
+        onSave={saveMoney} onDelete={deleteMoney} onScan={scanReceipt} getReceiptUrl={store.receiptUrl} onAddCat={addMoneyCat} />}
+      {sheet && sheet.kind === 'cats' && <CatsSheet cats={moneyCats} onClose={() => setSheet(null)} onSave={async (l) => { if (await saveMoneyCats(l)) { setSheet(null); say('Kategoriler kaydedildi'); } }} />}
       {sheet && sheet.kind === 'scan' && <ReceiptScanSheet file={sheet.file} onClose={() => setSheet(null)} onDone={(item) => setSheet({ kind: 'money', item })} />}
-      {sheet && sheet.kind === 'fixed' && <FixedSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveFixed} onDelete={deleteFixed} />}
+      {sheet && sheet.kind === 'fixed' && <FixedSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveFixed} onDelete={deleteFixed} onAddCat={addMoneyCat} />}
       {sheet && sheet.kind === 'budget' && <BudgetSheet budgets={budgets} onClose={() => setSheet(null)} onSave={saveBudgets} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'gevent' && <GoogleEventSheet ev={sheet.item} onClose={() => setSheet(null)} onConvert={(c) => setSheet({ kind: 'campaign', item: c })} />}

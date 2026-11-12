@@ -1001,3 +1001,16 @@ button.pill { min-height: 32px; }
   .subtabs.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; overflow: visible; margin: 0; padding: 0; }
   .subtabs.grid3 button { min-height: 36px; padding: 0 6px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
 }
+/* Cüzdan: kendi kategorilerin */
+.wl-catchip.add { border-style: dashed; color: var(--accent); background: transparent; }
+.wl-newcat { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.wl-emojis { display: flex; flex-wrap: wrap; gap: 4px; }
+.wl-emojis button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid transparent; background: transparent; font-size: 18px; cursor: pointer; }
+.wl-emojis button.on { border-color: var(--accent); background: var(--surface); }
+.wl-newcat-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.wl-newcat-row input { flex: 1 1 140px; min-width: 0; }
+.wl-newcat-em { font-size: 22px; width: 32px; text-align: center; }
+.wl-catrow { display: flex; align-items: center; gap: 8px; }
+.wl-catrow select { width: 64px; flex: 0 0 auto; font-size: 18px; }
+.wl-catrow input { flex: 1 1 auto; min-width: 0; }
+.linkbtn.danger { color: var(--danger); }
