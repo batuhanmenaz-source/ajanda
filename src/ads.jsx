@@ -159,7 +159,7 @@ export function AdsTodayCard({ data, now, actions, onAll }) {
   const live = all.filter((c) => adStatus(c, now) === 'live').sort((a, b) => adEnd(a) - adEnd(b));
   const today = all.filter((c) => adStatus(c, now) === 'soon' && adStart(c) < addDays(startOfDay(now), 1)).sort((a, b) => adStart(a) - adStart(b));
   if (!live.length && !today.length) return null;
-  const meta = [live.length ? live.length + ' yayında' : '', today.length ? today.length + ' bugün başlıyor' : ''].filter(Boolean).join(', ');
+  const meta = [live.length ? live.length + ' yayında' : '', today.length ? today.length + ' bugün başlıyor' : ''].filter(Boolean).join(' · ');
   const list = [...live, ...today];
   return (
     <Section title="Influencer reklamları" meta={meta} action={<button type="button" className="linkbtn" onClick={onAll}>Tümü</button>}>

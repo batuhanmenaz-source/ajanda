@@ -101,7 +101,7 @@ export function FollowupsMini({ data, now, actions, onAll, mp, limit = 3 }) {
   if (!open.length) return null;
   const oldest = waitDays(open[0], now);
   return (
-    <Section title="Bekleyenler" meta={open.length + ' iş, en eskisi ' + oldest + ' gün'} action={onAll ? <button type="button" className="linkbtn" onClick={onAll}>Tümü</button> : null}>
+    <Section title={'Bekleyenler · ' + open.length} meta={'en eskisi ' + oldest + ' gün'} action={onAll ? <button type="button" className="linkbtn" onClick={onAll}>Tümü</button> : null}>
       <div className="card list">
         {open.slice(0, limit).map((f) => <FollowRow key={f.id} f={f} now={now} actions={actions} />)}
       </div>
