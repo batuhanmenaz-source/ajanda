@@ -160,7 +160,8 @@ export async function ajandaCalendarId() {
 export async function listEvents(from, to) {
   const items = await calendarList();
   const ajandaId = await ajandaCalendarId();
-  const cals = items.filter((c) => c.selected && c.id !== ajandaId && !c.hidden);
+  // Uygulamanın kendi yazdığı "Ajanda" takvimleri (eski kopyalar dahil) tekrar gösterilmez
+  const cals = items.filter((c) => c.selected && c.id !== ajandaId && c.summary !== AJANDA_CAL_NAME && !c.hidden);
   const results = await Promise.all(cals.map(async (c) => {
     const q = new URLSearchParams({
       timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '250'

@@ -768,21 +768,48 @@ function SelectedDay({ d, items, now, actions, google }) {
 
 function WeekView({ data, events, google, now, actions, day, setDay, pass }) {
   const ws = weekStart(day);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+  const today = startOfDay(now);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i)).map((d) => {
+    const items = dayItems(d, { data, events }).filter(pass);
+    const bars = [...new Map(items.filter((e) => e.kind === 'campaign' && e.time === 'Tüm gün').map((e) => [e.item.id, e.item && e.item.marketplace ? mpColor(e.item.marketplace) : e.color])).values()];
+    return { d, items, open: items.filter((e) => !e.done).length, bars };
+  });
+  const sel = days.find((x) => sameDay(x.d, day)) || days[0];
+  const later = days.filter((x) => x.d > sel.d);
   const isThisWeek = sameDay(ws, weekStart(now));
   return (
     <>
       <div className="week-nav">
         <button type="button" className="iconbtn" aria-label="Önceki hafta" onClick={() => setDay(addDays(day, -7))}><Icon.Left /></button>
-        <span className="lbl">{rangeLabel(days[0], days[6])}</span>
+        <span className="lbl">{rangeLabel(days[0].d, days[6].d)}</span>
         <div style={{ display: 'flex', gap: 4 }}>
-          {!isThisWeek ? <button type="button" className="btn" onClick={() => setDay(startOfDay(now))}>Bugün</button> : null}
+          {!sameDay(day, today) ? <button type="button" className="btn" onClick={() => setDay(today)}>Bugün</button> : null}
           <button type="button" className="iconbtn" aria-label="Sonraki hafta" onClick={() => setDay(addDays(day, 7))}><Icon.Right /></button>
         </div>
       </div>
-      <div className="cal-days">
-        {days.map((d) => <DayCard key={d.toISOString()} d={d} items={dayItems(d, { data, events }).filter(pass)} now={now} actions={actions} google={google} />)}
+      <div className="wk-strip" role="tablist" aria-label="Haftanın günleri">
+        {days.map(({ d, open, items, bars }) => {
+          const on = sameDay(d, sel.d), isToday = sameDay(d, today), past = d < today;
+          return (
+            <button key={d.toISOString()} type="button" role="tab" aria-selected={on} onClick={() => setDay(d)}
+              className={'wk-day' + (on ? ' sel' : '') + (isToday ? ' today' : '') + (past ? ' past' : '')}
+              aria-label={fmtLong(d) + ', ' + (open ? open + ' açık kayıt' : 'açık kayıt yok')}>
+              <span className="wk-wd">{isToday ? 'Bugün' : WEEKDAYS_SHORT[d.getDay()]}</span>
+              <span className="wk-num">{d.getDate()}</span>
+              <span className="wk-bars">{bars.slice(0, 3).map((c, i) => <span key={i} style={{ background: c }} />)}</span>
+              <span className={'wk-count' + (open ? '' : ' zero')}>{open ? open : items.length ? '✓' : '·'}</span>
+            </button>
+          );
+        })}
       </div>
+      <SelectedDay d={sel.d} items={sel.items} now={now} actions={actions} google={google} />
+      {later.length ? (
+        <Section title={isThisWeek && sameDay(sel.d, today) ? 'Haftanın kalanı' : 'Sonraki günler'}>
+          <div className="cal-days">
+            {later.map(({ d, items }) => <DayCard key={d.toISOString()} d={d} items={items} now={now} actions={actions} google={google} />)}
+          </div>
+        </Section>
+      ) : null}
     </>
   );
 }
