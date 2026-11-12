@@ -954,3 +954,5 @@ button.pill { min-height: 32px; }
 @media (min-width: 1100px) { .adt-grid:not(.one) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .adt-tile.live .adt-state { color: #0B6E7E; }
 .adt-grid > .adt-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.camp-grid { display: flex; flex-direction: column; gap: 8px; }
+.section.toned .camp-grid > .card.camp { border-left: 3px solid var(--tone); }

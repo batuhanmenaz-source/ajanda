@@ -490,7 +490,14 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
   const undated = open(data.reminders).filter((r) => !r.due_at);
   const yarimToday = [...allData.reminders, ...allData.calls].filter((x) => x.for_yarim && !x.done && x.due_at && sameDay(new Date(x.due_at), today));
   const gToday = (events || []).filter((e) => (e.allDay ? today >= startOfDay(e.start) && today <= startOfDay(e.end) : sameDay(e.start, today)));
-  const camps = data.campaigns.filter((c) => c.kind !== 'etkinlik').filter((c) => { const s = campaignStatus(c, now); return s.key === 'live' || (s.key === 'soon' && daysBetween(today, fromDateInput(c.start_date)) <= 14); }).slice(0, 4);
+  // Yayındakiler önce (en erken biten), sonra 30 gün içinde başlayacaklar
+  const campsAll = data.campaigns.filter((c) => c.kind !== 'etkinlik')
+    .map((c) => ({ c, st: campaignStatus(c, now) }))
+    .filter(({ c, st }) => st.key === 'live' || (st.key === 'soon' && daysBetween(today, fromDateInput(c.start_date)) <= 30))
+    .sort((a, b) => (a.st.key === 'live' ? 0 : 1) - (b.st.key === 'live' ? 0 : 1) || (a.st.key === 'live' ? a.c.end_date.localeCompare(b.c.end_date) : a.c.start_date.localeCompare(b.c.start_date)))
+    .map((x) => x.c);
+  const camps = campsAll.slice(0, 6);
+  const liveCamps = campsAll.filter((c) => campaignStatus(c, now).key === 'live').length;
 
   const upcoming = [
     ...open(rem).map((r) => ({ t: new Date(r.due_at), title: r.title, meta: r.marketplace, kind: 'rem' })),
@@ -612,8 +619,9 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
 
         <div className="tslot" style={{ order: 5 }}>
         {scope !== 'ozel' ? (
-          <Section title="Kampanyalar" tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
-            {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />) : <div className="card"><p className="empty">Önümüzdeki 2 haftada kampanya yok.</p></div>}
+          <Section title={'Kampanyalar' + (campsAll.length ? ' · ' + (liveCamps ? liveCamps + ' aktif' : '') + (liveCamps && campsAll.length > liveCamps ? ', ' : '') + (campsAll.length > liveCamps ? (campsAll.length - liveCamps) + ' yakında' : '') : '')} tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
+            {camps.length ? <div className="camp-grid">{camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)}</div> : <div className="card"><p className="empty">Önümüzdeki 30 günde kampanya yok.</p></div>}
+            {campsAll.length > camps.length ? <button type="button" className="linkbtn" style={{ alignSelf: 'center', padding: '4px 0' }} onClick={() => goTab('kampanya')}>+{campsAll.length - camps.length} kampanya daha</button> : null}
           </Section>
         ) : null}
         </div>
