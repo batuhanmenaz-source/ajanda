@@ -926,3 +926,10 @@ button.pill { min-height: 32px; }
   .hero-time { font-size: 28px; border-right: 0; padding-right: 0; }
   .hero-after .ha:nth-child(n+2) { display: none; }
 }
+/* Bugün: sütunlar; telefonda tek akışta önem sırası */
+.today-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.tslot:empty { display: none; }
+@media (max-width: 759px) {
+  .today-grid { display: flex; flex-direction: column; gap: 20px; }
+  .today-grid > .today-col { display: contents; }
+}

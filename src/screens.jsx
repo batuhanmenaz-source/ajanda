@@ -538,9 +538,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
     </div>
     {revReady && scope !== 'ozel' ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} /> : null}
     {showSummary ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
-    <div className="grid-2">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="grid-2 today-grid">
+      <div className="today-col">
 
+        <div className="tslot" style={{ order: 1 }}>
         {lateCount ? (
           <Section title="Gecikenler" meta={lateCount + ' iş'} tone="#C92A2A" tint="#FFF5F5">
             <div className="card list">
@@ -549,17 +550,27 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
             </div>
           </Section>
         ) : null}
+        </div>
 
+        <div className="tslot" style={{ order: 3 }}>
         <Section title="Hatırlatmalar" meta={open(rem).length + ' açık'} tone={SRC_COLORS['Hatırlatma']}>
           <div className="card list">
             {rem.length ? rem.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />) : <p className="empty">Bugün için hatırlatma yok.</p>}
           </div>
         </Section>
+        </div>
 
+        <div className="tslot" style={{ order: 6 }}>
         {scope !== 'ozel' ? <AdsTodayCard data={rawData} now={now} actions={actions} onAll={() => goTab('influencer')} /> : null}
+        </div>
+        <div className="tslot" style={{ order: 7 }}>
         {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
+        </div>
+        <div className="tslot" style={{ order: 9 }}>
         {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
+        </div>
 
+        <div className="tslot" style={{ order: 10 }}>
         {undated.length ? (
           <Section title="Tarihsiz işler" meta={undated.length + ' iş'} tone="#868E96">
             <div className="card list">
@@ -567,10 +578,14 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
             </div>
           </Section>
         ) : null}
+        </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div className="today-col">
+        <div className="tslot" style={{ order: 2 }}>
         {missedEl}
+        </div>
+        <div className="tslot" style={{ order: 8 }}>
         <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
           <div className="card list">
             {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
@@ -585,18 +600,23 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
               )) : <p className="empty">{google === 'off' ? 'Örnek modda Google Takvim kapalı.' : 'Bugün takviminde etkinlik yok.'}</p>}
           </div>
         </Section>
+        </div>
 
+        <div className="tslot" style={{ order: 4 }}>
         <Section title="Aranacaklar" meta={open(calls).length + ' açık'} tone={SRC_COLORS.Arama}>
           <div className="card list">
             {calls.length ? calls.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />) : <p className="empty">Bugün aranacak kimse yok.</p>}
           </div>
         </Section>
+        </div>
 
+        <div className="tslot" style={{ order: 5 }}>
         {scope !== 'ozel' ? (
           <Section title="Kampanyalar" tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
             {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />) : <div className="card"><p className="empty">Önümüzdeki 2 haftada kampanya yok.</p></div>}
           </Section>
         ) : null}
+        </div>
       </div>
     </div>
     <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} />
