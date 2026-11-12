@@ -930,6 +930,7 @@ button.pill { min-height: 32px; }
 .today-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .tslot:empty { display: none; }
 @media (max-width: 759px) {
-  .today-grid { display: flex; flex-direction: column; gap: 20px; }
+  .today-grid { display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
+  .today-grid .tslot { min-width: 0; }
   .today-grid > .today-col { display: contents; }
 }
