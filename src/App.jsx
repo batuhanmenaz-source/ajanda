@@ -6,7 +6,7 @@ import { MoneySheet, FixedSheet, BudgetSheet, ReceiptScanSheet } from './wallet.
 import { nextFixedDue } from './money.js';
 import { Sheet } from './ui.jsx';
 import { RevenueSheet, TargetSheet, marketplaceOrder, tl } from './revenue.jsx';
-import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet, YarimToggle, AlertDefaultsSheet } from './sheets.jsx';
+import { QuickAdd, ItemSheet, NoteSheet, CampaignSheet, AccountSheet, YarimSettingsSheet, MissedSetupSheet, YarimToggle, AlertDefaultsSheet, GoogleEventSheet } from './sheets.jsx';
 import { alertDefaults as mergeAlertDefaults } from './alerts.js';
 import { MemorySheet, YarimItemSheet, nextSaturdayEvening, randomSurpriseDate, pickSurpriseIdea, SURPRISE_PREFIX } from './yarim.jsx';
 import { specialUpcoming, specialLabel } from './special.js';
@@ -170,6 +170,16 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const viewData = useMemo(() => (yarimHidden
     ? { ...data, reminders: data.reminders.filter((r) => !r.for_yarim), calls: data.calls.filter((c) => !c.for_yarim), special_dates: data.special_dates.filter((x) => !x.for_yarim) }
     : data), [data, yarimHidden]);
+  // Kampanyaya çevrilmiş Google etkinlikleri (aynı isim, kesişen tarih) ikinci kez gösterilmez
+  const visibleEvents = useMemo(() => {
+    const norm = (x) => (x || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').trim();
+    const camps = (data.campaigns || []).map((c) => ({ n: norm(c.name), s: c.start_date, e: c.end_date }));
+    if (!camps.length) return events;
+    return (events || []).filter((ev) => {
+      const n = norm(ev.title), s0 = toDateInput(ev.start), e0 = toDateInput(ev.end || ev.start);
+      return !camps.some((c) => c.n === n && c.s <= e0 && c.e >= s0);
+    });
+  }, [events, data.campaigns]);
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -824,6 +834,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     },
     newItemOn: (d) => { const x = new Date(d); x.setHours(9, 0, 0, 0); setSheet({ kind: 'item', item: { kind: 'reminder', due_at: x.toISOString() } }); },
     openCampaign: (c) => setSheet({ kind: 'campaign', item: c }),
+    openGoogleEvent: (e) => setSheet({ kind: 'gevent', item: e }),
     newEventOn: (d) => setSheet({ kind: 'campaign', item: { start_date: toDateInput(d), end_date: toDateInput(d), kind: 'etkinlik' } }),
     newCampaignOn: (d) => setSheet({ kind: 'campaign', item: { start_date: toDateInput(d), end_date: toDateInput(d), kind: 'kampanya' } }),
     newAdOn: (d) => { const x = new Date(d); x.setHours(10, 0, 0, 0); setSheet({ kind: 'collab', item: { start_at: x.toISOString() } }); },
@@ -1008,8 +1019,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} />}
-              {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} />}
+              {tab === 'takvim' && <CalendarScreen data={viewData} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} />}
               {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden}
                 yarim={{ seg: yarimSeg, setSeg: setYarimSeg, love, prefs: yarimPrefs, photoUrl }} />}
@@ -1057,6 +1068,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'fixed' && <FixedSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveFixed} onDelete={deleteFixed} />}
       {sheet && sheet.kind === 'budget' && <BudgetSheet budgets={budgets} onClose={() => setSheet(null)} onSave={saveBudgets} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} alertDefaults={alertDefs} />}
+      {sheet && sheet.kind === 'gevent' && <GoogleEventSheet ev={sheet.item} onClose={() => setSheet(null)} onConvert={(c) => setSheet({ kind: 'campaign', item: c })} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'alertDefaults' && <AlertDefaultsSheet defaults={alertDefs} onClose={() => setSheet(null)} onSave={saveAlertDefaults} />}
       {sheet && sheet.kind === 'yarim' && (

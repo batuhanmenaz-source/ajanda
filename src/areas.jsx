@@ -7,12 +7,12 @@ import { WalletView } from './wallet.jsx';
 import { YarimPage } from './yarim.jsx';
 import { FollowupsView, ReportsView } from './work.jsx';
 
-export const WORK_TABS = [['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['bekleyenler', 'Bekleyenler'], ['notlar', 'Pazaryeri notları'], ['influencer', 'Influencer reklamları'], ['raporlar', 'Raporlar']];
+export const WORK_TABS = [['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['bekleyenler', 'Bekleyenler'], ['notlar', 'Notlar'], ['influencer', 'Influencer'], ['raporlar', 'Raporlar']];
 export const PRIVATE_TABS = [['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
-export function SubTabs({ tabs, value, onChange, label }) {
+export function SubTabs({ tabs, value, onChange, label, grid }) {
   return (
-    <div className="subtabs" role="tablist" aria-label={label}>
+    <div className={'subtabs' + (grid ? ' grid3' : '')} role="tablist" aria-label={label}>
       {tabs.map(([id, l]) => (
         <button key={id} type="button" role="tab" aria-selected={value === id} className={value === id ? 'on' : ''} onClick={() => onChange(id)}>{l}</button>
       ))}
@@ -23,7 +23,7 @@ export function SubTabs({ tabs, value, onChange, label }) {
 export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" />
+      <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" grid />
       {seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} />
         : seg === 'bekleyenler' ? <FollowupsView data={data} now={now} actions={actions} />
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
@@ -39,7 +39,7 @@ export function PrivateScreen({ seg: seg0, setSeg, data, now, actions, budgets, 
   const seg = yarimHidden && seg0 === 'yarim' ? 'cuzdan' : seg0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <SubTabs tabs={tabs} value={seg} onChange={setSeg} label="Özel bölümler" />
+      <SubTabs tabs={tabs} value={seg} onChange={setSeg} label="Özel bölümler" grid />
       {seg === 'yarim' ? <YarimPage {...yarim} data={data} now={now} actions={actions} />
         : seg === 'listeler' ? <ListsView data={data} actions={actions} />
         : seg === 'aliskanlik' ? <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 760 }}><HabitsCard data={data} now={now} actions={actions} /><HabitHistory data={data} now={now} /></div>

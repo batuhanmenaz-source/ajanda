@@ -956,3 +956,48 @@ button.pill { min-height: 32px; }
 .adt-grid > .adt-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .camp-grid { display: flex; flex-direction: column; gap: 8px; }
 .section.toned .camp-grid > .card.camp { border-left: 3px solid var(--tone); }
+.hero-camp { --hero: #B8410A; }
+.hero-inf { --hero: #0B6E7E; }
+.hero-event { --hero: #862E9C; }
+.hero-special { --hero: #8A6400; }
+/* Ciro: girilmeyen pazaryerleri tek satır */
+.gl-missing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.gl-miss { display: inline-flex; align-items: center; gap: 5px; border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; color: var(--ink-2); cursor: pointer; }
+.gl-miss .dot { width: 7px; height: 7px; border-radius: 50%; }
+.gl-miss:hover { border-color: var(--accent); color: var(--accent); }
+/* Ciro grafiği: kıyas çizgisi, altı açık ton, hafta sonu zemini */
+.rv-bars { position: relative; }
+.rv-col.we { background: #F1EFEA; }
+.rv-col.we:hover, .rv-col.we.on { background: var(--accent-soft); }
+.rv-col.low .rv-bar { background: #9AA8E6; }
+.rv-col.on.low .rv-bar { background: #6F80D6; }
+.rv-ref { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px dashed #868E96; pointer-events: none; z-index: 1; }
+.rv-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 11px; color: var(--muted); }
+.rv-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.rv-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.rv-legend i.hi { background: var(--accent); }
+.rv-legend i.lo { background: #9AA8E6; }
+.rv-legend i.we { background: #F1EFEA; border: 1px solid var(--line); }
+.rv-legend i.ln { height: 0; border-top: 1.5px dashed #868E96; border-radius: 0; width: 14px; }
+/* Bugün: aylık hedef çubuğu */
+.gl-target { display: flex; flex-direction: column; gap: 5px; }
+.gl-target-top { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.gl-target-top b { font-size: 13px; color: var(--ink); }
+.gl-target-top .muted { margin-left: auto; font-variant-numeric: tabular-nums; }
+.gl-target-bar { position: relative; height: 6px; border-radius: 999px; background: var(--track); }
+.gl-target-bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+.gl-target-bar > span.ok { background: var(--green); }
+.gl-target-bar > span.behind { background: #E67700; }
+.gl-target-bar > i { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink-2); border-radius: 1px; }
+.gev { display: flex; flex-direction: column; gap: 6px; }
+.gev-t { font-family: var(--display); font-size: 20px; font-weight: 700; line-height: 1.25; }
+.gev-m { font-size: 14px; color: var(--ink-2); }
+.done-fold { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; padding: 10px 14px; font: inherit; font-size: 13px; color: var(--muted); text-align: left; cursor: pointer; }
+.done-fold:hover { color: var(--ink-2); }
+.done-ic { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--green-soft); color: var(--green); font-size: 11px; font-weight: 700; }
+.done-chev { margin-left: auto; }
+/* Alt sekmeler: telefonda kaydırma yerine 3'lü ızgara, hepsi görünür */
+@media (max-width: 899px) {
+  .subtabs.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; overflow: visible; margin: 0; padding: 0; }
+  .subtabs.grid3 button { min-height: 36px; padding: 0 6px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+}

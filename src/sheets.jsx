@@ -819,3 +819,39 @@ export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefr
     </Sheet>
   );
 }
+
+// Google Takvim etkinliği: ayrıntı + kampanyaya çevirme
+const MP_ALIASES = [['hepsiburada', 'Hepsiburada'], ['hb ', 'Hepsiburada'], ['trendyol', 'Trendyol'], ['ty ', 'Trendyol'], ['mclub', 'MCLUB'], ['amazon', 'Amazon'], ['n11', 'N11'], ['boyner', 'Boyner'], ['pazarama', 'Pazarama'], ['beymen', 'Beymen'], ['idefix', 'İdefix'], ['i̇defix', 'İdefix']];
+export function guessMarketplace(text) {
+  const t = ' ' + (text || '').toLocaleLowerCase('tr-TR') + ' ';
+  const hit = MP_ALIASES.find(([k]) => t.includes(k.startsWith(' ') || k.endsWith(' ') ? ' ' + k.trim() + ' ' : k));
+  const name = hit ? hit[1] : '';
+  return MARKETPLACES.some((m) => m.name === name) ? name : '';
+}
+export function GoogleEventSheet({ ev, onClose, onConvert }) {
+  const s = ev.start, e = ev.end;
+  const multi = ev.allDay && toDateInput(s) !== toDateInput(e);
+  const whenTxt = ev.allDay ? (multi ? rangeLabel(s, e) : dayLabel(s) + ', tüm gün') : whenLabel(s) + (e ? '–' + toTimeInput(e) : '');
+  const mp = guessMarketplace(ev.title);
+  return (
+    <Sheet title="Google Takvim etkinliği" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="gev">
+          <span className="gev-t">{ev.title}</span>
+          <span className="gev-m">{whenTxt}</span>
+          <span className="tag" style={{ fontSize: 13, color: 'var(--ink-2)' }}><span className="dot" style={{ background: ev.color }} />{ev.calendar}</span>
+        </div>
+        <div className="setup-box">
+          <b>Kampanyaya çevir</b>
+          <span className="hint" style={{ margin: 0 }}>Bu etkinlik uygulamada kampanya olarak takip edilsin: hazırlık adımları, hatırlatmalar, Bugün sayfası ve raporlar.{mp ? ' Pazaryeri ' + mp + ' olarak önerildi.' : ''} İsmi aynı bıraktığında Google'daki kopyası uygulamada ayrıca gösterilmez.</span>
+          <button type="button" className="btn primary big" onClick={() => onConvert({
+            name: ev.title, marketplace: mp, kind: 'kampanya',
+            start_date: toDateInput(s), end_date: toDateInput(e || s),
+            start_time: ev.allDay ? null : toTimeInput(s), end_time: ev.allDay || !e ? null : toTimeInput(e)
+          })}>Kampanyaya çevir</button>
+        </div>
+        {ev.link ? <a className="linkbtn" href={ev.link} target="_blank" rel="noopener noreferrer" style={{ alignSelf: 'flex-start' }}>Google Takvim'de aç ↗</a> : null}
+      </div>
+    </Sheet>
+  );
+}

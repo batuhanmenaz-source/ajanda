@@ -82,8 +82,10 @@ export function RevenueGlance({ revenue, now, actions, order }) {
   const cur = dayStat(revenue, day);
   const wk = dayStat(revenue, toDateInput(addDays(fromDateInput(day), -7)));
   const prev = dayStat(revenue, toDateInput(addDays(fromDateInput(day), -1)));
-  const mps = (order || MARKETPLACES.map((m) => m.name)).filter((n) => cur.by[n] || wk.by[n]);
-  mps.sort((a, b) => ((cur.by[b] || {}).v || 0) - ((cur.by[a] || {}).v || 0));
+  const known = (order || MARKETPLACES.map((m) => m.name)).filter((n) => cur.by[n] || wk.by[n]);
+  const mps = known.filter((n) => cur.by[n]).sort((a, b) => cur.by[b].v - cur.by[a].v);
+  // Geçen hafta girilmiş ama bu gün girilmemiş pazaryerleri: küçük satır
+  const missing = known.filter((n) => !cur.by[n]);
   // Her pazaryeri için son 7 gün (seçili gün dahil)
   const last7 = Array.from({ length: 7 }, (_, i) => toDateInput(addDays(fromDateInput(day), i - 6)));
   const spark = (mp) => {
@@ -130,6 +132,12 @@ export function RevenueGlance({ revenue, now, actions, order }) {
               );
             })}
           </div>
+          {missing.length ? (
+            <div className="gl-missing">
+              <span className="muted">Girilmedi:</span>
+              {missing.map((n) => <button key={n} type="button" className="gl-miss" onClick={() => actions.openRevenue(day)}><span className="dot" style={{ background: mpColor(n) }} />{n}</button>)}
+            </div>
+          ) : null}
           <span className="hint">Yüzdeler geçen haftanın aynı gününe göre · çubuklar son 7 gün</span>
           <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => actions.openRevenue(day)}>Bu günü düzenle</button>
         </>
@@ -144,7 +152,7 @@ export function RevenueGlance({ revenue, now, actions, order }) {
 }
 
 // Bugün sayfası için kısa kart
-export function RevenueMini({ revenue, now, actions, onOpen }) {
+export function RevenueMini({ revenue, now, actions, onOpen, target }) {
   const day = glanceDefaultDay(revenue, now);
   const y = toDateInput(addDays(startOfDay(now), -1));
   const cur = dayStat(revenue, day);
@@ -164,6 +172,20 @@ export function RevenueMini({ revenue, now, actions, onOpen }) {
         <span className="rv-k">{day === y ? 'Dünkü ciro · ' + fmtShort(fromDateInput(day)) : 'Son girilen ciro · ' + relLabel(day, now)}</span>
         <span className="gl-mini-total">{tl(cur.total)} <Delta v={dlt(cur.total, wk.total)} small /></span>
       </span>
+      {Number(target) > 0 ? (() => {
+        const mk = toDateInput(startOfDay(now)).slice(0, 7);
+        const mt = revenue.filter((r) => r.day.startsWith(mk)).reduce((a, r) => a + Number(r.amount), 0);
+        const pctv = mt / Number(target);
+        const t0 = startOfDay(now);
+        const dimv = new Date(t0.getFullYear(), t0.getMonth() + 1, 0).getDate();
+        const expect = (t0.getDate() - 1) / dimv;
+        return (
+          <span className="gl-target">
+            <span className="gl-target-top"><span>Aylık hedef</span><b>%{Math.round(pctv * 100)}</b><span className="muted">{tlShort(mt)} / {tlShort(Number(target))}</span></span>
+            <span className="gl-target-bar"><span style={{ width: Math.min(100, pctv * 100) + '%' }} className={pctv >= expect ? 'ok' : 'behind'} /><i style={{ left: Math.min(100, expect * 100) + '%' }} title="Bugüne kadar olması gereken" /></span>
+          </span>
+        );
+      })() : null}
       <span className="gl-mini-row">
         {top.slice(0, 6).map(([n, x]) => {
           const w = wk.by[n];
@@ -234,6 +256,9 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
     return { d, key, v: byDay[key] ? byDay[key].total : 0, future: d > today };
   });
   const maxV = Math.max(1, ...days.map((x) => x.v));
+  // Kıyas çizgisi: hedef varsa günlük hedef, yoksa ayın günlük ortalaması
+  const ref = (Number(target) || 0) > 0 ? Number(target) / dim : avg;
+  const refLabel = (Number(target) || 0) > 0 ? 'günlük hedef' : 'günlük ortalama';
   const hoverDay = hover ? days.find((x) => x.key === hover) : null;
 
   const list = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
@@ -301,8 +326,9 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
         </div>
         <div className="card rv-chart" onMouseLeave={() => setHover(null)}>
           <div className="rv-bars" role="list" aria-label="Günlük ciro grafiği">
+            {ref > 0 ? <span className="rv-ref" style={{ bottom: Math.min(100, (ref / maxV) * 100) + '%' }} aria-hidden="true" /> : null}
             {days.map((x) => (
-              <button type="button" role="listitem" key={x.key} className={'rv-col' + (hover === x.key ? ' on' : '') + (x.future ? ' future' : '')}
+              <button type="button" role="listitem" key={x.key} className={'rv-col' + (hover === x.key ? ' on' : '') + (x.future ? ' future' : '') + ([0, 6].includes(x.d.getDay()) ? ' we' : '') + (x.v && ref > 0 && x.v < ref ? ' low' : '')}
                 onMouseEnter={() => setHover(x.key)} onFocus={() => setHover(x.key)} onClick={() => setHover(x.key)}
                 aria-label={fmtLong(x.d) + ': ' + (x.v ? tl(x.v) : 'girilmedi')}>
                 <span className="rv-bar" style={{ height: x.v ? Math.max(3, (x.v / maxV) * 100) + '%' : 0 }} />
@@ -312,6 +338,14 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
           <div className="rv-axis" aria-hidden="true">
             <span>1</span><span>{Math.round(dim / 2)}</span><span>{dim}</span>
           </div>
+          {ref > 0 ? (
+            <div className="rv-legend">
+              <span><i className="hi" />{refLabel} üstü</span>
+              <span><i className="lo" />altı</span>
+              <span><i className="ln" />{refLabel} {tlShort(ref)}</span>
+              <span><i className="we" />hafta sonu</span>
+            </div>
+          ) : null}
         </div>
       </section>
 

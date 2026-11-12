@@ -71,7 +71,7 @@ function isLate(it, now) {
 export function dayItems(day, { data, events }) {
   const out = [];
   (events || []).filter((e) => (e.allDay ? day >= startOfDay(e.start) && day <= startOfDay(e.end) : sameDay(e.start, day))).forEach((e) =>
-    out.push({ key: 'g' + e.id + day.getDate(), time: e.allDay ? 'Tüm gün' : fmtTime(e.start), title: e.title, src: 'Google', color: SRC_COLORS.Google, sub: e.calendar })
+    out.push({ key: 'g' + e.id + day.getDate(), time: e.allDay ? 'Tüm gün' : fmtTime(e.start), title: e.title, src: 'Google', color: SRC_COLORS.Google, sub: e.calendar, kind: 'google', item: e })
   );
   data.reminders.filter((r) => r.due_at && sameDay(new Date(r.due_at), day)).forEach((r) =>
     out.push({ key: 'r' + r.id, time: fmtTime(new Date(r.due_at)), title: r.title + (r.for_yarim ? ' ❤️' : ''), src: r.for_yarim ? 'Yarim' : 'Hatırlatma', color: r.for_yarim ? SRC_COLORS.Yarim : SRC_COLORS['Hatırlatma'], sub: r.marketplace, loc: r.location, geo: r.location_geo, done: r.done, item: r, kind: 'reminder' })
@@ -472,8 +472,25 @@ export function MarketplacePanel({ name, data, now, actions }) {
   );
 }
 
+// Tamamlananlar listenin sonunda tek satıra katlanır
+function DoneFold({ items, render }) {
+  const [show, setShow] = useState(false);
+  const open = items.filter((x) => !x.done), done = items.filter((x) => x.done);
+  return (
+    <>
+      {open.map(render)}
+      {done.length ? (
+        <button type="button" className="done-fold" aria-expanded={show} onClick={() => setShow(!show)}>
+          <span className="done-ic" aria-hidden="true">✓</span>{done.length} tamamlandı<span className="done-chev" aria-hidden="true">{show ? '▴' : '▾'}</span>
+        </button>
+      ) : null}
+      {show ? done.map(render) : null}
+    </>
+  );
+}
+
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady }) {
+export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget }) {
   const allData = scopeData(rawData, scope);
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} contacts={allData.contacts} />;
   const [sumHidden, setSumHidden] = useState(false);
@@ -507,6 +524,19 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
   ].filter((x) => x.t >= now).sort((a, b) => a.t - b.t);
   const next = upcoming[0];
   const lateCount = lateR.length + lateC.length;
+  // Bugün saatli iş kalmadıysa: sonraki günlerin ilk işi (saatliler önce)
+  const later = useMemo(() => {
+    if (next) return null;
+    for (let i = 1; i <= 21; i++) {
+      const d = addDays(today, i);
+      const items = dayItems(d, { data: allData, events }).filter((e) => !e.done);
+      const timed = items.find((e) => e.time !== 'Tüm gün');
+      const pick = timed || items[0];
+      if (pick) return { d, e: pick };
+    }
+    return null;
+  }, [next, allData, events, today.getTime()]);
+  const LATER_KIND = { 'Hatırlatma': 'rem', Not: 'rem', Arama: 'call', Google: 'google', Yarim: 'yarim', Kampanya: 'camp', Influencer: 'inf', Etkinlik: 'event', 'Özel gün': 'special' };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -517,7 +547,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
     ) : null}
     <WeatherCard now={now} />
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
-        <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : 'free')}>
+        <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : later ? (LATER_KIND[later.e.src] || 'free') : 'free')}>
           {next ? (
             <>
               <span className="k">{HERO_KIND[next.kind]} · {next.t - now < 60000 ? 'şimdi' : dur(next.t - now) + ' sonra'}</span>
@@ -534,16 +564,33 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
                 </span>
               ) : null}
             </>
+          ) : lateCount ? (
+            <>
+              <span className="k">Bugünlük saatli iş kalmadı</span>
+              <span className="t">{lateCount} geciken iş seni bekliyor</span>
+              <span className="m">Aşağıdaki Gecikenler listesinden kapatabilirsin.</span>
+            </>
+          ) : later ? (
+            <>
+              <span className="k">Bugünlük iş kalmadı · sıradaki {dayLabel(later.d, now).toLocaleLowerCase('tr-TR')}</span>
+              <span className="hero-main">
+                {later.e.time !== 'Tüm gün' ? <span className="hero-time">{later.e.time}</span> : null}
+                <span className="hero-txt">
+                  <span className="t">{later.e.title}</span>
+                  <span className="m">{later.e.src}{later.e.item && later.e.item.marketplace ? ' · ' + later.e.item.marketplace : ''}</span>
+                </span>
+              </span>
+            </>
           ) : (
             <>
-              <span className="t">Bugün için sırada bir şey yok</span>
-              <span className="m">{lateCount ? lateCount + ' geciken iş var' : 'Yeni bir şey eklemek için + butonunu kullan'}</span>
+              <span className="t">Önümüzdeki 3 haftada kayıt yok</span>
+              <span className="m">Yeni bir şey eklemek için + düğmesini kullan</span>
             </>
           )}
         </section>
         {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
-    {revReady && scope !== 'ozel' ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} /> : null}
+    {revReady && scope !== 'ozel' ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} target={revTarget} /> : null}
     {showSummary ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2 today-grid">
       <div className="today-col">
@@ -560,9 +607,9 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
 
         <div className="tslot" style={{ order: 3 }}>
-        <Section title="Hatırlatmalar" meta={open(rem).length + ' açık'} tone={SRC_COLORS['Hatırlatma']}>
+        <Section title="Hatırlatmalar" meta={open(rem).length ? open(rem).length + ' açık' : rem.length ? 'hepsi tamam' : ''} tone={SRC_COLORS['Hatırlatma']}>
           <div className="card list">
-            {rem.length ? rem.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />) : <p className="empty">Bugün için hatırlatma yok.</p>}
+            {rem.length ? <DoneFold items={rem} render={(r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />} /> : <p className="empty">Bugün için hatırlatma yok.</p>}
           </div>
         </Section>
         </div>
@@ -597,22 +644,22 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
           <div className="card list">
             {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
               : gToday.length ? gToday.map((e) => (
-                <div key={e.id} className="row timeline">
+                <button type="button" key={e.id} className="rowbtn row timeline" onClick={() => actions.openGoogleEvent(e)}>
                   <span className="tcol">{e.allDay ? 'Tüm gün' : fmtTime(e.start)}</span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
                     <span style={{ fontSize: 15 }}>{e.title}</span>
                     <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.calendar}</span>
-                  </div>
-                </div>
+                  </span>
+                </button>
               )) : <p className="empty">{google === 'off' ? 'Örnek modda Google Takvim kapalı.' : 'Bugün takviminde etkinlik yok.'}</p>}
           </div>
         </Section>
         </div>
 
         <div className="tslot" style={{ order: 4 }}>
-        <Section title="Aranacaklar" meta={open(calls).length + ' açık'} tone={SRC_COLORS.Arama}>
+        <Section title="Aranacaklar" meta={open(calls).length ? open(calls).length + ' açık' : calls.length ? 'hepsi tamam' : ''} tone={SRC_COLORS.Arama}>
           <div className="card list">
-            {calls.length ? calls.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />) : <p className="empty">Bugün aranacak kimse yok.</p>}
+            {calls.length ? <DoneFold items={calls} render={(c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />} /> : <p className="empty">Bugün aranacak kimse yok.</p>}
           </div>
         </Section>
         </div>
@@ -638,7 +685,7 @@ function DayItemRow({ e, actions, compact }) {
   return (
     <div className={'ditem' + (compact ? ' compact' : '')}>
       <button type="button" className={'rowbtn row timeline' + (compact ? ' compact' : '')}
-        onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : e.kind === 'special' ? actions.openSpecial(e.item) : e.kind === 'collab' ? actions.openCollab(e.item) : e.kind === 'note' ? actions.openNote(e.item) : null)}>
+        onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : e.kind === 'special' ? actions.openSpecial(e.item) : e.kind === 'collab' ? actions.openCollab(e.item) : e.kind === 'note' ? actions.openNote(e.item) : e.kind === 'google' ? actions.openGoogleEvent(e.item) : null)}>
         <span className="tcol">{e.time}</span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
