@@ -18,8 +18,8 @@ export function Section({ title, meta, action, children }) {
   return (
     <section className="section">
       <div className="section-head">
-        <h2>{title}</h2>
-        {action || (meta ? <span className="meta">{meta}</span> : null)}
+        <h2>{title}{meta ? <span className="meta">{meta}</span> : null}</h2>
+        {action || null}
       </div>
       {children}
     </section>

@@ -14,7 +14,7 @@ import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FollowupsMini } from './work.jsx';
-import { AdsTodayCard, adWho, adStart, adEnd } from './ads.jsx';
+import { AdsTodayCard, adWho, adStart, adEnd, dur } from './ads.jsx';
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -508,18 +508,31 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
     ) : null}
     <WeatherCard now={now} />
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
-        <section className="hero">
-          <span className="k">Sıradaki</span>
+        <section className={'nextup' + (next ? '' : ' empty')} aria-label="Sıradaki">
           {next ? (
             <>
-              <span className="t">{next.title}</span>
-              <span className="m">{fmtTime(next.t)}{next.meta ? ' · ' + next.meta : ''}</span>
+              <div className="nx-main">
+                <span className="nx-clock">{fmtTime(next.t)}</span>
+                <span className="nx-body">
+                  <span className="nx-k">Sıradaki · {next.t - now < 60000 ? 'şimdi' : dur(next.t - now) + ' sonra'}</span>
+                  <span className="nx-t">{next.title}</span>
+                  {next.meta ? <span className="nx-m">{next.meta}</span> : null}
+                </span>
+              </div>
+              {upcoming.length > 1 ? (
+                <ol className="nx-after" aria-label="Ardından">
+                  {upcoming.slice(1, 4).map((x, i) => <li key={i}><span className="nx-at">{fmtTime(x.t)}</span><span className="nx-tt">{x.title}</span></li>)}
+                </ol>
+              ) : <p className="nx-free">Bugün başka saatli işin yok.</p>}
             </>
           ) : (
-            <>
-              <span className="t">Bugün için sırada bir şey yok</span>
-              <span className="m">{lateCount ? lateCount + ' geciken iş var' : 'Yeni bir şey eklemek için + butonunu kullan'}</span>
-            </>
+            <div className="nx-main">
+              <span className="nx-body">
+                <span className="nx-k">Sıradaki</span>
+                <span className="nx-t">{lateCount ? lateCount + ' geciken iş seni bekliyor' : 'Bugün için saatli iş kalmadı'}</span>
+                <span className="nx-m">{lateCount ? 'Aşağıdaki Gecikenler listesine bak.' : 'Yeni bir şey eklemek için + düğmesini kullan.'}</span>
+              </span>
+            </div>
           )}
         </section>
         {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
@@ -527,26 +540,45 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
     {revReady && scope !== 'ozel' ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} /> : null}
     {showSummary ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
+      <div className="today-col">
         {lateCount ? (
           <Section title="Gecikenler" meta={lateCount + ' iş'}>
-            <div className="card list">
+            <div className="card list late-list">
               {lateR.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />)}
               {lateC.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} showDay />)}
             </div>
           </Section>
         ) : null}
 
-        <Section title="Hatırlatmalar" meta={open(rem).length + ' açık'}>
+        <Section title="Hatırlatmalar" meta={open(rem).length ? open(rem).length + ' açık' : ''}>
           <div className="card list">
             {rem.length ? rem.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />) : <p className="empty">Bugün için hatırlatma yok.</p>}
           </div>
         </Section>
 
-        {scope !== 'ozel' ? <AdsTodayCard data={rawData} now={now} actions={actions} onAll={() => goTab('influencer')} /> : null}
-        {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
-        {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
+        <Section title="Aranacaklar" meta={open(calls).length ? open(calls).length + ' açık' : ''}>
+          <div className="card list">
+            {calls.length ? calls.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />) : <p className="empty">Bugün aranacak kimse yok.</p>}
+          </div>
+        </Section>
+
+        {missedEl}
+
+        {google === 'ok' && gToday.length ? (
+          <Section title="Google Takvim" meta={gToday.length + ' etkinlik'}>
+            <div className="card list">
+              {gToday.map((e) => (
+                <div key={e.id} className="row timeline">
+                  <span className="tcol">{e.allDay ? 'Tüm gün' : fmtTime(e.start)}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                    <span style={{ fontSize: 15 }}>{e.title}</span>
+                    <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.calendar}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Section>
+        ) : null}
 
         {undated.length ? (
           <Section title="Tarihsiz işler" meta={undated.length + ' iş'}>
@@ -557,34 +589,15 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         ) : null}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {missedEl}
-        <Section title="Takvim" meta="Google Takvim">
-          <div className="card list">
-            {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
-              : gToday.length ? gToday.map((e) => (
-                <div key={e.id} className="row timeline">
-                  <span className="tcol">{e.allDay ? 'Tüm gün' : fmtTime(e.start)}</span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-                    <span style={{ fontSize: 15 }}>{e.title}</span>
-                    <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.calendar}</span>
-                  </div>
-                </div>
-              )) : <p className="empty">{google === 'off' ? 'Örnek modda Google Takvim kapalı.' : 'Bugün takviminde etkinlik yok.'}</p>}
-          </div>
-        </Section>
-
-        <Section title="Aranacaklar" meta={open(calls).length + ' açık'}>
-          <div className="card list">
-            {calls.length ? calls.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />) : <p className="empty">Bugün aranacak kimse yok.</p>}
-          </div>
-        </Section>
-
+      <div className="today-col">
         {scope !== 'ozel' ? (
-          <Section title="Kampanyalar" action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
+          <Section title="Kampanyalar" meta={camps.length ? camps.length + ' aktif ya da yakın' : ''} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
             {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />) : <div className="card"><p className="empty">Önümüzdeki 2 haftada kampanya yok.</p></div>}
           </Section>
         ) : null}
+        {scope !== 'ozel' ? <AdsTodayCard data={rawData} now={now} actions={actions} onAll={() => goTab('influencer')} /> : null}
+        {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
+        {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
       </div>
     </div>
     <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} />
