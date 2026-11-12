@@ -869,3 +869,26 @@ button.pill { min-height: 32px; }
 .wk-day.sel .wk-count { background: rgba(255,255,255,.22); color: #fff; }
 .wk-day.sel .wk-bars span { box-shadow: 0 0 0 1px rgba(255,255,255,.7); }
 @media (min-width: 760px) { .wk-day { padding: 10px 4px; } .wk-num { font-size: 24px; } .wk-wd { font-size: 12px; } }
+/* Bugün: influencer reklamları kartı */
+.adt { display: flex; flex-direction: column; overflow: hidden; }
+.adt-row { --mp: #0C8599; display: flex; align-items: stretch; gap: 14px; width: 100%; padding: 14px 16px 14px 18px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; position: relative; }
+.adt-row::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--mp); }
+.adt-row + .adt-row { border-top: 1px solid var(--line-2); }
+.adt-row:hover { background: #FAF9F7; }
+.adt-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.adt-name { font-size: 15px; font-weight: 700; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adt-pi { margin-right: 6px; font-size: 14px; }
+.adt-sub { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adt-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.adt-tags > span { font-size: 11px; font-weight: 700; line-height: 20px; padding: 0 8px; border-radius: 6px; background: var(--chip); color: var(--ink-2); white-space: nowrap; }
+.adt-tags .adt-mp { background: color-mix(in srgb, var(--mp) 12%, #fff); color: color-mix(in srgb, var(--mp) 75%, #000); }
+.adt-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 104px; }
+.adt-state { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .03em; }
+.adt-row.live .adt-state { color: #0B6E7E; }
+.adt-state i { width: 7px; height: 7px; border-radius: 50%; background: #12B886; box-shadow: 0 0 0 3px #D3F9E8; }
+.adt-left { font-family: var(--display); font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.2; }
+.adt-row.ending .adt-left { color: var(--danger); }
+.adt-when { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.adt-bar { width: 100%; height: 4px; border-radius: 999px; background: var(--track); overflow: hidden; margin-top: 4px; }
+.adt-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--mp); }
+.adt-more { border: 0; border-top: 1px solid var(--line-2); background: transparent; padding: 10px; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; }
