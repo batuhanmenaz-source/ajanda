@@ -431,34 +431,21 @@ export function RevenueSheet({ initialDay, revenue, order, onClose, onSave }) {
   const entered = useMemo(() => new Set(revenue.map((r) => r.day)), [revenue]);
   const strip = useMemo(() => Array.from({ length: 28 }, (_, i) => toDateInput(addDays(startOfDay(new Date()), i - 27))), []);
   const isMissing = (k) => !entered.has(k) && k !== today;
-  // Kaydettikten sonra gidilecek gün: ileride en yakın eksik gün, yoksa geride en yakın
-  const nextMissing = (from) => {
-    const after = strip.filter((k) => k > from && isMissing(k));
-    if (after.length) return after[0];
-    const before = strip.filter((k) => k < from && isMissing(k));
-    return before.length ? before[before.length - 1] : null;
-  };
-  const nm = nextMissing(day);
   const stripRef = useRef(null);
   useEffect(() => {
     const el = stripRef.current && stripRef.current.querySelector('[aria-current="date"]');
     if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'center' });
   }, [day]);
 
-  const doSave = async (goNext) => {
+  // Kaydet: pencere açık kalır, şeritten başka güne geçilebilir. "Kaydet ve kapat" kapatır.
+  const doSave = async (close) => {
     if (busy) return;
     setBusy(true);
     try {
-      const target = goNext ? nextMissing(day) : null;
-      const ok = await onSave(day, order.map((mp) => ({ marketplace: mp, amount: parseTL(vals[mp]), orders: ords[mp] ? parseInt(ords[mp], 10) || null : null })), { keepOpen: !!target });
-      if (ok && target) {
-        setDay(target);
-        // Yeni günün ilk kutusuna geç (sayfa başa kayar)
-        setTimeout(() => { const el = document.getElementById('rv-0'); if (el) { el.scrollIntoView({ block: 'center' }); el.focus({ preventScroll: true }); } }, 60);
-      }
+      await onSave(day, order.map((mp) => ({ marketplace: mp, amount: parseTL(vals[mp]), orders: ords[mp] ? parseInt(ords[mp], 10) || null : null })), { keepOpen: !close });
     } finally { setBusy(false); }
   };
-  const submit = (e) => { e.preventDefault(); doSave(!!nm); };
+  const submit = (e) => { e.preventDefault(); doSave(false); };
 
   return (
     <Sheet title="Ciro gir" onClose={onClose}>
@@ -512,12 +499,10 @@ export function RevenueSheet({ initialDay, revenue, order, onClose, onSave }) {
 
         <div className="rv-total"><span>Günün toplamı</span><b>{tl(total, total % 1 ? 2 : 0)}</b></div>
         <p className="hint" style={{ margin: 0 }}>Pazaryerleri son 30 günün cirosuna göre çok satandan az satana sıralanır. Boş bıraktıkların kaydedilmez; daha önce girdiğin bir değeri silersen o kayıt kaldırılır.</p>
-        {nm ? (
-          <div className="rv-actions">
-            <button type="submit" className="btn big primary" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Kaydet, ' + (dayLabel(fromDateInput(nm)) === fmtShort(fromDateInput(nm)) ? fmtShort(fromDateInput(nm)) : dayLabel(fromDateInput(nm)).toLocaleLowerCase('tr-TR')) + ' gününe geç'}</button>
-            <button type="button" className="btn big" disabled={busy} onClick={() => doSave(false)}>Kaydet ve kapat</button>
-          </div>
-        ) : <button type="submit" className="btn big primary" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Kaydet'}</button>}
+        <div className="rv-actions">
+          <button type="submit" className="btn big primary" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Kaydet'}</button>
+          <button type="button" className="btn big" disabled={busy} onClick={() => doSave(true)}>Kaydet ve kapat</button>
+        </div>
       </form>
     </Sheet>
   );
