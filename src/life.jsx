@@ -248,7 +248,7 @@ export function HabitsCard({ data, now, actions }) {
   const week = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
   const doneToday = habits.filter((h) => (data.habit_logs || []).some((l) => l.habit_id === h.id && l.day === T)).length;
   return (
-    <Section title="Alışkanlıklar" action={<span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>{habits.length ? <span className="meta">{doneToday}/{habits.length}</span> : null}<button type="button" className="linkbtn" onClick={() => actions.openHabit({})}>+ Ekle</button></span>}>
+    <Section title="Alışkanlıklar" tone="#7048E8" action={<span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>{habits.length ? <span className="meta">{doneToday}/{habits.length}</span> : null}<button type="button" className="linkbtn" onClick={() => actions.openHabit({})}>+ Ekle</button></span>}>
       <div className="card list">
         {habits.length ? habits.map((h) => {
           const { n, set } = streak(data.habit_logs || [], h.id, today);

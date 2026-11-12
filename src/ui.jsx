@@ -14,9 +14,10 @@ export function Check({ on, onClick, label, square }) {
   );
 }
 
-export function Section({ title, meta, action, children }) {
+// tone: bölümün türünü gösteren renk (başlık işareti + kartın üst şeridi)
+export function Section({ title, meta, action, children, tone, tint }) {
   return (
-    <section className="section">
+    <section className={'section' + (tone ? ' toned' : '') + (tint ? ' tinted' : '')} style={tone ? { '--tone': tone, '--tint': tint || 'transparent' } : undefined}>
       <div className="section-head">
         <h2>{title}</h2>
         {action || (meta ? <span className="meta">{meta}</span> : null)}

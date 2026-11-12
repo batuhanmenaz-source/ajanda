@@ -14,7 +14,9 @@ import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FollowupsMini } from './work.jsx';
-import { AdsTodayCard, adWho, adStart, adEnd } from './ads.jsx';
+import { AdsTodayCard, adWho, adStart, adEnd, dur } from './ads.jsx';
+
+const HERO_KIND = { rem: 'Sıradaki hatırlatma', call: 'Sıradaki arama', google: 'Google Takvim', yarim: 'Yarim için' };
 
 const PinIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);
 
@@ -368,7 +370,7 @@ export function MissedCallsSection({ missed, now, actions, showEmpty, configured
   const open = (missed || []).filter((m) => !m.handled).sort((a, b) => b.missed_at.localeCompare(a.missed_at));
   if (!open.length && !showEmpty) return null;
   return (
-    <Section title="Cevapsız çağrılar" action={open.length > 1
+    <Section title="Cevapsız çağrılar" tone="#E03131" tint="#FFF5F5" action={open.length > 1
       ? <button type="button" className="linkbtn" onClick={actions.missedClearAll}>Tümünü kapat</button>
       : <span className="meta">{open.length ? open.length + ' çağrı' : ''}</span>}>
       <div className="card list missed-list">
@@ -491,10 +493,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
   const camps = data.campaigns.filter((c) => c.kind !== 'etkinlik').filter((c) => { const s = campaignStatus(c, now); return s.key === 'live' || (s.key === 'soon' && daysBetween(today, fromDateInput(c.start_date)) <= 14); }).slice(0, 4);
 
   const upcoming = [
-    ...open(rem).map((r) => ({ t: new Date(r.due_at), title: r.title, meta: r.marketplace })),
-    ...open(calls).map((c) => ({ t: new Date(c.due_at), title: c.who + ' aranacak', meta: c.topic })),
-    ...gToday.filter((e) => !e.allDay).map((e) => ({ t: e.start, title: e.title, meta: e.calendar })),
-    ...yarimToday.map((x) => ({ t: new Date(x.due_at), title: (x.title || x.who + ' aranacak') + ' ❤️', meta: 'Yarim' }))
+    ...open(rem).map((r) => ({ t: new Date(r.due_at), title: r.title, meta: r.marketplace, kind: 'rem' })),
+    ...open(calls).map((c) => ({ t: new Date(c.due_at), title: c.who + ' aranacak', meta: c.topic, kind: 'call' })),
+    ...gToday.filter((e) => !e.allDay).map((e) => ({ t: e.start, title: e.title, meta: e.calendar, kind: 'google' })),
+    ...yarimToday.map((x) => ({ t: new Date(x.due_at), title: (x.title || x.who + ' aranacak') + ' ❤️', meta: 'Yarim', kind: 'yarim' }))
   ].filter((x) => x.t >= now).sort((a, b) => a.t - b.t);
   const next = upcoming[0];
   const lateCount = lateR.length + lateC.length;
@@ -508,12 +510,22 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
     ) : null}
     <WeatherCard now={now} />
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
-        <section className="hero">
-          <span className="k">Sıradaki</span>
+        <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : 'free')}>
           {next ? (
             <>
-              <span className="t">{next.title}</span>
-              <span className="m">{fmtTime(next.t)}{next.meta ? ' · ' + next.meta : ''}</span>
+              <span className="k">{HERO_KIND[next.kind]} · {next.t - now < 60000 ? 'şimdi' : dur(next.t - now) + ' sonra'}</span>
+              <span className="hero-main">
+                <span className="hero-time">{fmtTime(next.t)}</span>
+                <span className="hero-txt">
+                  <span className="t">{next.title}</span>
+                  {next.meta ? <span className="m">{next.meta}</span> : null}
+                </span>
+              </span>
+              {upcoming.length > 1 ? (
+                <span className="hero-after">
+                  {upcoming.slice(1, 3).map((x, i) => <span key={i} className={'ha ha-' + x.kind}><b>{fmtTime(x.t)}</b>{x.title}</span>)}
+                </span>
+              ) : null}
             </>
           ) : (
             <>
@@ -530,7 +542,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         {lateCount ? (
-          <Section title="Gecikenler" meta={lateCount + ' iş'}>
+          <Section title="Gecikenler" meta={lateCount + ' iş'} tone="#C92A2A" tint="#FFF5F5">
             <div className="card list">
               {lateR.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />)}
               {lateC.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} showDay />)}
@@ -538,7 +550,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
           </Section>
         ) : null}
 
-        <Section title="Hatırlatmalar" meta={open(rem).length + ' açık'}>
+        <Section title="Hatırlatmalar" meta={open(rem).length + ' açık'} tone={SRC_COLORS['Hatırlatma']}>
           <div className="card list">
             {rem.length ? rem.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />) : <p className="empty">Bugün için hatırlatma yok.</p>}
           </div>
@@ -549,7 +561,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
 
         {undated.length ? (
-          <Section title="Tarihsiz işler" meta={undated.length + ' iş'}>
+          <Section title="Tarihsiz işler" meta={undated.length + ' iş'} tone="#868E96">
             <div className="card list">
               {undated.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />)}
             </div>
@@ -559,7 +571,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {missedEl}
-        <Section title="Takvim" meta="Google Takvim">
+        <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
           <div className="card list">
             {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
               : gToday.length ? gToday.map((e) => (
@@ -574,14 +586,14 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
           </div>
         </Section>
 
-        <Section title="Aranacaklar" meta={open(calls).length + ' açık'}>
+        <Section title="Aranacaklar" meta={open(calls).length + ' açık'} tone={SRC_COLORS.Arama}>
           <div className="card list">
             {calls.length ? calls.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />) : <p className="empty">Bugün aranacak kimse yok.</p>}
           </div>
         </Section>
 
         {scope !== 'ozel' ? (
-          <Section title="Kampanyalar" action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
+          <Section title="Kampanyalar" tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
             {camps.length ? camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />) : <div className="card"><p className="empty">Önümüzdeki 2 haftada kampanya yok.</p></div>}
           </Section>
         ) : null}

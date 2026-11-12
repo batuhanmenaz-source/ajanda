@@ -162,7 +162,7 @@ export function AdsTodayCard({ data, now, actions, onAll }) {
   const meta = [live.length ? live.length + ' yayında' : '', today.length ? today.length + ' bugün başlıyor' : ''].filter(Boolean).join(' · ');
   const list = [...live, ...today];
   return (
-    <Section title="Influencer reklamları" meta={meta} action={<button type="button" className="linkbtn" onClick={onAll}>Tümü</button>}>
+    <Section title="Influencer reklamları" meta={meta} tone="#0C8599" action={<button type="button" className="linkbtn" onClick={onAll}>Tümü</button>}>
       <div className="card adt">
         {list.slice(0, 4).map((c) => {
           const st = adStatus(c, now);
