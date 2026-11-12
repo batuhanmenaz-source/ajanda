@@ -823,6 +823,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     newItemOn: (d) => { const x = new Date(d); x.setHours(9, 0, 0, 0); setSheet({ kind: 'item', item: { kind: 'reminder', due_at: x.toISOString() } }); },
     openCampaign: (c) => setSheet({ kind: 'campaign', item: c }),
     newEventOn: (d) => setSheet({ kind: 'campaign', item: { start_date: toDateInput(d), end_date: toDateInput(d), kind: 'etkinlik' } }),
+    newCampaignOn: (d) => setSheet({ kind: 'campaign', item: { start_date: toDateInput(d), end_date: toDateInput(d), kind: 'kampanya' } }),
+    newAdOn: (d) => { const x = new Date(d); x.setHours(10, 0, 0, 0); setSheet({ kind: 'collab', item: { start_at: x.toISOString() } }); },
     openMarketplace: (name) => setSheet({ kind: 'mp', name }),
     openRevenue: (day) => setSheet({ kind: 'revenue', day }),
     openTarget: () => setSheet({ kind: 'target' }),
@@ -938,7 +940,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const upcomingCamps = data.campaigns.filter((c) => c.end_date >= toDateInput(today)).length;
   const head = {
     bugun: ['Bugün', fmtLong(today)],
-    takvim: ['Takvim', rangeLabel(weekStart(day), addDays(weekStart(day), 6))],
+    takvim: ['Takvim', fmtLong(now)],
     is: ['İş', isSeg === 'kampanya' ? upcomingCamps + ' aktif / yaklaşan kampanya' : (WORK_TABS.find((x) => x[0] === isSeg) || [, ''])[1]],
     ozel: ozelSeg === 'yarim' && !yarimHidden
       ? ['Yarim ❤️', YARIM_STARTS.map((x) => Math.floor(Math.max(0, now - x.start) / 86400000).toLocaleString('tr-TR')).join(' · ') + ' gündür birlikte']
@@ -1005,7 +1007,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
               {tab === 'bugun' && <TodayScreen data={viewData} events={events} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} />}
-              {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} actions={actions} yarimHidden={yarimHidden} />}
+              {tab === 'takvim' && <CalendarScreen data={viewData} events={events} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} />}
               {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden}
                 yarim={{ seg: yarimSeg, setSeg: setYarimSeg, love, prefs: yarimPrefs, photoUrl }} />}

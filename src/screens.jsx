@@ -587,8 +587,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         ) : null}
       </div>
     </div>
-    <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} />
-    <MonthCalendar data={allData} events={events} google={google} now={now} actions={actions} month={month} setMonth={setMonth} />
+    <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} />
     {scope !== 'ozel' ? <MarketplaceStrip data={allData} now={now} actions={actions} /> : null}
     </div>
   );
@@ -613,11 +612,11 @@ function DayItemRow({ e, actions, compact }) {
 }
 
 // Bugün sayfasının altındaki "Yaklaşan günler"
-function UpcomingDays({ data, events, google, now, actions, count = 3 }) {
+function UpcomingDays({ data, events, google, now, actions, count = 3, onAll }) {
   const today = startOfDay(now);
   const days = Array.from({ length: count }, (_, i) => addDays(today, i + 1));
   return (
-    <Section title={'Yaklaşan ' + count + ' gün'} meta={rangeLabel(days[0], days[days.length - 1])}>
+    <Section title={'Yaklaşan ' + count + ' gün'} action={onAll ? <button type="button" className="linkbtn" onClick={onAll}>Takvimi aç</button> : null}>
       <div className="upcoming">
         {days.map((d) => {
           const items = dayItems(d, { data, events });
@@ -640,35 +639,77 @@ function UpcomingDays({ data, events, google, now, actions, count = 3 }) {
   );
 }
 
-// Bugün sayfasının altındaki aylık takvim
+// ---------- TAKVİM ----------
 const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+// Filtre grupları (not → hatırlatma, Yarim ayrı)
+const CAL_GROUPS = [['Kampanya', 'Kampanya'], ['Etkinlik', 'Etkinlik'], ['Influencer', 'Influencer'], ['Hatırlatma', 'Hatırlatma'], ['Arama', 'Arama'], ['Özel gün', 'Özel gün'], ['Yarim', 'Yarim'], ['Google', 'Google']];
+const calGroup = (e) => (e.src === 'Not' ? 'Hatırlatma' : e.src);
+const CAL_VIEWS = [['ay', 'Ay'], ['hafta', 'Hafta'], ['liste', 'Liste']];
+const loadHidden = () => { try { return JSON.parse(localStorage.getItem('ajanda-cal-hide') || '[]'); } catch { return []; } };
 
-function MonthCalendar({ data, events, google, now, actions, month, setMonth }) {
-  const [sel, setSel] = useState(null);
+// Bir günün eklenecek-kayıt düğmeleri
+function DayAdd({ d, actions }) {
+  return (
+    <span className="cal-add">
+      <button type="button" className="chip" onClick={() => actions.newItemOn(d)}>+ Hatırlatma</button>
+      <button type="button" className="chip" onClick={() => actions.newCampaignOn(d)}>+ Kampanya</button>
+      <button type="button" className="chip" onClick={() => actions.newEventOn(d)}>+ Etkinlik</button>
+      <button type="button" className="chip" onClick={() => actions.newAdOn(d)}>+ Reklam</button>
+    </span>
+  );
+}
+
+// Gün kartı: başlık + kayıtlar (Hafta ve Liste görünümü, seçili gün)
+function DayCard({ d, items, now, actions, google, emptyText, onAdd }) {
+  const [adding, setAdding] = useState(false);
+  return (
+    <div className={'card upday' + (sameDay(d, now) ? ' is-today' : '')}>
+      <div className="upday-head">
+        <span className="upday-name">{dayLabel(d, now)}</span>
+        <span className="upday-date">{dayLabel(d, now) === fmtShort(d) ? WEEKDAYS_SHORT[d.getDay()] : WEEKDAYS_SHORT[d.getDay()] + ' · ' + fmtShort(d)}</span>
+        <button type="button" className="iconbtn upday-add" aria-label={fmtLong(d) + ' gününe ekle'} aria-expanded={adding} onClick={() => (onAdd ? onAdd(d) : setAdding(!adding))}><Icon.Plus width="18" height="18" /></button>
+      </div>
+      {adding ? <div className="cal-addrow"><DayAdd d={d} actions={actions} /></div> : null}
+      <div className="list">
+        {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact />)
+          : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : emptyText || 'Boş gün'}</p>}
+      </div>
+    </div>
+  );
+}
+
+function MonthView({ data, events, google, now, actions, month, setMonth, sel, setSel, pass }) {
   const today = startOfDay(now);
   const gridStart = weekStart(month);
+  const ads = (data.collabs || []).filter((c) => c.status !== 'iptal' && c.start_at);
   const cells = useMemo(() => Array.from({ length: 42 }, (_, i) => {
     const d = addDays(gridStart, i);
-    const items = dayItems(d, { data, events });
-    // Çok günlü kampanya/etkinlikler şerit, diğerleri nokta/etiket olarak
-    const bars = items.filter((e) => e.kind === 'campaign' && e.time === 'Tüm gün');
-    const rest = items.filter((e) => !(e.kind === 'campaign' && e.time === 'Tüm gün'));
+    const items = dayItems(d, { data, events }).filter(pass);
+    // Çok günlü kampanya/etkinlik ve yayındaki reklamlar şerit, diğerleri nokta/etiket
+    const bars = items.filter((e) => e.kind === 'campaign' && e.time === 'Tüm gün').map((e) => ({ key: e.key, color: e.item && e.item.marketplace ? mpColor(e.item.marketplace) : e.color }));
+    if (pass({ src: 'Influencer' })) {
+      const d1 = addDays(d, 1);
+      ads.filter((c) => new Date(c.start_at) < d1 && adEnd(c) > d).forEach((c) => bars.push({ key: 'ab' + c.id, color: c.marketplace ? mpColor(c.marketplace) : SRC_COLORS.Influencer, ad: true }));
+    }
+    const rest = items.filter((e) => !(e.kind === 'campaign' && e.time === 'Tüm gün') && e.kind !== 'collab');
     return { d, items, bars, rest };
-  }), [data, events, gridStart.getTime()]);
-  // Son satır tamamen sonraki aya aitse gösterme
+  }), [data, events, gridStart.getTime(), pass]);
   const rows = cells[35].d.getMonth() !== month.getMonth() ? 5 : 6;
   const shown = cells.slice(0, rows * 7);
   const selCell = sel ? shown.find((c) => sameDay(c.d, sel)) : null;
-  const go = (n) => { setSel(null); setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1)); };
+  const go = (n) => {
+    const m = new Date(month.getFullYear(), month.getMonth() + n, 1);
+    setMonth(m);
+    setSel(m.getFullYear() === today.getFullYear() && m.getMonth() === today.getMonth() ? today : m);
+  };
   const isThisMonth = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
-
   return (
-    <section className="section">
-      <div className="section-head">
-        <h2>{MONTH_NAMES[month.getMonth()]} {month.getFullYear()}</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {!isThisMonth ? <button type="button" className="linkbtn" style={{ marginRight: 6 }} onClick={() => { setSel(null); setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Bu ay</button> : null}
-          <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
+    <>
+      <div className="week-nav">
+        <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
+        <span className="lbl">{MONTH_NAMES[month.getMonth()]} {month.getFullYear()}</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {!isThisMonth ? <button type="button" className="btn" onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSel(today); }}>Bugün</button> : null}
           <button type="button" className="iconbtn" aria-label="Sonraki ay" onClick={() => go(1)}><Icon.Right /></button>
         </div>
       </div>
@@ -686,17 +727,17 @@ function MonthCalendar({ data, events, google, now, actions, month, setMonth }) 
             return (
               <button type="button" key={d.toISOString()}
                 className={'mcal-day' + (out ? ' out' : '') + (past ? ' past' : '') + (isToday ? ' today' : '') + (isSel ? ' sel' : '')}
-                onClick={() => setSel(isSel ? null : d)} aria-pressed={!!isSel}
+                onClick={() => setSel(d)} aria-pressed={!!isSel}
                 aria-label={fmtLong(d) + (items.length ? ', ' + items.length + ' kayıt' : ', boş')}>
                 <span className="mcal-num">{d.getDate()}</span>
                 <span className="mcal-bars">
-                  {bars.slice(0, 2).map((b) => <span key={b.key} className="mcal-bar" style={{ background: b.item && b.item.marketplace ? mpColor(b.item.marketplace) : b.color }} />)}
+                  {bars.slice(0, 3).map((b) => <span key={b.key} className={'mcal-bar' + (b.ad ? ' ad' : '')} style={{ background: b.color }} />)}
+                  {bars.length > 3 ? <span className="mcal-barmore">+{bars.length - 3}</span> : null}
                 </span>
-                {/* Telefonda noktalar, geniş ekranda kısa etiketler */}
                 <span className="mcal-dots">{colors.map((c) => <span key={c} className="dot" style={{ background: c, width: 6, height: 6 }} />)}</span>
                 <span className="mcal-labels">
                   {items.slice(0, 3).map((e) => (
-                    <span key={e.key} className="mcal-label"><span className="dot" style={{ background: e.item && e.item.marketplace && e.kind === 'campaign' ? mpColor(e.item.marketplace) : e.color, width: 6, height: 6 }} />{e.title}</span>
+                    <span key={e.key} className="mcal-label"><span className="dot" style={{ background: e.item && e.item.marketplace && (e.kind === 'campaign' || e.kind === 'collab') ? mpColor(e.item.marketplace) : e.color, width: 6, height: 6 }} />{e.title}</span>
                   ))}
                   {items.length > 3 ? <span className="mcal-more">+{items.length - 3}</span> : null}
                 </span>
@@ -705,58 +746,92 @@ function MonthCalendar({ data, events, google, now, actions, month, setMonth }) 
           })}
         </div>
       </div>
-      {selCell ? (
-        <div className="card list">
-          <div className="upday-head">
-            <span className="upday-name">{dayLabel(selCell.d, now)}</span>
-            <span className="upday-date">{fmtLong(selCell.d)}</span>
-            <button type="button" className="iconbtn upday-add" aria-label={fmtLong(selCell.d) + ' gününe ekle'} onClick={() => actions.newItemOn(selCell.d)}><Icon.Plus width="18" height="18" /></button>
-          </div>
-          {selCell.items.length ? selCell.items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact />)
-            : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Bu gün boş.'}</p>}
-        </div>
-      ) : <p className="hint" style={{ margin: 0 }}>Ayrıntı için bir güne dokun. Renkli şeritler kampanya ve etkinlikleri gösterir.</p>}
-    </section>
+      <p className="hint" style={{ margin: '-6px 0 0' }}>Kalın şerit kampanya/etkinlik, ince şerit yayındaki influencer reklamı; renk pazaryerini gösterir.</p>
+      {selCell ? <SelectedDay d={selCell.d} items={selCell.items} now={now} actions={actions} google={google} /> : null}
+    </>
   );
 }
 
-// ---------- TAKVİM ----------
-export function CalendarScreen({ data, events, google, now, day, setDay, actions, yarimHidden }) {
+function SelectedDay({ d, items, now, actions, google }) {
+  return (
+    <div className="card list cal-sel">
+      <div className="upday-head">
+        <span className="upday-name">{dayLabel(d, now)}</span>
+        <span className="upday-date">{fmtLong(d)}</span>
+      </div>
+      <div className="cal-addrow"><DayAdd d={d} actions={actions} /></div>
+      {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} />)
+        : <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Bu gün için kayıt yok.'}</p>}
+    </div>
+  );
+}
+
+function WeekView({ data, events, google, now, actions, day, setDay, pass }) {
   const ws = weekStart(day);
   const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
-  const items = dayItems(day, { data, events });
+  const isThisWeek = sameDay(ws, weekStart(now));
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 760 }}>
+    <>
       <div className="week-nav">
         <button type="button" className="iconbtn" aria-label="Önceki hafta" onClick={() => setDay(addDays(day, -7))}><Icon.Left /></button>
         <span className="lbl">{rangeLabel(days[0], days[6])}</span>
         <div style={{ display: 'flex', gap: 4 }}>
-          {!sameDay(day, now) ? <button type="button" className="btn" onClick={() => setDay(startOfDay(now))}>Bugün</button> : null}
+          {!isThisWeek ? <button type="button" className="btn" onClick={() => setDay(startOfDay(now))}>Bugün</button> : null}
           <button type="button" className="iconbtn" aria-label="Sonraki hafta" onClick={() => setDay(addDays(day, 7))}><Icon.Right /></button>
         </div>
       </div>
-      <div className="week">
-        {days.map((d) => {
-          const sel = sameDay(d, day);
-          const has = dayItems(d, { data, events }).length > 0;
-          return (
-            <button type="button" key={d.toISOString()} className={'wday' + (sel ? ' sel' : '') + (sameDay(d, now) ? ' today' : '')} onClick={() => setDay(d)} aria-label={fmtLong(d)} aria-pressed={sel}>
-              <span className="wd">{WEEKDAYS_SHORT[d.getDay()]}</span>
-              <span className="d">{d.getDate()}</span>
-              <span className="dt" style={{ background: has ? (sel ? '#fff' : 'var(--accent)') : 'transparent' }} />
-            </button>
-          );
+      <div className="cal-days">
+        {days.map((d) => <DayCard key={d.toISOString()} d={d} items={dayItems(d, { data, events }).filter(pass)} now={now} actions={actions} google={google} />)}
+      </div>
+    </>
+  );
+}
+
+function ListView({ data, events, google, now, actions, pass }) {
+  const [span, setSpan] = useState(30);
+  const today = startOfDay(now);
+  const days = Array.from({ length: span }, (_, i) => addDays(today, i))
+    .map((d) => ({ d, items: dayItems(d, { data, events }).filter(pass) }))
+    .filter((x, i) => i === 0 || x.items.length);
+  const end = addDays(today, span - 1);
+  return (
+    <>
+      <div className="week-nav"><span className="lbl">Önümüzdeki {span} gün</span><span className="hint" style={{ margin: 0 }}>{rangeLabel(today, end)}</span></div>
+      <div className="cal-days">
+        {days.map(({ d, items }) => <DayCard key={d.toISOString()} d={d} items={items} now={now} actions={actions} google={google} emptyText="Bugün için kayıt yok." />)}
+        {days.length === 1 && !days[0].items.length ? <div className="card"><p className="empty">Bu filtrede önümüzdeki {span} günde kayıt yok.</p></div> : null}
+      </div>
+      {span < 180 ? <button type="button" className="btn" onClick={() => setSpan(span + 30)}>30 gün daha göster</button> : null}
+    </>
+  );
+}
+
+export function CalendarScreen({ data, events, google, now, day, setDay, month, setMonth, actions, yarimHidden }) {
+  const [view, setViewState] = useState(() => { try { return localStorage.getItem('ajanda-cal-view') || 'ay'; } catch { return 'ay'; } });
+  const setView = (v) => { setViewState(v); try { localStorage.setItem('ajanda-cal-view', v); } catch { /* yok say */ } };
+  const [hidden, setHiddenState] = useState(loadHidden);
+  const setHidden = (h) => { setHiddenState(h); try { localStorage.setItem('ajanda-cal-hide', JSON.stringify(h)); } catch { /* yok say */ } };
+  const groups = CAL_GROUPS.filter(([k]) => !(yarimHidden && k === 'Yarim') && !(k === 'Google' && google === 'off'));
+  const pass = useMemo(() => (e) => !hidden.includes(calGroup(e)), [hidden]);
+  const toggle = (k) => setHidden(hidden.includes(k) ? hidden.filter((x) => x !== k) : [...hidden, k]);
+  // Ay görünümünde seçili gün ile gösterilen ay uyumlu kalsın
+  const selectDay = (d) => { setDay(d); if (d.getMonth() !== month.getMonth() || d.getFullYear() !== month.getFullYear()) setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); };
+  const props = { data, events, google, now, actions, pass };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 980 }}>
+      <div className="seg three" role="tablist" aria-label="Takvim görünümü">
+        {CAL_VIEWS.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{l}</button>)}
+      </div>
+      <div className="cal-filters" role="group" aria-label="Gösterilecek kayıtlar">
+        {groups.map(([k, l]) => {
+          const on = !hidden.includes(k);
+          return <button key={k} type="button" className={'chip cal-f' + (on ? ' on' : '')} aria-pressed={on} onClick={() => toggle(k)}><span className="dot" style={{ background: SRC_COLORS[k] }} />{l}</button>;
         })}
+        {hidden.length ? <button type="button" className="linkbtn" onClick={() => setHidden([])}>Hepsini göster</button> : null}
       </div>
-      <div className="legend">
-        {Object.entries(SRC_COLORS).filter(([k]) => !(yarimHidden && k === 'Yarim')).map(([k, c]) => <span key={k} className="tag"><span className="dot" style={{ background: c }} />{k}</span>)}
-      </div>
-      <Section title={dayLabel(day, now) === fmtShort(day) ? fmtLong(day) : dayLabel(day, now) + ' · ' + fmtShort(day)} action={<span style={{ display: 'flex', gap: 14 }}><button type="button" className="linkbtn" onClick={() => actions.newEventOn(day)}>+ Etkinlik</button><button type="button" className="linkbtn" onClick={() => actions.newItemOn(day)}>+ Hatırlatma</button></span>}>
-        <div className="card list">
-          {google === 'checking' ? <p className="empty">Google Takvim yükleniyor…</p> : null}
-          {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} />) : google !== 'checking' ? <p className="empty">Bu gün için kayıt yok.</p> : null}
-        </div>
-      </Section>
+      {view === 'hafta' ? <WeekView {...props} day={day} setDay={setDay} />
+        : view === 'liste' ? <ListView {...props} />
+          : <MonthView {...props} month={month} setMonth={setMonth} sel={day} setSel={selectDay} />}
     </div>
   );
 }

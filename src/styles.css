@@ -833,3 +833,20 @@ button.pill { min-height: 32px; }
 .ad-rlabel { font-weight: 700; font-size: 15px; }
 .ad-result .linkbtn { align-self: flex-start; }
 .rp-sub .title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: none; }
+
+/* ---------- Takvim sekmesi ---------- */
+.cal-filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; align-items: center; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 2px; }
+.cal-filters::-webkit-scrollbar { display: none; }
+.chip.cal-f { min-height: 32px; padding: 0 12px; flex: 0 0 auto; color: var(--muted); background: transparent; border-style: dashed; }
+.chip.cal-f .dot { width: 8px; height: 8px; border-radius: 50%; opacity: .35; }
+.chip.cal-f.on { background: var(--surface); color: var(--ink); border-style: solid; border-color: #D5D2CA; }
+.chip.cal-f.on .dot { opacity: 1; }
+.cal-filters .linkbtn { flex: 0 0 auto; white-space: nowrap; }
+.cal-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.upday.is-today { border-color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); }
+.cal-addrow { padding: 10px 12px 4px; }
+.cal-add { display: flex; flex-wrap: wrap; gap: 6px; }
+.cal-add .chip { min-height: 32px; padding: 0 12px; color: var(--accent); }
+.cal-sel .upday-head { padding: 12px 14px; }
+.mcal-bar.ad { height: 2px; }
+.mcal-barmore { font-size: 9px; font-weight: 700; color: var(--muted); line-height: 1; text-align: center; }
