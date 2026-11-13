@@ -9,6 +9,54 @@ import {
 import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, fmtLong, rangeLabel, daysBetween, MONTHS, WEEKDAYS_SHORT } from './dates.js';
 
 const pct = (x) => (x >= 0 ? '+' : '−') + Math.abs(Math.round(x * 100)) + '%';
+
+// Kategori renkleri: her kategorinin sabit bir rengi var (sıralama değişse de renk değişmez)
+const PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6', '#e34948'];
+const PREF = { market: 0, yemek: 1, ulasim: 2, fatura: 3, ev: 4, eglence: 5, giyim: 6, saglik: 4, arac: 2, abonelik: 5, kredi: 6, hediye: 4 };
+const REST_COLOR = '#ADB5BD';
+function catSlices(catList) {
+  const top = catList.slice(0, catList.length > 7 ? 6 : 7);
+  const rest = catList.slice(top.length);
+  const used = new Set();
+  const out = top.map(([id, v]) => {
+    let slot = PREF[id];
+    if (slot == null || used.has(slot)) slot = PALETTE.findIndex((_, i) => !used.has(i));
+    used.add(slot);
+    const c = catOf(id);
+    return { id, v, label: c.label, emoji: c.emoji, color: id === 'diger' ? REST_COLOR : PALETTE[slot] };
+  });
+  if (rest.length) out.push({ id: '_rest', ids: rest.map(([id]) => id), v: rest.reduce((s, [, v]) => s + v, 0), label: 'Diğerleri (' + rest.length + ')', emoji: '•', color: '#868E96' });
+  return out;
+}
+
+function Donut({ slices, total, sel, onSel }) {
+  const R = 70, W = 24, C = 2 * Math.PI * R, GAP = slices.length > 1 ? 2 : 0;
+  let acc = 0;
+  const selX = sel ? slices.find((x) => x.id === sel) : null;
+  return (
+    <div className="wl-donut">
+      <svg viewBox="0 0 180 180" role="img" aria-label={'Harcama dağılımı: ' + slices.map((x) => x.label + ' ' + Math.round((x.v / total) * 100) + '%').join(', ')}>
+        <circle cx="90" cy="90" r={R} fill="none" stroke="var(--track)" strokeWidth={W} />
+        {slices.map((x) => {
+          const len = (x.v / total) * C;
+          const seg = (
+            <circle key={x.id} cx="90" cy="90" r={R} fill="none" stroke={x.color} strokeWidth={sel === x.id ? W + 6 : W}
+              strokeDasharray={Math.max(0.5, len - GAP) + ' ' + (C - Math.max(0.5, len - GAP))} strokeDashoffset={-acc}
+              transform="rotate(-90 90 90)" opacity={sel && sel !== x.id ? 0.3 : 1} style={{ cursor: 'pointer', transition: 'opacity .15s, stroke-width .15s' }}
+              onClick={() => onSel(x.id)}><title>{x.label}: {tl(x.v)}</title></circle>
+          );
+          acc += len;
+          return seg;
+        })}
+      </svg>
+      <div className="wl-donut-c" aria-hidden="true">
+        <span className="k">{selX ? selX.label : 'Toplam gider'}</span>
+        <span className="v">{tlShort(selX ? selX.v : total)}</span>
+        {selX ? <span className="p">%{Math.round((selX.v / total) * 100)}</span> : null}
+      </div>
+    </div>
+  );
+}
 const methodLabel = { kart: '💳 Kart', nakit: '💵 Nakit' };
 
 export function WalletView({ money, fixed, budgets, now, actions, error }) {
@@ -38,9 +86,11 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
 
   // Kategoriler
   const byCat = {};
-  rows.filter((r) => r.kind === 'gider').forEach((r) => { byCat[r.category] = (byCat[r.category] || 0) + Number(r.amount); });
+  rows.filter((r) => r.kind === 'gider').forEach((r) => { const k = catOf(r.category).id; byCat[k] = (byCat[k] || 0) + Number(r.amount); });
   const catList = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-  const catMax = catList.length ? catList[0][1] : 0;
+  // Halka grafik: en büyük 6 kategori + kalanlar tek dilim
+  const slices = catSlices(catList);
+  const restIds = (slices.find((x) => x.id === '_rest') || { ids: [] }).ids;
   const lim = budgets || {};
 
   // Günlük grafik (gider)
@@ -65,7 +115,7 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
   const fixedLeft = fixedRows.filter((x) => x.f.kind !== 'gelir' && !x.paid).reduce((s, x) => s + Number(x.f.amount), 0);
 
   // Hareketler
-  const list = rows.filter((r) => !catFilter || r.category === catFilter)
+  const list = rows.filter((r) => !catFilter || (catFilter === '_rest' ? r.kind === 'gider' && restIds.includes(catOf(r.category).id) : r.kind === 'gider' && catOf(r.category).id === catFilter))
     .sort((a, b) => b.day.localeCompare(a.day) || (b.created_at || '').localeCompare(a.created_at || ''));
   const groups = [];
   list.forEach((r) => { const g = groups[groups.length - 1]; if (g && g.day === r.day) g.items.push(r); else groups.push({ day: r.day, items: [r] }); });
@@ -102,9 +152,19 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
             <span className="rv-v">{delta != null ? <span className={delta > 0 ? 'wl-up' : 'wl-down'}>{pct(delta)}</span> : '—'}</span>
           </div>
           <div><span className="rv-k">Günlük ortalama</span><span className="rv-v">{tl(expense / Math.max(1, elapsed + 1))}</span></div>
-          <div><span className="rv-k">💳 Kart</span><span className="rv-v">{tl(byMethod.kart)}</span></div>
-          <div><span className="rv-k">💵 Nakit</span><span className="rv-v">{tl(byMethod.nakit)}</span></div>
         </div>
+        {byMethod.kart + byMethod.nakit > 0 ? (
+          <div className="wl-split">
+            <div className="wl-split-top">
+              <span><i className="k" />💳 Kart <b>{tl(byMethod.kart)}</b></span>
+              <span>💵 Nakit <b>{tl(byMethod.nakit)}</b><i className="n" /></span>
+            </div>
+            <div className="wl-split-bar" aria-hidden="true">
+              <span className="k" style={{ width: (byMethod.kart / (byMethod.kart + byMethod.nakit)) * 100 + '%' }} />
+              <span className="n" style={{ width: (byMethod.nakit / (byMethod.kart + byMethod.nakit)) * 100 + '%' }} />
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <div className="wl-add">
@@ -116,6 +176,29 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
         <button type="button" className="btn" onClick={() => actions.scanReceipt()}>📷 Fiş tara</button>
         <button type="button" className="btn" onClick={() => actions.exportWallet({ start, end, label, view })}>⬇ Excel</button>
       </div>
+
+      <section className="section">
+        <div className="section-head">
+          <h2>Harcama dağılımı</h2>
+          <span className="meta">{catFilter ? <button type="button" className="linkbtn" onClick={() => setCatFilter(null)}>Filtreyi kaldır</button> : <button type="button" className="linkbtn" onClick={actions.openCats}>Kategorilerim</button>}</span>
+        </div>
+        {slices.length ? (
+          <div className="card wl-dist">
+            <Donut slices={slices} total={expense} sel={catFilter} onSel={(id) => setCatFilter(catFilter === id ? null : id)} />
+            <div className="wl-legend" role="list">
+              {slices.map((x) => (
+                <button key={x.id} type="button" role="listitem" className={'wl-lg' + (catFilter === x.id ? ' on' : '') + (catFilter && catFilter !== x.id ? ' dim' : '')} aria-pressed={catFilter === x.id} onClick={() => setCatFilter(catFilter === x.id ? null : x.id)}>
+                  <i style={{ background: x.color }} aria-hidden="true" />
+                  <span className="wl-lg-n">{x.emoji} {x.label}{x.id !== '_rest' && lim[x.id] ? <small className={x.v > lim[x.id] ? 'over' : ''}>bütçe {tlShort(lim[x.id])}</small> : null}</span>
+                  <span className="wl-lg-v">{tl(x.v)}</span>
+                  <span className="wl-lg-p">%{expense ? Math.round((x.v / expense) * 100) : 0}</span>
+                </button>
+              ))}
+            </div>
+            <p className="hint wl-dist-hint">Bir dilime ya da satıra dokun, aşağıdaki hareketler o kategoriye göre süzülsün.</p>
+          </div>
+        ) : <div className="card"><p className="empty">Bu dönemde gider yok. "− Gider ekle" ile başla.</p></div>}
+      </section>
 
       {budget.length ? (
         <Section title="Bütçe" meta={MONTHS[start.getMonth()]} action={<button type="button" className="linkbtn" onClick={actions.openBudget}>Düzenle</button>}>
@@ -146,8 +229,9 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
         </div>
         <div className="card rv-chart" onMouseLeave={() => setHover(null)}>
           <div className={'rv-bars' + (view === 'hafta' ? ' wk' : '')} role="list" aria-label="Günlük harcama grafiği">
+            {expense > 0 ? <span className="rv-ref" style={{ bottom: Math.min(100, ((expense / Math.max(1, elapsed + 1)) / maxV) * 100) + '%' }} aria-hidden="true" /> : null}
             {days.map((x) => (
-              <button type="button" role="listitem" key={x.key} className={'rv-col' + (hover === x.key ? ' on' : '') + (x.future ? ' future' : '')}
+              <button type="button" role="listitem" key={x.key} className={'rv-col' + (hover === x.key ? ' on' : '') + (x.future ? ' future' : '') + ([0, 6].includes(x.d.getDay()) ? ' we' : '')}
                 onMouseEnter={() => setHover(x.key)} onFocus={() => setHover(x.key)} onClick={() => setHover(x.key)}
                 aria-label={fmtLong(x.d) + ': ' + (x.v ? tl(x.v) : 'harcama yok')}>
                 <span className="rv-bar" style={{ height: x.v ? Math.max(3, (x.v / maxV) * 100) + '%' : 0 }} />
@@ -160,23 +244,6 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
         </div>
       </section>
 
-      <section className="section">
-        <div className="section-head"><h2>Kategoriler</h2><span className="meta">{catFilter ? <button type="button" className="linkbtn" onClick={() => setCatFilter(null)}>Filtreyi kaldır</button> : <>Dokun, hareketleri süz · <button type="button" className="linkbtn" onClick={actions.openCats}>Kategorilerim</button></>}</span></div>
-        <div className="card list">
-          {catList.length ? catList.map(([id, v]) => {
-            const c = catOf(id);
-            return (
-              <button key={id} type="button" className={'rv-mp rowbtn wl-cat' + (catFilter === id ? ' on' : '')} onClick={() => setCatFilter(catFilter === id ? null : id)} aria-pressed={catFilter === id}>
-                <div className="rv-mp-top">
-                  <span>{c.emoji} {c.label}</span>
-                  <span className="rv-mp-v">{tl(v)} <span className="muted">· %{expense ? Math.round((v / expense) * 100) : 0}{lim[id] ? ' · bütçe ' + tlShort(lim[id]) : ''}</span></span>
-                </div>
-                <div className="rv-mp-bar"><div style={{ width: (v / catMax) * 100 + '%' }} /></div>
-              </button>
-            );
-          }) : <p className="empty">Bu dönemde gider yok.</p>}
-        </div>
-      </section>
 
       {view === 'ay' ? (
         <Section title="Sabit giderler" meta={fixedRows.length ? 'Aylık ' + tl(fixedTotal) + (fixedLeft ? ' · kalan ' + tl(fixedLeft) : ' · hepsi ödendi') : ''}
@@ -206,7 +273,7 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
         </Section>
       ) : null}
 
-      <Section title="Hareketler" meta={list.length ? list.length + ' kayıt' + (catFilter ? ' · ' + catOf(catFilter).label : '') : ''}>
+      <Section title="Hareketler" meta={list.length ? list.length + ' kayıt' + (catFilter ? ' · ' + (catFilter === '_rest' ? 'Diğerleri' : catOf(catFilter).label) : '') : ''}>
         <div className="card list">
           {groups.length ? groups.map((g) => (
             <div key={g.day} className="wl-group">

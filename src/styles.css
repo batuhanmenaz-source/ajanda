@@ -1030,3 +1030,37 @@ button.pill { min-height: 32px; }
 .rv-sd.on { background: var(--accent); border: 1px solid var(--accent); color: #fff; }
 .rv-sd.on .w, .rv-sd.on .s { color: #fff; }
 .rv-actions { display: flex; flex-direction: column; gap: 8px; }
+/* Cüzdan: harcama dağılımı (halka grafik) */
+.wl-dist { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 18px 24px; align-items: center; padding: 18px; }
+.wl-donut { position: relative; width: 200px; height: 200px; justify-self: center; }
+.wl-donut svg { width: 100%; height: 100%; display: block; }
+.wl-donut-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 0 44px; }
+.wl-donut-c .k { font-size: 12px; color: var(--muted); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.wl-donut-c .v { font-family: var(--display); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.wl-donut-c .p { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.wl-legend { display: flex; flex-direction: column; min-width: 0; }
+.wl-lg { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 40px; align-items: center; gap: 10px; padding: 9px 6px; border: 0; border-radius: 10px; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.wl-lg + .wl-lg { border-top: 1px solid var(--line-2); border-radius: 0; }
+.wl-lg:hover { background: #FAF9F7; }
+.wl-lg.on { background: var(--accent-soft); border-radius: 10px; }
+.wl-lg.dim { opacity: .5; }
+.wl-lg i { width: 12px; height: 12px; border-radius: 3px; }
+.wl-lg-n { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-lg-n small { margin-left: 6px; font-size: 11px; color: var(--muted); }
+.wl-lg-n small.over { color: var(--danger); font-weight: 600; }
+.wl-lg-v { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wl-lg-p { font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.wl-dist-hint { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 620px) {
+  .wl-dist { grid-template-columns: minmax(0, 1fr); padding: 16px 12px; }
+  .wl-donut { width: 210px; height: 210px; }
+}
+/* Kart / nakit oranı */
+.wl-split { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--line-2); }
+.wl-split-top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.wl-split-top b { color: var(--ink); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.wl-split-top i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin: 0 6px; }
+.wl-split-top i.k, .wl-split-bar .k { background: #6250d6; }
+.wl-split-top i.n, .wl-split-bar .n { background: #1baf7a; }
+.wl-split-bar { display: flex; gap: 2px; height: 8px; border-radius: 999px; overflow: hidden; }
+.wl-split-bar span { height: 100%; }
