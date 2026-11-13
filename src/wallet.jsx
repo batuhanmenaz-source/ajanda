@@ -299,12 +299,47 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
   );
 }
 
-export const CAT_EMOJIS = ['🏷️', '🚗', '🐾', '👶', '🎓', '💻', '📱', '🏋️', '✈️', '🍼', '🧴', '🎮', '🍷', '🚬', '🛠️', '💼', '🏥', '🎨', '📚', '🐈', '⚽', '💍', '🏖️', '💰'];
+// Simge seçenekleri: gruplu, telefon klavyesinden kendi emojini de yazabilirsin
+export const EMOJI_GROUPS = [
+  ['Dijital', ['📺', '▶️', '🎵', '🎧', '🎬', '📱', '💻', '🖥️', '☁️', '🎮', '🕹️', '📡', '🔌', '🖨️', '📷', '⌚']],
+  ['Ev', ['🏠', '🛋️', '🛏️', '🧹', '🧺', '🧽', '🪴', '🔧', '🛠️', '💡', '🔥', '💧', '🚿', '🔑', '📦', '🧾']],
+  ['Ulaşım', ['🚗', '⛽', '🅿️', '🚕', '🚌', '🚇', '✈️', '🛵', '🚲', '🛞', '🧰', '🚦', '⛴️', '🚆', '🛣️', '🧳']],
+  ['Yemek', ['🛒', '🍽️', '☕', '🍔', '🍕', '🍣', '🥗', '🍰', '🍺', '🍷', '🥖', '🍎', '🥩', '🧃', '🍫', '🥡']],
+  ['Bakım & sağlık', ['💊', '🏥', '🦷', '👓', '💇', '💅', '🧴', '💄', '🏋️', '🧘', '🩺', '🧼', '👕', '👟', '👜', '💍']],
+  ['Aile & sosyal', ['👶', '🍼', '🧸', '🎓', '📚', '✏️', '🐾', '🐈', '🐕', '🎁', '💐', '❤️', '🎉', '🎂', '⚽', '🎨']],
+  ['Para & iş', ['💰', '💳', '🏦', '📈', '💼', '🧮', '🪙', '💸', '🏷️', '📄', '🤝', '⭐', '🏆', '🔔', '📌', '🧩']]
+];
+export const CAT_EMOJIS = EMOJI_GROUPS.flatMap(([, l]) => l);
+// Addan simge önerisi
+const EMOJI_HINTS = [[/youtube|netflix|disney|exxen|blutv|tabii|tv|dizi/, '📺'], [/spotify|müzik|muzik|apple music/, '🎵'], [/icloud|google one|drive|bulut/, '☁️'], [/oyun|playstation|xbox|steam/, '🎮'],
+  [/kedi/, '🐈'], [/köpek|kopek/, '🐕'], [/evcil|mama|veteriner/, '🐾'], [/bebek|bez/, '👶'], [/okul|kurs|eğitim|egitim/, '🎓'], [/kitap/, '📚'], [/spor|gym|salon/, '🏋️'],
+  [/kuaför|kuafor|berber/, '💇'], [/araç|arac|araba|oto/, '🚗'], [/tatil|uçak|ucak|seyahat/, '✈️'], [/hediye/, '🎁'], [/yatırım|yatirim|borsa|altın|altin/, '📈'], [/kira/, '🏠'], [/telefon|hat/, '📱']];
+const suggestEmoji = (label) => { const l = (label || '').toLocaleLowerCase('tr-TR'); const h = EMOJI_HINTS.find(([r]) => r.test(l)); return h ? h[1] : null; };
+
+export function EmojiPicker({ value, onChange }) {
+  const [g, setG] = useState(() => Math.max(0, EMOJI_GROUPS.findIndex(([, l]) => l.includes(value))));
+  const [own, setOwn] = useState('');
+  return (
+    <div className="em-pick">
+      <div className="em-tabs" role="tablist" aria-label="Simge grupları">
+        {EMOJI_GROUPS.map(([n], i) => <button key={n} type="button" role="tab" aria-selected={g === i} className={g === i ? 'on' : ''} onClick={() => setG(i)}>{n}</button>)}
+      </div>
+      <div className="wl-emojis" role="group" aria-label={EMOJI_GROUPS[g][0]}>
+        {EMOJI_GROUPS[g][1].map((e) => <button key={e} type="button" className={value === e ? 'on' : ''} aria-pressed={value === e} onClick={() => setOwn('') || onChange(e)}>{e}</button>)}
+      </div>
+      <label className="em-own">
+        <span>Listede yoksa klavyeden emoji yaz:</span>
+        <input type="text" value={own} maxLength={8} placeholder="😀" aria-label="Kendi emojin" onChange={(e) => { const v = e.target.value.trim(); setOwn(v); if (v) onChange(Array.from(v).slice(0, 2).join('')); }} />
+      </label>
+    </div>
+  );
+}
 
 // Yeni kategori: emoji + ad (Kategori seçiminin içinde açılır)
 function NewCatForm({ kind, onAdd, onCancel, inline = true }) {
   const [label, setLabel] = useState('');
   const [emoji, setEmoji] = useState('🏷️');
+  const [picked, setPicked] = useState(false);
   const [busy, setBusy] = useState(false);
   const add = async () => {
     const l = label.trim();
@@ -312,17 +347,18 @@ function NewCatForm({ kind, onAdd, onCancel, inline = true }) {
     setBusy(true);
     try { await onAdd({ label: l, emoji, kind }); } finally { setBusy(false); }
   };
+  const onLabel = (v) => { setLabel(v); if (!picked) { const s2 = suggestEmoji(v); setEmoji(s2 || '🏷️'); } };
   return (
     <div className="wl-newcat">
-      <div className="wl-emojis" role="group" aria-label="Simge">
-        {CAT_EMOJIS.map((e) => <button key={e} type="button" className={emoji === e ? 'on' : ''} aria-pressed={emoji === e} onClick={() => setEmoji(e)}>{e}</button>)}
-      </div>
       <div className="wl-newcat-row">
         <span className="wl-newcat-em" aria-hidden="true">{emoji}</span>
-        <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === 'gelir' ? 'Örn. Kira geliri' : 'Örn. Evcil hayvan'} aria-label="Kategori adı" maxLength={28} autoFocus={inline}
+        <input type="text" value={label} onChange={(e) => onLabel(e.target.value)} placeholder={kind === 'gelir' ? 'Örn. Kira geliri' : 'Örn. Evcil hayvan'} aria-label="Kategori adı" maxLength={28} autoFocus={inline}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} />
-        <button type="button" className="btn primary" disabled={!label.trim() || busy} onClick={add}>Ekle</button>
+      </div>
+      <EmojiPicker value={emoji} onChange={(e) => { setEmoji(e); setPicked(true); }} />
+      <div className="wl-newcat-row" style={{ justifyContent: 'flex-end' }}>
         {inline ? <button type="button" className="btn" onClick={onCancel}>Vazgeç</button> : null}
+        <button type="button" className="btn primary" disabled={!label.trim() || busy} onClick={add}>Ekle</button>
       </div>
     </div>
   );

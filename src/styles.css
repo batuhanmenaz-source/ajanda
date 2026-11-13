@@ -1064,3 +1064,12 @@ button.pill { min-height: 32px; }
 .wl-split-top i.n, .wl-split-bar .n { background: #1baf7a; }
 .wl-split-bar { display: flex; gap: 2px; height: 8px; border-radius: 999px; overflow: hidden; }
 .wl-split-bar span { height: 100%; }
+.em-pick { display: flex; flex-direction: column; gap: 8px; }
+.em-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.em-tabs::-webkit-scrollbar { display: none; }
+.em-tabs button { flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.em-tabs button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.wl-emojis { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; }
+.wl-emojis button { width: 100%; aspect-ratio: 1; height: auto; max-height: 44px; }
+.em-own { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.em-own input { width: 64px; text-align: center; font-size: 18px; padding: 4px; min-height: 36px; }
