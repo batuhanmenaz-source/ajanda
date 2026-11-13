@@ -22,7 +22,7 @@ export default defineConfig({
         shortcuts: [
           { name: 'Gider ekle', short_name: 'Gider', url: '/?yeni=gider', icons: [{ src: '/icons/sc-gider.png', sizes: '96x96', type: 'image/png' }] },
           { name: 'Sesle ekle', short_name: 'Sesle', url: '/?yeni=ses', icons: [{ src: '/icons/sc-ses.png', sizes: '96x96', type: 'image/png' }] },
-          { name: 'Hatırlatma ekle', short_name: 'Hatırlatma', url: '/?yeni=hatirlatma', icons: [{ src: '/icons/sc-hatirlatma.png', sizes: '96x96', type: 'image/png' }] },
+          { name: 'Kopyalanan mesajı ekle', short_name: 'Mesaj ekle', url: '/?yeni=pano', icons: [{ src: '/icons/sc-pano.png', sizes: '96x96', type: 'image/png' }] },
           { name: 'Ciro gir', short_name: 'Ciro', url: '/?yeni=ciro', icons: [{ src: '/icons/sc-ciro.png', sizes: '96x96', type: 'image/png' }] }
         ],
         lang: 'tr',

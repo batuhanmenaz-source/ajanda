@@ -75,7 +75,7 @@ export function normalizeSpeech(t) {
   return x;
 }
 
-export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden, shared: sharedProp, autoVoice }) {
+export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden, shared: sharedProp, autoVoice, autoPaste }) {
   // Paylaşılan ya da panodan yapıştırılan metin
   const wa0 = useMemo(() => parseWhatsApp(sharedProp || ''), [sharedProp]);
   const [shared, setSharedRaw] = useState(wa0.text);
@@ -85,6 +85,19 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
   const [q, setQ] = useState(() => condense(wa0.text));
   // Dışarıdan gelen metni al: WhatsApp biçimindeyse zaman/gönderen ayıkla
   const takeShared = (t) => { const w = parseWhatsApp(t); setSharedRaw(w.text.slice(0, 4000)); setQ(condense(w.text)); if (w.from) setFrom(w.from); setIsWa(w.wa); };
+  // Simge kısayolu "Mesaj ekle": panodaki metni kendiliğinden almayı dener (izin istenirse "İzin ver")
+  const pasteFromClipboard = async () => {
+    setClipErr('');
+    try {
+      const t = ((await navigator.clipboard.readText()) || '').trim();
+      if (!t) { setClipErr('Panoda metin yok. Önce WhatsApp\'ta mesaja basılı tutup Kopyala de.'); return; }
+      takeShared(t);
+    } catch {
+      setClipErr('Panoya erişilemedi. Aşağıdaki düğmeye bas ya da yazı kutusuna uzun basıp "Yapıştır" de.');
+    }
+  };
+  useEffect(() => { if (autoPaste && !sharedProp) pasteFromClipboard(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const sharedLong = !!shared && condense(shared) !== (shared || '').trim();
   const [typeOverride, setTypeOverride] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -202,16 +215,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
           </div>
         ) : (
           <div className="examples">
-            <button type="button" className="paste-btn" onClick={async () => {
-              setClipErr('');
-              try {
-                const t = ((await navigator.clipboard.readText()) || '').trim();
-                if (!t) { setClipErr('Panoda metin yok. Önce mesajı kopyala.'); return; }
-                takeShared(t);
-              } catch {
-                setClipErr('Panoya erişilemedi. Yazı kutusuna uzun basıp "Yapıştır" diyebilirsin.');
-              }
-            }}>
+            <button type="button" className="paste-btn" onClick={pasteFromClipboard}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /></svg>
               Kopyaladığım mesajı yapıştır
             </button>

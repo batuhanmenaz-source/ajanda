@@ -115,6 +115,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     if (k === 'gider') { goTab('cuzdan'); setSheet({ kind: 'money', item: { kind: 'gider', day: t } }); }
     else if (k === 'ses') { setTab('bugun'); setSheet({ kind: 'quick', voice: true }); }
     else if (k === 'hatirlatma') { setSheet({ kind: 'item', item: { kind: 'reminder' } }); }
+    else if (k === 'pano') { setTab('bugun'); setSheet({ kind: 'quick', paste: true }); }
     else if (k === 'ciro') { goTab('ciro'); setSheet({ kind: 'revenue', day: t }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1060,7 +1061,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         ))}
       </nav>
 
-      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} shared={sheet.shared} autoVoice={!!sheet.voice} />}
+      {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} shared={sheet.shared} autoVoice={!!sheet.voice} autoPaste={!!sheet.paste} />}
       {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} contacts={data.contacts} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'special' && <SpecialDateSheet initial={sheet.item} yarimHidden={yarimHidden} YarimToggle={YarimToggle} alertDefaults={alertDefs} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('special_dates', f, 'Özel gün kaydedildi')} onDelete={(x) => deleteRow('special_dates', x, '"' + x.title + '" silinsin mi?')} />}
