@@ -31,6 +31,26 @@ export function YarimToggle({ on, onClick }) {
   );
 }
 
+// WhatsApp'tan paylaşılan/kopyalanan mesajlar: "[13.11.2026 13:59] Ahmet: metin", "[13:59, 13.11.2026] Ahmet: metin",
+// "13.11.2026 13:59 - Ahmet: metin". Zaman ve gönderen ayrılır (yoksa tarih yanlışlıkla hatırlatma tarihi sanılır).
+const WA_LINE = [
+  /^\[?\s*\d{1,2}[./]\d{1,2}[./]\d{2,4},?\s+\d{1,2}[:.]\d{2}(?:[:.]\d{2})?\s*\]?\s*[-–]?\s*([^:\n\]]{1,40}?):\s?(.*)$/,
+  /^\[?\s*\d{1,2}[:.]\d{2}(?:[:.]\d{2})?,?\s+\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*\]?\s*[-–]?\s*([^:\n\]]{1,40}?):\s?(.*)$/
+];
+export function parseWhatsApp(text) {
+  const lines = (text || '').split(/\r?\n/);
+  const senders = [];
+  const body = [];
+  let hit = 0;
+  for (const ln of lines) {
+    const m = WA_LINE.map((r) => ln.match(r)).find(Boolean);
+    if (m) { hit++; const who = m[1].trim(); if (!senders.includes(who)) senders.push(who); body.push(m[2]); }
+    else body.push(ln);
+  }
+  if (!hit) return { text: (text || '').trim(), from: '', wa: false };
+  return { text: body.join('\n').replace(/\n{3,}/g, '\n\n').trim(), from: senders.length === 1 ? senders[0] : senders.slice(0, 3).join(', '), wa: true };
+}
+
 // Paylaşılan uzun metni tek satırlık başlığa indirger
 function condense(t) {
   const clean = (t || '').replace(/[*_~]/g, '').trim();
@@ -57,9 +77,14 @@ export function normalizeSpeech(t) {
 
 export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden, shared: sharedProp, autoVoice }) {
   // Paylaşılan ya da panodan yapıştırılan metin
-  const [shared, setShared] = useState(sharedProp || '');
+  const wa0 = useMemo(() => parseWhatsApp(sharedProp || ''), [sharedProp]);
+  const [shared, setSharedRaw] = useState(wa0.text);
+  const [from, setFrom] = useState(wa0.from);
+  const [isWa, setIsWa] = useState(wa0.wa);
   const [clipErr, setClipErr] = useState('');
-  const [q, setQ] = useState(() => condense(sharedProp));
+  const [q, setQ] = useState(() => condense(wa0.text));
+  // Dışarıdan gelen metni al: WhatsApp biçimindeyse zaman/gönderen ayıkla
+  const takeShared = (t) => { const w = parseWhatsApp(t); setSharedRaw(w.text.slice(0, 4000)); setQ(condense(w.text)); if (w.from) setFrom(w.from); setIsWa(w.wa); };
   const sharedLong = !!shared && condense(shared) !== (shared || '').trim();
   const [typeOverride, setTypeOverride] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -112,7 +137,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
   const type = typeOverride || (waitPrefix ? 'Bekleyen' : money ? 'Para' : p.type);
   const yarim = yarimHidden ? false : (yarimOverride !== null ? yarimOverride : p.yarim);
 
-  const build = () => ({ ...p, type, yarim, shared: shared || '', money, raw: q.trim(), title: type === 'Bekleyen' ? ((p.title || '').replace(/^\s*bekle(?:n|yen)?\s*[:\-]\s*/i, '') || p.title) : p.title });
+  const build = () => ({ ...p, type, yarim, shared: shared || '', from: shared ? from.trim() : '', money, raw: q.trim(), title: type === 'Bekleyen' ? ((p.title || '').replace(/^\s*bekle(?:n|yen)?\s*[:\-]\s*/i, '') || p.title) : p.title });
 
   const submit = async (e) => {
     if (e) e.preventDefault();
@@ -126,8 +151,12 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {shared ? (
           <div className="shared-box">
-            <span className="lbl">Paylaşılan metin</span>
+            <span className="lbl">{isWa ? '💬 WhatsApp mesajı' : 'Paylaşılan metin'}</span>
             <p>{shared.length > 400 ? shared.slice(0, 400) + '…' : shared}</p>
+            <label className="shared-from">
+              <span>Kimden</span>
+              <input type="text" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="İsteğe bağlı, ör. Ahmet / Trendyol ekibi" maxLength={60} />
+            </label>
             {sharedLong ? <span className="hint">Not olarak kaydedersen metnin tamamı nota eklenir.</span> : null}
           </div>
         ) : null}
@@ -135,7 +164,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
           <label htmlFor="quick">{shared ? 'Başlığı düzenle, türünü seç; tarih ve saati metinden kendisi anlar.' : 'Yaz; tarih, saat, pazaryeri ve türü kendisi anlar.'}</label>
           <div className="qa-input">
             <input id="quick" ref={inputRef} type="text" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)}
-              onPaste={(e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; if (!shared && (t.length > 90 || /\n/.test(t))) { e.preventDefault(); setShared(t.trim().slice(0, 4000)); setQ(condense(t)); } }} placeholder={listening ? 'Dinliyorum…' : 'ör. yarın 10:00 HB fiyat güncelle'} enterKeyHint="done" />
+              onPaste={(e) => { const t = (e.clipboardData && e.clipboardData.getData('text')) || ''; if (!shared && (t.length > 90 || /\n/.test(t))) { e.preventDefault(); takeShared(t.trim()); } }} placeholder={listening ? 'Dinliyorum…' : 'ör. yarın 10:00 HB fiyat güncelle'} enterKeyHint="done" />
             {SpeechRec ? (
               <button type="button" className={'mic' + (listening ? ' on' : '')} onClick={startVoice} aria-label={listening ? 'Dinlemeyi durdur' : 'Sesle söyle'} aria-pressed={listening}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
@@ -178,7 +207,7 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
               try {
                 const t = ((await navigator.clipboard.readText()) || '').trim();
                 if (!t) { setClipErr('Panoda metin yok. Önce mesajı kopyala.'); return; }
-                setShared(t.slice(0, 4000)); setQ(condense(t));
+                takeShared(t);
               } catch {
                 setClipErr('Panoya erişilemedi. Yazı kutusuna uzun basıp "Yapıştır" diyebilirsin.');
               }

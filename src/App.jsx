@@ -766,12 +766,15 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
 
   // ---------- Hızlı ekle ----------
-  const quickSave = async (p) => {
+  const quickSave = async (p0) => {
+    // Paylaşılan mesajın göndereni: hatırlatma başlığına, bekleyende karşı tarafa, aramada kişiye yazılır
+    const p = p0.from && p0.type !== 'Bekleyen' && p0.type !== 'Arama' && p0.type !== 'Not' && p0.title && !p0.title.toLocaleLowerCase('tr-TR').includes(p0.from.toLocaleLowerCase('tr-TR'))
+      ? { ...p0, title: p0.from + ': ' + p0.title } : p0;
     const due = p.date ? p.date.toISOString() : null;
     // Bugün sayfasında İş ya da Özel seçiliyse yeni kayıt o alana yazılır
     const sc = scope === 'ozel' && !p.yarim && !p.mp ? { scope: 'ozel' } : {};
     if (p.type === 'Bekleyen') {
-      await saveFollowup({ title: p.title || 'Talep', party: p.mp || null, marketplace: p.mp || null, since: toDateInput(new Date()) });
+      await saveFollowup({ title: p.title || 'Talep', party: p.from || p.mp || null, marketplace: p.mp || null, since: toDateInput(new Date()), ...(p.shared && p.shared.trim() !== (p.title || '').trim() ? { note: p.shared.slice(0, 2000) } : {}) });
       return;
     }
     if (p.type === 'Para') {
@@ -787,22 +790,22 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         p.type === 'Kampanya' ? DEFAULT_PREPS : null
       );
     } else if (p.type === 'Not') {
-      await saveNote({ marketplace: p.mp || null, brand: p.brand || null, title: p.title || 'Not', body: p.shared || '' });
+      await saveNote({ marketplace: p.mp || null, brand: p.brand || null, title: p.title || 'Not', body: (p.from ? 'WhatsApp · ' + p.from + '\n\n' : '') + (p.shared || '') });
       goTab('notlar');
     } else if (p.type === 'Arama') {
-      await saveItem('calls', { who: p.title || 'Arama', topic: null, phone: null, due_at: due, for_yarim: !!p.yarim, ...sc, ...(due ? { alerts: alertDefs.call } : {}) });
+      await saveItem('calls', { who: p.from || p.title || 'Arama', topic: p.from ? p.title || null : null, phone: null, due_at: due, for_yarim: !!p.yarim, ...sc, ...(due ? { alerts: alertDefs.call } : {}) });
     } else {
       await saveItem('reminders', { title: p.title || 'Hatırlatma', marketplace: p.yarim ? null : (p.mp || null), due_at: due, for_yarim: !!p.yarim, ...sc, ...(p.repeat ? { repeat_rule: p.repeat } : {}), ...(due ? { alerts: alertDefs.reminder } : {}) });
     }
   };
   const quickDetail = (p) => {
     if (p.type === 'Para') { setSheet({ kind: 'money', item: p.money || { kind: 'gider', note: p.raw || '' } }); return; }
-    if (p.type === 'Bekleyen') { setSheet({ kind: 'followup', item: { title: p.title, party: p.mp || '', marketplace: p.mp || null } }); return; }
+    if (p.type === 'Bekleyen') { setSheet({ kind: 'followup', item: { title: p.title, party: p.from || p.mp || '', marketplace: p.mp || null, note: p.shared && p.shared.trim() !== (p.title || '').trim() ? p.shared.slice(0, 2000) : '' } }); return; }
     if (p.type === 'Kampanya' || p.type === 'Etkinlik') {
       const st = p.date ? startOfDay(p.date) : startOfDay(new Date());
       setSheet({ kind: 'campaign', item: { name: p.title, marketplace: p.mp, start_date: toDateInput(st), end_date: toDateInput(p.endDate ? startOfDay(p.endDate) : st), kind: p.type === 'Kampanya' ? 'kampanya' : 'etkinlik' } });
     } else if (p.type === 'Not') setSheet({ kind: 'note', item: { marketplace: p.mp, brand: p.brand, title: p.title, body: p.shared || '' } });
-    else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.title, marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim, repeat_rule: p.repeat || '', ...(scope === 'ozel' && !p.yarim && !p.mp ? { scope: 'ozel' } : {}) } });
+    else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.from ? (p.type === 'Arama' ? p.from : (p.title && !p.title.includes(p.from) ? p.from + ': ' + p.title : p.title)) : p.title, ...(p.type === 'Arama' && p.from ? { topic: p.title } : {}), marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim, repeat_rule: p.repeat || '', ...(scope === 'ozel' && !p.yarim && !p.mp ? { scope: 'ozel' } : {}) } });
   };
 
   const actions = {

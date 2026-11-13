@@ -1073,3 +1073,5 @@ button.pill { min-height: 32px; }
 .wl-emojis button { width: 100%; aspect-ratio: 1; height: auto; max-height: 44px; }
 .em-own { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .em-own input { width: 64px; text-align: center; font-size: 18px; padding: 4px; min-height: 36px; }
+.shared-from { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.shared-from input { flex: 1 1 auto; min-width: 0; min-height: 34px; padding: 4px 10px; font-size: 14px; }
