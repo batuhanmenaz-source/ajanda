@@ -1,6 +1,6 @@
 // İş: Bekleyen talepler ve Raporlar
 import { useMemo, useState } from 'react';
-import { adWho } from './ads.jsx';
+import { adWho, adStart, adEnd } from './ads.jsx';
 import { Sheet, Section, Check } from './ui.jsx';
 import { MARKETPLACES, mpColor } from './constants.js';
 import { tl, tlShort } from './revenue.jsx';
@@ -211,6 +211,29 @@ export function buildReport({ data, revenue, now, period, mp }) {
     ciro: camps.reduce((s, x) => s + (x.r ? x.r.cur : 0), 0),
     avgDelta: withDelta.length ? withDelta.reduce((s, x) => s + x.r.delta, 0) / withDelta.length : null
   };
+  // Ciro: genel / kampanyalı / kampanyasız. Bir pazaryerinin bir günü, o pazaryerinde (ya da pazaryeri seçilmemiş
+  // genel bir kampanyada) aktif kampanya varsa "kampanyalı" sayılır.
+  const allCamps = data.campaigns.filter((c) => c.kind !== 'etkinlik' && c.start_date && c.end_date);
+  const inCamp = (m, day) => allCamps.some((c) => c.start_date <= day && c.end_date >= day && (!c.marketplace || c.marketplace === m));
+  const split = {};
+  const mkSplit = () => ({ total: 0, camp: 0, plain: 0, campDays: new Set(), plainDays: new Set() });
+  (revenue || []).forEach((r) => {
+    if (r.day < A || r.day > B || (mp && r.marketplace !== mp)) return;
+    const v = Number(r.amount) || 0;
+    const on = inCamp(r.marketplace, r.day);
+    for (const key of ['_all', r.marketplace]) {
+      const x = split[key] || (split[key] = mkSplit());
+      x.total += v;
+      if (on) { x.camp += v; x.campDays.add(r.day); } else { x.plain += v; x.plainDays.add(r.day); }
+    }
+  });
+  const fin = (x) => {
+    if (!x) return { total: 0, camp: 0, plain: 0, campDays: 0, plainDays: 0, campAvg: 0, plainAvg: 0, uplift: null };
+    const cd = x.campDays.size, pd = x.plainDays.size;
+    const campAvg = cd ? x.camp / cd : 0, plainAvg = pd ? x.plain / pd : 0;
+    return { total: x.total, camp: x.camp, plain: x.plain, campDays: cd, plainDays: pd, campAvg, plainAvg, uplift: campAvg && plainAvg ? campAvg / plainAvg - 1 : null };
+  };
+  const ciro = { all: fin(split._all), byMp: Object.keys(split).filter((k) => k !== '_all').map((k) => ({ name: k, ...fin(split[k]) })).sort((x, y) => y.total - x.total) };
   // Pazaryeri karşılaştırması
   const mps = MARKETPLACES.map((m) => m.name).filter((n) => !mp || n === mp);
   const byMp = mps.map((n) => {
@@ -222,15 +245,17 @@ export function buildReport({ data, revenue, now, period, mp }) {
   // Influencer
   const collabs = (data.collabs || []).filter((c) => c.publish_date && c.publish_date >= A && c.publish_date <= B && c.status !== 'iptal' && (!mp || c.marketplace === mp));
   const byInf = {};
-  collabs.forEach((c) => { const k = adWho(c, data.contacts); byInf[k] = byInf[k] || { name: k, n: 0, fee: 0 }; byInf[k].n++; byInf[k].fee += Number(c.fee) || 0; });
+  collabs.forEach((c) => { const k = adWho(c, data.contacts); byInf[k] = byInf[k] || { name: k, n: 0, fee: 0, rev: 0, feeR: 0 }; byInf[k].n++; byInf[k].fee += Number(c.fee) || 0; byInf[k].rev += Number(c.ad_revenue) || 0; if (Number(c.ad_revenue) > 0) byInf[k].feeR += Number(c.fee) || 0; });
   const byPct = {};
-  collabs.forEach((c) => { const has = c.commission != null && c.commission !== ''; const k = has ? Number(c.commission) : -1; byPct[k] = byPct[k] || { rate: has ? k : null, n: 0, fee: 0 }; byPct[k].n++; byPct[k].fee += Number(c.fee) || 0; });
+  collabs.forEach((c) => { const has = c.commission != null && c.commission !== ''; const k = has ? Number(c.commission) : -1; byPct[k] = byPct[k] || { rate: has ? k : null, n: 0, fee: 0, rev: 0, feeR: 0 }; byPct[k].n++; byPct[k].fee += Number(c.fee) || 0; byPct[k].rev += Number(c.ad_revenue) || 0; if (Number(c.ad_revenue) > 0) byPct[k].feeR += Number(c.fee) || 0; });
+  const ended = collabs.filter((c) => adEnd(c) && adEnd(c) < now).sort((x, y) => (adStart(y) || 0) - (adStart(x) || 0));
   // Bekleyenler
   const fups = (data.followups || []).filter((f) => !mp || f.marketplace === mp);
   const openF = fups.filter((f) => !f.done);
   return {
-    range: [a, b], camps, best, totals, byMp,
-    inf: { count: collabs.length, fee: collabs.reduce((s, c) => s + (Number(c.fee) || 0), 0), list: Object.values(byInf).sort((x, y) => y.fee - x.fee), byPct: Object.values(byPct).sort((x, y) => (x.rate == null) - (y.rate == null) || x.rate - y.rate) },
+    range: [a, b], camps, best, totals, byMp, ciro,
+    inf: { count: collabs.length, fee: collabs.reduce((s, c) => s + (Number(c.fee) || 0), 0), rev: collabs.reduce((s, c) => s + (Number(c.ad_revenue) || 0), 0), feeR: collabs.filter((c) => Number(c.ad_revenue) > 0).reduce((s, c) => s + (Number(c.fee) || 0), 0),
+      ads: collabs, ended, endedNoRev: ended.filter((c) => !(Number(c.ad_revenue) > 0)).length, contacts: data.contacts, list: Object.values(byInf).sort((x, y) => y.fee - x.fee), byPct: Object.values(byPct).sort((x, y) => (x.rate == null) - (y.rate == null) || x.rate - y.rate) },
     fup: { open: openF.length, oldest: openF.length ? Math.max(...openF.map((f) => waitDays(f, now))) : 0, stats: responseStats(fups) }
   };
 }
@@ -251,6 +276,41 @@ export function ReportsView({ data, revenue, now, actions }) {
         <button type="button" className={'chip' + (!mp ? ' on' : '')} aria-pressed={!mp} onClick={() => setMp('')}>Tüm pazaryerleri</button>
         {used.map((n) => <button key={n} type="button" className={'chip' + (mp === n ? ' on' : '')} aria-pressed={mp === n} onClick={() => setMp(n)}><span className="dot" style={{ background: mpColor(n) }} />{n}</button>)}
       </div>
+
+      <Section title="Ciro" meta={label}>
+        {rep.ciro.all.total ? (
+          <div className="card rp-ciro">
+            <div className="rp-ciro-top">
+              <div><span className="rv-k">Genel ciro</span><span className="rp-v">{tlShort(rep.ciro.all.total)}</span></div>
+              <div><span className="rv-k"><i className="cc" />Kampanyalı</span><span className="rp-v">{tlShort(rep.ciro.all.camp)}</span><span className="rp-s">%{Math.round((rep.ciro.all.camp / rep.ciro.all.total) * 100)} · {rep.ciro.all.campDays} gün</span></div>
+              <div><span className="rv-k"><i className="cp" />Kampanyasız</span><span className="rp-v">{tlShort(rep.ciro.all.plain)}</span><span className="rp-s">%{Math.round((rep.ciro.all.plain / rep.ciro.all.total) * 100)} · {rep.ciro.all.plainDays} gün</span></div>
+            </div>
+            <div className="rp-split" aria-hidden="true">
+              <span className="cc" style={{ width: (rep.ciro.all.camp / rep.ciro.all.total) * 100 + '%' }} />
+              <span className="cp" style={{ width: (rep.ciro.all.plain / rep.ciro.all.total) * 100 + '%' }} />
+            </div>
+            {rep.ciro.all.uplift != null ? (
+              <p className="rp-note">Kampanyalı günlerde günlük ortalama <b>{tlShort(rep.ciro.all.campAvg)}</b>, kampanyasız günlerde <b>{tlShort(rep.ciro.all.plainAvg)}</b>: kampanyalı günler <b className={rep.ciro.all.uplift >= 0 ? 'up' : 'down'}>{pct(rep.ciro.all.uplift)}</b> {rep.ciro.all.uplift >= 0 ? 'daha yüksek' : 'daha düşük'}.</p>
+            ) : null}
+            {rep.ciro.byMp.length > 1 ? (
+              <div className="rp-table-wrap">
+                <table className="rp-table">
+                  <thead><tr><th>Pazaryeri</th><th>Genel</th><th>Kampanyalı</th><th>Kampanyasız</th><th>Günlük fark</th></tr></thead>
+                  <tbody>
+                    {rep.ciro.byMp.map((x) => (
+                      <tr key={x.name}>
+                        <td><span className="tag"><span className="dot" style={{ background: mpColor(x.name) }} />{x.name}</span></td>
+                        <td>{tlShort(x.total)}</td><td>{x.camp ? tlShort(x.camp) : '—'}</td><td>{x.plain ? tlShort(x.plain) : '—'}</td>
+                        <td className={x.uplift != null ? (x.uplift >= 0 ? 'up' : 'down') : ''}>{x.uplift != null ? pct(x.uplift) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </div>
+        ) : <div className="card"><p className="empty">Bu dönemde girilmiş ciro yok.</p></div>}
+      </Section>
 
       <section className="card rp-sum" aria-label="Kampanya özeti">
         <div><span className="rv-k">Kampanya</span><span className="rp-v">{rep.totals.count}</span></div>
@@ -301,10 +361,15 @@ export function ReportsView({ data, revenue, now, actions }) {
 
       <Section title="Influencer reklamları" meta={label}>
         <div className="card list">
-          <div className="row fup-stat"><span className="title">Reklam</span><span className="meta">{rep.inf.count} adet</span><span className="fup-avg">{tl(rep.inf.fee)}</span></div>
-          {rep.inf.list.slice(0, 5).map((x) => <div key={x.name} className="row fup-stat"><span className="title">{x.name}</span><span className="meta">{x.n} reklam</span><span className="fup-avg">{tlShort(x.fee)}</span></div>)}
+          <div className="rp-inf-sum">
+            <div><span className="rv-k">Reklam</span><span className="rp-v">{rep.inf.count}</span><span className="rp-s">{rep.inf.ended.length} sonlandı</span></div>
+            <div><span className="rv-k">Bütçe (KDV hariç)</span><span className="rp-v">{rep.inf.fee ? tlShort(rep.inf.fee) : '—'}</span></div>
+            <div><span className="rv-k">Reklam cirosu (KDV dahil)</span><span className="rp-v">{rep.inf.rev ? tlShort(rep.inf.rev) : '—'}</span>{rep.inf.endedNoRev ? <span className="rp-s warn">{rep.inf.endedNoRev} reklamın cirosu girilmedi</span> : null}</div>
+            <div><span className="rv-k">Ciro / bütçe</span><span className="rp-v">{rep.inf.feeR && rep.inf.rev ? (rep.inf.rev / rep.inf.feeR).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + 'x' : '—'}</span><span className="rp-s">cirosu girilen reklamlarda</span></div>
+          </div>
+          {rep.inf.list.slice(0, 5).map((x) => <div key={x.name} className="row fup-stat"><span className="title">{x.name}</span><span className="meta">{x.n} reklam · {tlShort(x.fee)}</span><span className="fup-avg">{x.rev ? tlShort(x.rev) + ' ciro' : '—'}</span></div>)}
           {rep.inf.byPct.some((x) => x.rate != null) ? <div className="row fup-stat rp-sub"><span className="title">Komisyona göre</span></div> : null}
-          {rep.inf.byPct.some((x) => x.rate != null) ? rep.inf.byPct.map((x) => <div key={String(x.rate)} className="row fup-stat"><span className="title">{x.rate == null ? 'Girilmemiş' : '%' + x.rate.toLocaleString('tr-TR') + ' komisyon'}</span><span className="meta">{x.n} reklam</span><span className="fup-avg">{x.fee ? tlShort(x.fee) : '—'}</span></div>) : null}
+          {rep.inf.byPct.some((x) => x.rate != null) ? rep.inf.byPct.map((x) => <div key={String(x.rate)} className="row fup-stat"><span className="title">{x.rate == null ? 'Girilmemiş' : '%' + x.rate.toLocaleString('tr-TR') + ' komisyon'}</span><span className="meta">{x.n} reklam · {x.fee ? tlShort(x.fee) : '—'}</span><span className="fup-avg">{x.rev ? tlShort(x.rev) + ' ciro' : '—'}</span></div>) : null}
         </div>
       </Section>
 

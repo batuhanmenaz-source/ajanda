@@ -146,19 +146,57 @@ export async function exportReport({ rep, label }) {
   camps.push([B(S('Toplam')), S(''), S(''), S(''), B(N(rep.totals.days)), B(N(rep.totals.ciro, TL)), S(''), rep.totals.avgDelta != null ? B(N(rep.totals.avgDelta, PCT)) : S(''), S('')]);
   const mps = [[H('Pazaryeri'), H('Kampanya'), H('Kampanyalı gün'), H('Kampanya cirosu'), H('Ort. etki'), H('Dönem cirosu')]];
   rep.byMp.forEach((x) => mps.push([S(x.name), N(x.count), N(x.days), N(x.ciro, TL), x.avgDelta != null ? N(x.avgDelta, PCT) : S(''), N(x.periodCiro, TL)]));
-  const inf = [[H('Hesap'), H('Reklam'), H('Bütçe')]];
-  rep.inf.list.forEach((x) => inf.push([S(x.name), N(x.n), N(x.fee, TL)]));
-  inf.push([B(S('Toplam')), B(N(rep.inf.count)), B(N(rep.inf.fee, TL))]);
-  const com = [[H('Komisyon oranı'), H('Reklam'), H('Bütçe')]];
-  (rep.inf.byPct || []).forEach((x) => com.push([S(x.rate == null ? 'Girilmemiş' : '%' + x.rate.toLocaleString('tr-TR')), N(x.n), N(x.fee, TL)]));
+  const ratio = (r, f) => (r > 0 && f > 0 ? N(r / f, '0.0"x"') : S(''));
+  const inf = [[H('Hesap'), H('Reklam'), H('Bütçe (KDV hariç)'), H('Reklam cirosu (KDV dahil)'), H('Ciro / bütçe')]];
+  rep.inf.list.forEach((x) => inf.push([S(x.name), N(x.n), N(x.fee, TL), N(x.rev || 0, TL), ratio(x.rev, x.feeR)]));
+  inf.push([B(S('Toplam')), B(N(rep.inf.count)), B(N(rep.inf.fee, TL)), B(N(rep.inf.rev || 0, TL)), ratio(rep.inf.rev, rep.inf.feeR)]);
+  const com = [[H('Komisyon oranı'), H('Reklam'), H('Bütçe (KDV hariç)'), H('Reklam cirosu (KDV dahil)'), H('Ciro / bütçe')]];
+  (rep.inf.byPct || []).forEach((x) => com.push([S(x.rate == null ? 'Girilmemiş' : '%' + x.rate.toLocaleString('tr-TR')), N(x.n), N(x.fee, TL), N(x.rev || 0, TL), ratio(x.rev, x.feeR)]));
+  const ads = adRows(rep.inf.ads || [], rep.inf.contacts);
+  const c0 = rep.ciro || { all: {}, byMp: [] };
+  const ciro = [[H('Pazaryeri'), H('Genel ciro'), H('Kampanyalı ciro'), H('Kampanyasız ciro'), H('Kampanyalı gün'), H('Kampanyasız gün'), H('Kampanyalı günlük ort.'), H('Kampanyasız günlük ort.'), H('Günlük fark')]];
+  const crow = (name, x, bold) => { const w = bold ? B : (v) => v; return [w(S(name)), w(N(x.total || 0, TL)), w(N(x.camp || 0, TL)), w(N(x.plain || 0, TL)), w(N(x.campDays || 0)), w(N(x.plainDays || 0)), w(N(x.campAvg || 0, TL)), w(N(x.plainAvg || 0, TL)), x.uplift != null ? w(N(x.uplift, PCT)) : S('')]; };
+  c0.byMp.forEach((x) => ciro.push(crow(x.name, x)));
+  if (c0.all) ciro.push(crow('Toplam', c0.all, true));
   const fu = [[H('Kimden'), H('Tamamlanan talep'), H('Ortalama dönüş (gün)'), H('En uzun (gün)')]];
   rep.fup.stats.forEach((s) => fu.push([S(s.party), N(s.n), N(Math.round(s.avg * 10) / 10), N(s.max)]));
   fu.push([S('Açık talep'), N(rep.fup.open), S(''), S('')]);
   await save([
+    { name: 'Ciro', rows: ciro, widths: [16, 16, 16, 16, 14, 15, 20, 21, 12], sticky: 1 },
     { name: 'Kampanyalar', rows: camps, widths: [28, 14, 12, 12, 7, 16, 14, 13, 11], sticky: 1 },
     { name: 'Pazaryerleri', rows: mps, widths: [16, 11, 14, 16, 11, 16], sticky: 1 },
-    { name: 'Influencer', rows: inf, widths: [24, 11, 15], sticky: 1 },
-    { name: 'Komisyon', rows: com, widths: [16, 11, 15], sticky: 1 },
+    { name: 'Influencer', rows: inf, widths: [24, 9, 18, 24, 13], sticky: 1 },
+    { name: 'Reklamlar', rows: ads, widths: [22, 28, 11, 12, 13, 17, 17, 11, 18, 24, 13, 11], sticky: 1 },
+    { name: 'Komisyon', rows: com, widths: [16, 9, 18, 24, 13], sticky: 1 },
     { name: 'Bekleyenler', rows: fu, widths: [24, 16, 20, 14], sticky: 1 }
   ], 'rapor-' + slug(label) + '.xlsx');
+}
+
+// Influencer reklamları: her reklam bir satır (bütçe KDV hariç, ciro KDV dahil)
+function adRows(list, contacts) {
+  const who = (c) => c.handle || ((contacts || []).find((k) => k.id === c.contact_id) || {}).name || '';
+  const when = (iso) => (iso ? new Date(iso) : null);
+  // Excel saat dilimi bilmez: yerel saati olduğu gibi yaz
+  const xl = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()));
+  const rows = [[H('Hesap'), H('Reklam'), H('Platform'), H('Marka'), H('Pazaryeri'), H('Başlangıç'), H('Bitiş'), H('Komisyon'), H('Bütçe (KDV hariç)'), H('Reklam cirosu (KDV dahil)'), H('Ciro / bütçe'), H('Durum')]];
+  const now = new Date();
+  const sorted = [...list].sort((a, b) => String(b.start_at || b.publish_date || '').localeCompare(String(a.start_at || a.publish_date || '')));
+  let fee = 0, rev = 0, feeR = 0;
+  sorted.forEach((c) => {
+    const s0 = when(c.start_at) || (c.publish_date ? new Date(c.publish_date + 'T00:00:00') : null);
+    const e0 = when(c.end_at);
+    const f = Number(c.fee) || 0, r = Number(c.ad_revenue) || 0;
+    fee += f; rev += r; if (r > 0) feeR += f;
+    const st = c.status === 'iptal' ? 'İptal' : e0 && e0 < now ? 'Bitti' : s0 && s0 > now ? 'Yaklaşan' : 'Yayında';
+    rows.push([S(who(c)), S(c.title || ''), S(c.platform || ''), S(c.brand || ''), S(c.marketplace || ''),
+      s0 ? { value: xl(s0), type: Date, format: 'dd.mm.yyyy hh:mm' } : S(''), e0 ? { value: xl(e0), type: Date, format: 'dd.mm.yyyy hh:mm' } : S(''),
+      c.commission != null && c.commission !== '' ? N(Number(c.commission) / 100, PCT) : S(''),
+      f ? N(f, TL) : S(''), r ? N(r, TL) : S(''), r > 0 && f > 0 ? N(r / f, '0.0"x"') : S(''), S(st)]);
+  });
+  rows.push([B(S('Toplam')), B(S(sorted.length + ' reklam')), S(''), S(''), S(''), S(''), S(''), S(''), B(N(fee, TL)), B(N(rev, TL)), rev > 0 && feeR > 0 ? B(N(rev / feeR, '0.0"x"')) : S(''), S('')]);
+  return rows;
+}
+
+export async function exportAds({ ads, contacts, label }) {
+  await save([{ name: 'Reklamlar', rows: adRows(ads, contacts), widths: [22, 28, 11, 12, 13, 17, 17, 11, 18, 24, 13, 11], sticky: 1 }], 'influencer-reklamlari-' + slug(label || 'tum') + '.xlsx');
 }

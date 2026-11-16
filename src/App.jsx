@@ -326,7 +326,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/collabs/.test(msg) && /commission/.test(msg)) say('Kaydedilemedi: Komisyon oranı için Supabase\'de 18 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/collabs/.test(msg) && /ad_revenue/.test(msg)) say('Kaydedilemedi: Reklam cirosu için Supabase\'de 20 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/collabs/.test(msg) && /commission/.test(msg)) say('Kaydedilemedi: Komisyon oranı için Supabase\'de 18 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /start_at|end_at|platform|handle/.test(msg)) say('Kaydedilemedi: Influencer reklamları için Supabase\'de 17 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/followups|nudge_/.test(msg)) say('Kaydedilemedi: Bekleyenler için Supabase\'de 16 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/yarim_items|memories|yarim_prefs|anilar/.test(msg)) say('Kaydedilemedi: Yarim bölümü için Supabase\'de 15 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -760,6 +761,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     try { if (f.nudge_reminder_id) await removeReminderQuiet(f.nudge_reminder_id); } catch (e) { console.error(e); }
     await deleteRow('followups', f);
   };
+  const exportAds = async (opts) => {
+    try { const { exportAds: ex } = await import('./excel.js'); await ex(opts); say('Excel dosyası indirildi'); }
+    catch (e) { console.error(e); say('Excel oluşturulamadı.'); }
+  };
   const exportReport = async (opts) => {
     say('Excel hazırlanıyor…');
     try { const { exportReport: ex } = await import('./excel.js'); await ex(opts); say('Excel dosyası indirildi'); }
@@ -820,7 +825,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openYarim: () => { setSheet(null); setYarimSeg('ozet'); goTab('yarim'); },
     openMemory: (m) => setSheet({ kind: 'memory', item: m }),
     openFollowup: (f) => setSheet({ kind: 'followup', item: f }),
-    doneFollowup, exportReport, goTab,
+    doneFollowup, exportReport, exportAds, goTab,
     openYarimItem: (x) => setSheet({ kind: 'yitem', item: x }),
     toggleYarimItem, planToCalendar, saveSurprise,
     hideYarim: () => { setYarimHidden(true); setSheet(null); say('Yarim alanı bu cihazda gizlendi. Geri açmak için: sağ üstteki etiket › Hesap'); },

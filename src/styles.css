@@ -1230,3 +1230,33 @@ button.pulse:hover { border-color: #C9C6BD; }
   .work-top .fx-i { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; padding: 8px 10px; }
   .work-top .fx-v { font-size: 18px; }
 }
+/* Raporlar: ciro dağılımı */
+.rp-ciro { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.rp-ciro-top { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.rp-ciro-top > div, .rp-inf-sum > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rp-ciro-top .rv-k { display: inline-flex; align-items: center; gap: 6px; }
+.rp-ciro-top i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.rp-ciro .cc { background: #eb6834; }
+.rp-ciro .cp { background: #2a78d6; }
+.rp-s { font-size: 12px; color: var(--muted); }
+.rp-s.warn { color: #B35C00; font-weight: 600; }
+.rp-split { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; }
+.rp-split span { height: 100%; }
+.rp-note { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.rp-note b.up { color: #1F6B31; }
+.rp-note b.down { color: var(--danger); }
+.rp-inf-sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 14px; border-bottom: 1px solid var(--line-2); }
+@media (max-width: 620px) {
+  .rp-ciro-top { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rp-ciro-top > div:first-child { grid-column: 1 / -1; }
+  .rp-inf-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Influencer: reklam sonucu */
+.ad-result-box { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.ad-result-box.ended { background: #FFF8E6; border: 1px solid #F2D58A; }
+.ad-out { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); padding-top: 6px; border-top: 1px solid var(--line-2); }
+.ad-out b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.ad-roas { font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #E6F6EA; color: #237A38; }
+.ad-out.missing { color: #B35C00; font-weight: 600; }
+.ad-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.ad-norev { border: 1px dashed #E8A33D; background: #FFF8E6; color: #8A4B00; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }

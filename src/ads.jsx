@@ -63,6 +63,11 @@ function AdCard({ c, now, contacts, onOpen }) {
         {hasPct(c) ? <span className="ad-pct">{pct(c.commission)} komisyon</span> : null}
         {c.fee ? <span>{tl(c.fee)}</span> : null}
       </span>
+      {st === 'past' ? (
+        Number(c.ad_revenue) > 0
+          ? <span className="ad-out"><span>Ciro <b>{tl(c.ad_revenue)}</b></span>{Number(c.fee) > 0 ? <span className="ad-roas">{(Number(c.ad_revenue) / Number(c.fee)).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}x</span> : null}</span>
+          : <span className="ad-out missing">Ciro girilmedi · dokun ve ekle</span>
+      ) : null}
       {s ? (
         <span className="ad-time">
           <span>{when(s, now)}</span><span className="arrow">→</span><span>{e ? when(e, now) : '—'}</span>
@@ -90,6 +95,7 @@ export function AdsView({ data, now, actions }) {
   const soon = all.filter((c) => adStatus(c, now) === 'soon').sort((a, b) => adStart(a) - adStart(b));
   const past = all.filter((c) => ['past', 'iptal'].includes(adStatus(c, now))).sort((a, b) => adStart(b) - adStart(a)).slice(0, filtering ? 300 : 40);
   const [showPast, setShowPast] = useState(false);
+  const noRev = all.filter((c) => adStatus(c, now) === 'past' && !(Number(c.ad_revenue) > 0)).length;
   const mk = toDateInput(now).slice(0, 7), yk = mk.slice(0, 4);
   const valid = all.filter((c) => c.status !== 'iptal');
   const month = valid.filter((c) => toDateInput(adStart(c)).startsWith(mk));
@@ -135,7 +141,11 @@ export function AdsView({ data, now, actions }) {
           <div><span className="rv-k">Bu ay bütçe</span><span className="rp-v">{budget ? tlShort(budget) : '—'}</span></div>
         </div>
       )}
-      <button type="button" className="btn primary big" onClick={() => actions.openCollab({})}>+ Reklam ekle</button>
+      <div className="ad-actions">
+        <button type="button" className="btn primary big" onClick={() => actions.openCollab({})}>+ Reklam ekle</button>
+        <button type="button" className="btn big" onClick={() => actions.exportAds({ ads: all.filter((c) => c.status !== 'iptal'), contacts: data.contacts, label: [fPct === 'yok' ? 'komisyonsuz' : fPct !== '' ? '%' + fPct : '', fMp].filter(Boolean).join('-') || 'tum' })}>⬇ Excel</button>
+      </div>
+      {noRev ? <button type="button" className="ad-norev" onClick={() => { setShowPast(true); setTimeout(() => document.querySelector('.ad-out.missing')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }}>📝 Biten {noRev} reklamın cirosu girilmedi. Girersen raporda reklam başına ciro görünür.</button> : null}
       <Section title="Yayında" meta={live.length ? 'bitişe göre' : ''}>
         {live.length ? <div className="ad-grid">{live.map(card)}</div>
           : <div className="card"><p className="empty">{filtering ? 'Bu filtrede yayında reklam yok.' : 'Şu an yayında reklam yok.'}</p></div>}
@@ -210,6 +220,8 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
   const [eDate, setEDate] = useState(e0 ? toDateInput(e0) : toDateInput(addDays(s0 || defStart, 1)));
   const [eTime, setETime] = useState(e0 ? toTimeInput(e0) : initial.start_at ? toTimeInput(s0) : toTimeInput(defStart));
   const [comm, setComm] = useState(hasPct(initial) ? String(Number(initial.commission)).replace('.', ',') : '');
+  const [rev, setRev] = useState(initial.ad_revenue ? Number(initial.ad_revenue).toLocaleString('tr-TR') : '');
+  const ended = !!initial.id && adEnd(initial) && adEnd(initial) < new Date();
   const [fee, setFee] = useState(initial.fee ? Number(initial.fee).toLocaleString('tr-TR') : '');
   const [link, setLink] = useState(initial.link || '');
   const [notes, setNotes] = useState(initial.notes || '');
@@ -242,7 +254,7 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
       await onSave({
         id: initial.id, title: title.trim() || null, handle: h || null, platform, brand: brand || null, marketplace: mp || null,
         start_at: start.toISOString(), end_at: end.toISOString(), publish_date: sDate,
-        fee: parseTL(fee) || null, commission: commVal, link: link.trim() || null, notes: notes.trim() || null,
+        fee: parseTL(fee) || null, ad_revenue: parseTL(rev) || null, commission: commVal, link: link.trim() || null, notes: notes.trim() || null,
         status: cancel ? 'iptal' : (initial.status && initial.status !== 'iptal' ? initial.status : 'planlandi'),
         alerts: { ...alerts, end: endAlert }
       });
@@ -313,13 +325,20 @@ export function AdSheet({ initial, collabs, contacts, onClose, onSave, onDelete 
         </div>
         <div className="row2">
           <div className="field">
-            <label htmlFor="ad-fee">Bütçe (₺)</label>
+            <label htmlFor="ad-fee">Bütçe (₺, KDV hariç)</label>
             <input id="ad-fee" type="text" inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="—" />
           </div>
           <div className="field">
             <label htmlFor="ad-link">Link</label>
             <input id="ad-link" type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://" autoCapitalize="off" />
           </div>
+        </div>
+        <div className={'ad-result-box' + (ended ? ' ended' : '')}>
+          <div className="field">
+            <label htmlFor="ad-rev">Reklam cirosu (₺, KDV dahil)</label>
+            <input id="ad-rev" type="text" inputMode="decimal" value={rev} onChange={(e) => setRev(e.target.value)} placeholder={ended ? 'Reklam bitti, cirosunu gir' : 'Reklam bitince girebilirsin'} />
+          </div>
+          {parseTL(rev) > 0 && parseTL(fee) > 0 ? <span className="hint" style={{ margin: 0 }}>Ciro / bütçe: <b>{(parseTL(rev) / parseTL(fee)).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}x</b> (her 1 ₺ bütçeye {tl(parseTL(rev) / parseTL(fee))} ciro)</span> : null}
         </div>
         {link && /^https?:\/\//.test(link) ? <a className="linkbtn" href={link} target="_blank" rel="noopener noreferrer" style={{ alignSelf: 'flex-start', marginTop: -6 }}>Paylaşımı aç ↗</a> : null}
         <AlertPicker id="ad-al" title="Başlangıcı hatırlat" value={alerts} onChange={setAlerts} mode="timed" />
