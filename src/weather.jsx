@@ -125,11 +125,11 @@ export function WeatherCard({ now }) {
         <span className="wx-temp">{Math.round(c.temperature_2m)}°</span>
         <span className="wx-txt">
           <span className="wx-l1">{w.label}{loc.place ? ' · ' + loc.place : ''}</span>
-          <span className="wx-l2">↑{Math.round(f.daily.temperature_2m_max[0])}° ↓{Math.round(f.daily.temperature_2m_min[0])}° · yağış %{f.daily.precipitation_probability_max[0] ?? 0} · hissedilen {Math.round(c.apparent_temperature)}°</span>
+          <span className="wx-l2">↑{Math.round(f.daily.temperature_2m_max[0])}° ↓{Math.round(f.daily.temperature_2m_min[0])}° · yağış %{f.daily.precipitation_probability_max[0] ?? 0}<span className="wx-feel"> · hissedilen {Math.round(c.apparent_temperature)}°</span></span>
         </span>
         <span className="wx-chev" aria-hidden="true">{open ? '▴' : '▾'}</span>
       </button>
-      {tip ? <span className="wx-tip">{tip}</span> : null}
+      {tip && open ? <span className="wx-tip">{tip}</span> : null}
       {open ? (
         <>
           <div className="wx-hours" role="list" aria-label="Saatlik tahmin">

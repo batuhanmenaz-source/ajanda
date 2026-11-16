@@ -13,6 +13,7 @@ import {
 import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
 import { WeatherCard } from './weather.jsx';
+import { FxStrip } from './fx.jsx';
 import { FollowupsMini } from './work.jsx';
 import { AdsTodayCard, adWho, adStart, adEnd, dur } from './ads.jsx';
 
@@ -545,7 +546,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         {SCOPES.map(([v, l]) => <button key={v} type="button" className={scope === v ? 'on' : ''} aria-pressed={scope === v} onClick={() => setScope(v)}>{l}</button>)}
       </div>
     ) : null}
-    <WeatherCard now={now} />
+    <div className="tstrip">
+      <WeatherCard now={now} />
+      <FxStrip />
+    </div>
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
         <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : later ? (LATER_KIND[later.e.src] || 'free') : 'free')}>
           {next ? (

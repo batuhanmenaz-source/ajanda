@@ -1134,3 +1134,33 @@ button.pill { min-height: 32px; }
 .wl-gsum .pill.in { background: #E6F6EA; color: #237A38; }
 .wl-tx .wl-amt:not(.in) { color: var(--ink); }
 .dc-bars.wk .dc-col.today .dc-d::before { width: 56px; height: 20px; border-radius: 10px; }
+
+/* ---------- Bugün: hava durumu (küçük) + döviz/altın şeridi ---------- */
+.tstrip { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr); gap: 10px; align-items: stretch; }
+.tstrip .wx.open { grid-column: 1 / -1; }
+.tstrip .wx { padding: 2px 4px; justify-content: center; }
+.tstrip .wx-main { min-height: 48px; padding: 6px 8px; gap: 8px; }
+.tstrip .wx-icon { font-size: 24px; }
+.tstrip .wx-temp { font-size: 22px; }
+.tstrip .wx-l1 { font-size: 13px; }
+.tstrip .wx-l2 { font-size: 11px; }
+.fx { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: center; gap: 0; padding: 8px 6px; }
+.fx-empty { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; }
+.fx-i { display: flex; flex-direction: column; gap: 1px; padding: 0 10px; min-width: 0; }
+.fx-i + .fx-i { border-left: 1px solid var(--line-2); }
+.fx-k { font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.fx-v { font-family: var(--display); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-ch { font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fx-ch.up { color: var(--green); }
+.fx-ch.down { color: var(--danger); }
+.fx-at { border: 0; background: transparent; font: inherit; font-size: 10px; color: var(--muted); padding: 4px 6px; cursor: pointer; align-self: start; white-space: nowrap; }
+@media (max-width: 759px) {
+  .tstrip { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .tstrip .wx-feel { display: none; }
+  .fx { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 2px 6px; row-gap: 2px; }
+  .fx-i { padding: 0 6px; }
+  .fx-v { font-size: 14px; }
+  .fx-k { font-size: 10px; }
+  .fx-at { grid-column: 1 / -1; justify-self: end; padding: 0 8px; }
+}
+.tstrip .wx:not(.open) .wx-feel { display: none; }
