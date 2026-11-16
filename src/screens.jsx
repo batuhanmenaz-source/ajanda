@@ -14,6 +14,7 @@ import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FxStrip } from './fx.jsx';
+import { WalletPulse } from './wallet.jsx';
 import { FollowupsMini } from './work.jsx';
 import { AdsTodayCard, adWho, adStart, adEnd, dur } from './ads.jsx';
 
@@ -490,6 +491,41 @@ function DoneFold({ items, render }) {
   );
 }
 
+// Bugün (İş): işin kısa nabzı — kampanya, reklam, bekleyen, geciken ve kur
+function WorkPulse({ data, rawData, now, lateCount, campsAll, goTab }) {
+  const live = campsAll.filter((c) => campaignStatus(c, now).key === 'live');
+  const soon = campsAll.filter((c) => campaignStatus(c, now).key === 'soon');
+  const firstSoon = soon[0];
+  const ads = (rawData.collabs || []).filter((c) => c.status !== 'iptal' && adStart(c));
+  const adsLive = ads.filter((c) => adStart(c) <= now && adEnd(c) >= now).sort((a, b) => adEnd(a) - adEnd(b));
+  const adsToday = ads.filter((c) => adStart(c) > now && sameDay(adStart(c), now));
+  const fups = (rawData.followups || []).filter((f) => !f.done);
+  const oldest = fups.length ? Math.max(...fups.map((f) => daysBetween(fromDateInput(f.since), startOfDay(now)))) : 0;
+  const tiles = [
+    { k: 'kampanya', label: 'Kampanyalar', v: live.length, unit: 'aktif', s: firstSoon ? (soon.length + ' yakında · ' + (firstSoon.marketplace || firstSoon.name) + ' ' + dayLabel(fromDateInput(firstSoon.start_date), now).toLocaleLowerCase('tr-TR')) : soon.length ? soon.length + ' yakında' : '30 günde yeni yok', tone: SRC_COLORS.Kampanya },
+    { k: 'influencer', label: 'Influencer', v: adsLive.length, unit: 'yayında', s: adsLive.length ? 'ilk biten: ' + dur(adEnd(adsLive[0]) - now) + ' sonra' : adsToday.length ? adsToday.length + ' reklam bugün başlıyor' : 'yayında reklam yok', tone: '#0C8599' },
+    { k: 'bekleyenler', label: 'Bekleyenler', v: fups.length, unit: 'iş', s: fups.length ? 'en eskisi ' + oldest + ' gün' : 'bekleyen yok', tone: '#E67700', warn: oldest >= 14 },
+    { k: 'gecikenler', label: 'Gecikenler', v: lateCount, unit: 'iş', s: lateCount ? 'aşağıdan kapat' : 'geciken yok 👏', tone: '#C92A2A', warn: lateCount > 0 }
+  ];
+  return (
+    <div className="work-top">
+      <div className="card pulse work-pulse">
+        <span className="pl-head"><span className="pl-title">İş özeti</span></span>
+        <span className="pl-grid">
+          {tiles.map((t) => (
+            <button key={t.k} type="button" className={'pl-i pl-btn' + (t.warn ? ' warn' : '')} style={{ '--tone': t.tone }} onClick={() => (t.k === 'gecikenler' ? document.querySelector('.late-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : goTab(t.k))}>
+              <span className="pl-k"><i aria-hidden="true" />{t.label}</span>
+              <span className="pl-v">{t.v}<small> {t.unit}</small></span>
+              <span className="pl-s">{t.s}</span>
+            </button>
+          ))}
+        </span>
+      </div>
+      <FxStrip keys={['USD', 'EUR']} title="Kur" />
+    </div>
+  );
+}
+
 // ---------- BUGÜN ----------
 export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget }) {
   const allData = scopeData(rawData, scope);
@@ -546,10 +582,14 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         {SCOPES.map(([v, l]) => <button key={v} type="button" className={scope === v ? 'on' : ''} aria-pressed={scope === v} onClick={() => setScope(v)}>{l}</button>)}
       </div>
     ) : null}
-    <div className="tstrip">
-      <WeatherCard now={now} />
-      <FxStrip />
-    </div>
+    {scope === 'is' ? (
+      <WorkPulse data={allData} rawData={rawData} now={now} lateCount={lateCount} campsAll={campsAll} goTab={goTab} />
+    ) : (
+      <div className="tstrip">
+        <WeatherCard now={now} />
+        {scope === 'ozel' ? <FxStrip keys={['GRA', 'CEY', 'TAM', 'USD']} title="Altın ve döviz" /> : <FxStrip />}
+      </div>
+    )}
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
         <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : later ? (LATER_KIND[later.e.src] || 'free') : 'free')}>
           {next ? (
@@ -594,6 +634,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </section>
         {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
+    {scope === 'ozel' ? <WalletPulse money={rawData.money} fixed={rawData.money_fixed} budgets={budgets} now={now} onOpen={() => goTab('cuzdan')} /> : null}
     {revReady && scope !== 'ozel' ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} target={revTarget} /> : null}
     {showSummary ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2 today-grid">
@@ -601,7 +642,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
 
         <div className="tslot" style={{ order: 1 }}>
         {lateCount ? (
-          <Section title="Gecikenler" meta={lateCount + ' iş'} tone="#C92A2A" tint="#FFF5F5">
+          <Section title={<span className="late-anchor">Gecikenler</span>} meta={lateCount + ' iş'} tone="#C92A2A" tint="#FFF5F5">
             <div className="card list">
               {lateR.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />)}
               {lateC.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} showDay />)}

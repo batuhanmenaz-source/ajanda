@@ -15,7 +15,7 @@ const ITEMS = [
   { k: 'TAM', label: 'Tam altın', ic: 'T', fmt: tl0 }
 ];
 
-export function FxStrip() {
+export function FxStrip({ keys, title = 'Piyasa' }) {
   const [fx, setFx] = useState(read);
   const [err, setErr] = useState(false);
   const load = useCallback(async (force) => {
@@ -42,14 +42,14 @@ export function FxStrip() {
 
   if (!fx) return err ? <div className="card fx fx-empty"><span className="hint">Kurlar alınamadı.</span><button type="button" className="linkbtn" onClick={() => load(true)}>Tekrar dene</button></div> : <div className="card fx fx-empty"><span className="hint">Kurlar yükleniyor…</span></div>;
   const t = new Date(fx.got);
-  const list = ITEMS.filter((it) => fx.rates[it.k]);
+  const list = ITEMS.filter((it) => fx.rates[it.k] && (!keys || keys.includes(it.k)));
   return (
     <section className="card fx" aria-label="Döviz ve altın">
       <div className="fx-head">
-        <span className="fx-title">Piyasa</span>
+        <span className="fx-title">{title}</span>
         <button type="button" className="fx-at" onClick={() => load(true)} aria-label={'Kurlar ' + t.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) + ' itibarıyla, yenile'}>↻ {t.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</button>
       </div>
-      <div className="fx-grid">
+      <div className={'fx-grid' + (keys ? ' n' + list.length : '')}>
         {list.map((it) => {
           const r = fx.rates[it.k];
           const ch = r.ch;

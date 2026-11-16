@@ -1182,3 +1182,51 @@ button.pill { min-height: 32px; }
 .tstrip { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .tstrip .wx-feel { display: none; }
 .tstrip .wx.open .wx-feel { display: inline; }
+
+/* ---------- Bugün: İş ve Özel için özet kutuları ---------- */
+.work-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.pulse { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; text-align: left; font: inherit; color: inherit; width: 100%; }
+button.pulse { cursor: pointer; }
+button.pulse:hover { border-color: #C9C6BD; }
+.pl-head { display: flex; justify-content: space-between; align-items: center; }
+.pl-title { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.pl-more { font-size: 12px; font-weight: 600; color: var(--accent); }
+.pl-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pl-i { --tone: var(--accent); display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 12px; background: var(--bg); min-width: 0; text-align: left; border: 0; font: inherit; color: inherit; position: relative; overflow: hidden; }
+.pl-btn { cursor: pointer; }
+.pl-btn:hover { background: #EFEDE7; }
+.pl-btn::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--tone); }
+.pl-k { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-k i { width: 8px; height: 8px; border-radius: 2px; background: var(--tone); flex: 0 0 auto; }
+.pl-v { font-family: var(--display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-v small { font-family: var(--font); font-size: 12px; font-weight: 600; color: var(--muted); }
+.pl-v.muted { color: var(--muted); }
+.pl-v.good { color: var(--green); }
+.pl-s { font-size: 12px; color: var(--muted); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pl-s.bad { color: var(--danger); font-weight: 600; }
+.pl-s.good { color: var(--green); font-weight: 600; }
+.pl-s.warnt { color: #B35C00; font-weight: 600; }
+.pl-i.warn { background: #FFF2F2; }
+.wallet-pulse .pl-i:nth-child(1) { background: #EEF2FF; }
+.fx-grid.n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fx-grid.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (min-width: 900px) {
+  .work-top { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr); }
+  .work-top .fx-grid.n2 { grid-template-columns: minmax(0, 1fr); }
+  .work-top .fx .fx-i { padding: 8px 12px; }
+}
+@media (max-width: 759px) {
+  .pl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pl-v { font-size: 20px; }
+  .fx-grid.n4 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .fx-grid.n4 .fx-i.gold { grid-column: span 2; }
+  .fx-grid.n4 .fx-i.cur { grid-column: 1 / -1; flex-direction: row; align-items: baseline; gap: 10px; }
+  .fx-grid.n2 .fx-i.cur { grid-column: auto; }
+  .fx-grid.n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.work-top { align-items: start; }
+@media (max-width: 759px) {
+  .work-top .fx { padding: 8px 10px 10px; gap: 6px; }
+  .work-top .fx-i { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; padding: 8px 10px; }
+  .work-top .fx-v { font-size: 18px; }
+}

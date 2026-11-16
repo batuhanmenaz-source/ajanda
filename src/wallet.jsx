@@ -733,4 +733,60 @@ export function weekSpend(money, now) {
   return { cur, last, delta: last > 0 ? cur / last - 1 : null };
 }
 
+// Bugün (Özel): cüzdanın kısa özeti
+export function WalletPulse({ money, fixed, budgets, now, onOpen }) {
+  const t = startOfDay(now);
+  const mk = toDateInput(t).slice(0, 7);
+  const monthRows = (money || []).filter((r) => r.day.startsWith(mk));
+  const spent = monthRows.filter((r) => r.kind === 'gider').reduce((a, r) => a + Number(r.amount), 0);
+  const inc = monthRows.filter((r) => r.kind === 'gelir').reduce((a, r) => a + Number(r.amount), 0);
+  const w7s = toDateInput(addDays(t, -6)), w7e = toDateInput(t);
+  const p7s = toDateInput(addDays(t, -13)), p7e = toDateInput(addDays(t, -7));
+  const s7 = (money || []).filter((r) => r.kind === 'gider' && r.day >= w7s && r.day <= w7e).reduce((a, r) => a + Number(r.amount), 0);
+  const sp7 = (money || []).filter((r) => r.kind === 'gider' && r.day >= p7s && r.day <= p7e).reduce((a, r) => a + Number(r.amount), 0);
+  const d7 = sp7 > 0 ? s7 / sp7 - 1 : null;
+  const bs = budgetStatus(money, budgets, now);
+  const worst = bs[0];
+  const monthStart = new Date(t.getFullYear(), t.getMonth(), 1);
+  const due = (fixed || []).filter((f) => f.active !== false && f.kind !== 'gelir').map((f) => ({ f, d: fixedDue(f, monthStart), paid: fixedPaid(f, money, monthStart) }))
+    .filter((x) => !x.paid).sort((a, b) => a.d - b.d);
+  const nextDue = due[0];
+  const dueLeft = due.reduce((a, x) => a + Number(x.f.amount), 0);
+  return (
+    <button type="button" className="card pulse wallet-pulse" onClick={onOpen} aria-label="Cüzdanı aç">
+      <span className="pl-head"><span className="pl-title">Cüzdan · {MONTHS[t.getMonth()]}</span><span className="pl-more">Cüzdan ›</span></span>
+      <span className="pl-grid">
+        <span className="pl-i">
+          <span className="pl-k">Bu ay harcama</span>
+          <span className="pl-v">{tl(spent)}</span>
+          <span className="pl-s">{inc ? 'gelir ' + tl(inc) : 'gelir girilmedi'}</span>
+        </span>
+        <span className="pl-i">
+          <span className="pl-k">Son 7 gün</span>
+          <span className="pl-v">{tl(s7)}</span>
+          <span className={'pl-s' + (d7 == null ? '' : d7 > 0.05 ? ' bad' : d7 < -0.05 ? ' good' : '')}>{d7 == null ? 'önceki 7 gün yok' : (d7 > 0 ? '▲ %' : '▼ %') + Math.abs(Math.round(d7 * 100)) + ' önceki 7 güne göre'}</span>
+        </span>
+        <span className={'pl-i' + (worst && worst.ratio >= 1 ? ' warn' : '')}>
+          <span className="pl-k">Bütçe</span>
+          {worst ? (
+            <>
+              <span className="pl-v">%{Math.round(worst.ratio * 100)}</span>
+              <span className={'pl-s' + (worst.ratio >= 1 ? ' bad' : worst.ratio >= 0.8 ? ' warnt' : '')}>{catOf(worst.cat).emoji} {catOf(worst.cat).label} {tlShort(worst.spent)} / {tlShort(worst.limit)}</span>
+            </>
+          ) : <><span className="pl-v muted">—</span><span className="pl-s">bütçe belirlenmedi</span></>}
+        </span>
+        <span className="pl-i">
+          <span className="pl-k">Sabit giderler</span>
+          {nextDue ? (
+            <>
+              <span className="pl-v">{tl(dueLeft)}</span>
+              <span className={'pl-s' + (nextDue.d < t ? ' bad' : '')}>{nextDue.d < t ? 'gecikti: ' : 'sıradaki: '}{nextDue.f.title || catOf(nextDue.f.category).label} · {nextDue.d.getDate()} {MONTHS[nextDue.d.getMonth()]}</span>
+            </>
+          ) : <><span className="pl-v good">✓</span><span className="pl-s">{(fixed || []).length ? 'bu ay hepsi ödendi' : 'sabit gider yok'}</span></>}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 export { INCOME_CATS };
