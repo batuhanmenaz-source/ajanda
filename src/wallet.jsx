@@ -8,6 +8,14 @@ import {
 } from './money.js';
 import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, fmtLong, rangeLabel, daysBetween, MONTHS, WEEKDAYS_SHORT } from './dates.js';
 
+// Çubuk üstü kısa tutar: 850, 2,5b, 17b, 1,2m
+const kfmt = (v) => {
+  const n = Number(v) || 0;
+  if (n >= 1e6) return (n / 1e6).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + 'm';
+  if (n >= 1000) return (n / 1000).toLocaleString('tr-TR', { maximumFractionDigits: n < 10000 ? 1 : 0 }) + 'b';
+  return String(Math.round(n));
+};
+const BAR_MAX = 78; // en yüksek çubuk; üstünde tutar yazısına yer kalır
 const pct = (x) => (x >= 0 ? '+' : '−') + Math.abs(Math.round(x * 100)) + '%';
 
 // Kategori renkleri: her kategorinin sabit bir rengi var (sıralama değişse de renk değişmez)
@@ -119,6 +127,8 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
     .sort((a, b) => b.day.localeCompare(a.day) || (b.created_at || '').localeCompare(a.created_at || ''));
   const groups = [];
   list.forEach((r) => { const g = groups[groups.length - 1]; if (g && g.day === r.day) g.items.push(r); else groups.push({ day: r.day, items: [r] }); });
+  // Gün başlığında o günün toplamı
+  groups.forEach((g) => { g.exp = g.items.filter((r) => r.kind === 'gider').reduce((a, r) => a + Number(r.amount), 0); g.inc = g.items.filter((r) => r.kind === 'gelir').reduce((a, r) => a + Number(r.amount), 0); });
 
   const label = view === 'ay' ? MONTHS[start.getMonth()] + ' ' + start.getFullYear() : rangeLabel(start, end);
   const go = (k) => { setHover(null); setCatFilter(null); setAnchor(shiftPeriod(view, anchor, k)); };
@@ -228,13 +238,14 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
           <span className="meta" aria-live="polite">{hoverDay ? fmtShort(hoverDay.d) + ' · ' + (hoverDay.v ? tl(hoverDay.v) : 'harcama yok') : 'Bir çubuğa dokun'}</span>
         </div>
         <div className="card rv-chart" onMouseLeave={() => setHover(null)}>
-          <div className={'rv-bars' + (view === 'hafta' ? ' wk' : '')} role="list" aria-label="Günlük harcama grafiği">
-            {expense > 0 ? <span className="rv-ref" style={{ bottom: Math.min(100, ((expense / Math.max(1, elapsed + 1)) / maxV) * 100) + '%' }} aria-hidden="true" /> : null}
+          <div className={'rv-bars wl-bars' + (view === 'hafta' ? ' wk' : ' month')} role="list" aria-label="Günlük harcama grafiği">
+            {expense > 0 ? <span className="rv-ref" style={{ bottom: Math.min(100, ((expense / Math.max(1, elapsed + 1)) / maxV) * BAR_MAX) + '%' }} aria-hidden="true" /> : null}
             {days.map((x) => (
               <button type="button" role="listitem" key={x.key} className={'rv-col' + (hover === x.key ? ' on' : '') + (x.future ? ' future' : '') + ([0, 6].includes(x.d.getDay()) ? ' we' : '')}
                 onMouseEnter={() => setHover(x.key)} onFocus={() => setHover(x.key)} onClick={() => setHover(x.key)}
                 aria-label={fmtLong(x.d) + ': ' + (x.v ? tl(x.v) : 'harcama yok')}>
-                <span className="rv-bar" style={{ height: x.v ? Math.max(3, (x.v / maxV) * 100) + '%' : 0 }} />
+                {x.v ? <span className="wl-lbl" aria-hidden="true">{kfmt(x.v)}</span> : null}
+                <span className="rv-bar" style={{ height: x.v ? Math.max(3, (x.v / maxV) * BAR_MAX) + '%' : 0 }} />
               </button>
             ))}
           </div>
@@ -277,7 +288,13 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
         <div className="card list">
           {groups.length ? groups.map((g) => (
             <div key={g.day} className="wl-group">
-              <div className="wl-gday"><b>{fmtShort(fromDateInput(g.day))}</b> <span className="muted">{WEEKDAYS_SHORT[fromDateInput(g.day).getDay()]}</span></div>
+              <div className="wl-gday">
+                <span><b>{fmtShort(fromDateInput(g.day))}</b> <span className="muted">{WEEKDAYS_SHORT[fromDateInput(g.day).getDay()]}</span></span>
+                <span className="wl-gsum">
+                  {g.inc ? <span className="in">+{tl(g.inc)}</span> : null}
+                  {g.exp ? <span className="out">−{tl(g.exp)}</span> : null}
+                </span>
+              </div>
               {g.items.map((r) => {
                 const c = catOf(r.category);
                 return (

@@ -1075,3 +1075,17 @@ button.pill { min-height: 32px; }
 .em-own input { width: 64px; text-align: center; font-size: 18px; padding: 4px; min-height: 36px; }
 .shared-from { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--muted); }
 .shared-from input { flex: 1 1 auto; min-width: 0; min-height: 34px; padding: 4px 10px; font-size: 14px; }
+/* Cüzdan: gün başlığında günlük toplam */
+.wl-gday { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wl-gsum { display: inline-flex; gap: 10px; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wl-gsum .out { color: var(--ink); }
+.wl-gsum .in { color: var(--green); }
+/* Cüzdan: çubukların üstünde günlük tutar */
+.wl-bars .rv-col { flex-direction: column; justify-content: flex-end; align-items: stretch; }
+.wl-lbl { font-size: 10px; font-weight: 700; color: var(--ink-2); text-align: center; white-space: nowrap; line-height: 1; padding-bottom: 3px; font-variant-numeric: tabular-nums; overflow: visible; }
+.wl-bars .rv-col.on .wl-lbl { color: var(--accent); }
+.wl-bars.wk .wl-lbl { font-size: 12px; }
+@media (max-width: 700px) {
+  .wl-bars.month .wl-lbl { writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; padding: 0 0 3px; font-size: 9px; }
+}
+.wl-lbl { position: relative; z-index: 2; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; }
