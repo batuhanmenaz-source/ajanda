@@ -184,8 +184,46 @@ function CampaignMini({ c, tasks, onOpen, result }) {
         </div>
         <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
       </div>
-      {ts.length ? <Progress done={ts.filter((t) => t.done).length} total={ts.length} /> : null}
+      <CampTimeBar c={c} st={st} />
+      {ts.length ? <CampSteps ts={ts} /> : null}
       {result || null}
+    </div>
+  );
+}
+
+// Kampanya süresi: başlamadan önce başlangıca kalan (amber), başladıktan sonra bitişe kalan (yeşil)
+const LEAD_MS = 14 * 86400000;
+function CampTimeBar({ c, st, now = new Date() }) {
+  const s = fromDateInput(c.start_date);
+  if (c.start_time) { const [h, m] = c.start_time.split(':').map(Number); s.setHours(h, m, 0, 0); }
+  const e = fromDateInput(c.end_date);
+  if (c.end_time) { const [h, m] = c.end_time.split(':').map(Number); e.setHours(h, m, 0, 0); } else e.setHours(23, 59, 59, 0);
+  let kind, fill, left, right;
+  if (st.key === 'past') { kind = 'past'; fill = 1; left = 'Bitti'; right = fmtShort(e); }
+  else if (now < s) { kind = 'soon'; fill = Math.min(1, Math.max(0.03, 1 - (s - now) / LEAD_MS)); left = 'Başlangıca ' + dur(s - now); right = fmtShort(s) + (c.start_time ? ' ' + c.start_time : ''); }
+  else { kind = 'live'; fill = Math.min(1, Math.max(0.02, (now - s) / Math.max(1, e - s))); left = 'Bitişe ' + dur(e - now); right = fmtShort(e) + (c.end_time ? ' ' + c.end_time : ''); }
+  return (
+    <div className={'ctb ' + kind}>
+      <div className="ctb-lbl"><span>{left}</span><span className="muted">{right}</span></div>
+      <div className="ctb-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fill * 100)} aria-label={left}>
+        <span style={{ width: fill * 100 + '%' }} />
+      </div>
+    </div>
+  );
+}
+
+// Hazırlık adımları: her adım bir nokta (dolu = tamam)
+function CampSteps({ ts }) {
+  const done = ts.filter((t) => t.done).length;
+  const all = done === ts.length;
+  return (
+    <div className={'csteps' + (all ? ' all' : '')} aria-label={'Hazırlık ' + done + '/' + ts.length}>
+      <span className="csteps-k">Hazırlık</span>
+      <span className="csteps-dots" aria-hidden="true">
+        {ts.slice(0, 8).map((t) => <i key={t.id} className={t.done ? 'on' : ''} title={t.title} />)}
+        {ts.length > 8 ? <em>+{ts.length - 8}</em> : null}
+      </span>
+      <span className="csteps-n">{all ? '✓ tamam' : done + '/' + ts.length + ' hazır'}</span>
     </div>
   );
 }
