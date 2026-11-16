@@ -1,5 +1,5 @@
 // Cüzdan: kişisel gelir / gider, sabit giderler, bütçe (iş cirosundan tamamen ayrı)
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Sheet, Section } from './ui.jsx';
 import { tl, tlShort, parseTL } from './revenue.jsx';
@@ -35,6 +35,67 @@ function catSlices(catList) {
   });
   if (rest.length) out.push({ id: '_rest', ids: rest.map(([id]) => id), v: rest.reduce((s, [, v]) => s + v, 0), label: 'Diğerleri (' + rest.length + ')', emoji: '•', color: '#868E96' });
   return out;
+}
+
+// Günlük harcama: kategori renklerinde yığılmış çubuklar, çubuk üstünde tutar.
+// Tek bir gün çok büyükse (ör. kira) ölçek kırılır, diğer günler okunur kalır.
+function DailyChart({ days, view, today, avg, colorOf, hover, setHover }) {
+  const scrollRef = useRef(null);
+  const vals = days.map((x) => x.v).filter(Boolean).sort((a, b) => b - a);
+  const top = vals[0] || 1, second = vals[1] || 0;
+  const cap = second && top > second * 2.5 ? second * 1.35 : top;
+  const H = 86; // en yüksek çubuğun yüzdesi (üstte tutar yazısına yer)
+  const h = (v) => (v >= cap ? H : (v / cap) * H);
+  const sel = hover ? days.find((x) => x.key === hover) : null;
+  useEffect(() => {
+    // Telefonda aylık grafik kayar: bugüne getir
+    const el = scrollRef.current;
+    if (!el) return;
+    const t = el.querySelector('.dc-col.today');
+    if (t) el.scrollLeft = Math.max(0, t.offsetLeft - el.clientWidth / 2);
+  }, [days.length, days[0] && days[0].key]);
+  return (
+    <div className="card dc">
+      <div className="dc-scroll" ref={scrollRef}>
+        <div className={'dc-bars ' + (view === 'hafta' ? 'wk' : 'month')} style={{ '--n': days.length }} role="list" aria-label="Günlük harcama grafiği">
+          {avg > 0 ? <span className="dc-avg" style={{ bottom: 'calc(var(--axis) + var(--plot) * ' + (Math.min(H, h(avg)) / 100) + ')' }} aria-hidden="true"><em>ort. {kfmt(avg)}</em></span> : null}
+          {days.map((x) => {
+            const segs = Object.entries(x.cats).sort((a, b) => b[1] - a[1]);
+            const broken = x.v > cap;
+            const we = [0, 6].includes(x.d.getDay());
+            const isToday = toDateInput(x.d) === toDateInput(today);
+            return (
+              <button type="button" role="listitem" key={x.key}
+                className={'dc-col' + (hover === x.key ? ' on' : '') + (hover && hover !== x.key ? ' dim' : '') + (x.future ? ' future' : '') + (isToday ? ' today' : '')}
+                onClick={() => setHover(hover === x.key ? null : x.key)} onMouseEnter={() => setHover(x.key)}
+                aria-label={fmtLong(x.d) + ': ' + (x.v ? tl(x.v) : 'harcama yok')}>
+                <span className="dc-plot">
+                  {x.v ? <span className="dc-v">{kfmt(x.v)}</span> : null}
+                  <span className={'dc-stack' + (broken ? ' broken' : '')} style={{ height: x.v ? Math.max(2.5, h(x.v)) + '%' : 0 }}>
+                    {segs.map(([id, v]) => <span key={id} style={{ flexGrow: v, background: colorOf(id) }} />)}
+                  </span>
+                </span>
+                <span className={'dc-d' + (we ? ' we' : '')}>{view === 'hafta' ? WEEKDAYS_SHORT[x.d.getDay()] : x.d.getDate()}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {sel ? (
+        <div className="dc-detail" aria-live="polite">
+          <b>{fmtLong(sel.d)}</b>
+          {sel.v ? (
+            <>
+              <span className="dc-total">{tl(sel.v)}</span>
+              <span className="dc-cats">
+                {Object.entries(sel.cats).sort((a, b) => b[1] - a[1]).map(([id, v]) => <span key={id}><i style={{ background: colorOf(id) }} />{catOf(id).label} {tl(v)}</span>)}
+              </span>
+            </>
+          ) : <span className="muted">Harcama yok</span>}
+        </div>
+      ) : <p className="dc-hint">Bir güne dokun, o günün kategorilere göre dökümü burada görünsün.</p>}
+    </div>
+  );
 }
 
 function Donut({ slices, total, sel, onSel }) {
@@ -106,8 +167,11 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
   const days = Array.from({ length: n }, (_, i) => {
     const d = addDays(start, i);
     const key = toDateInput(d);
-    const v = rows.filter((r) => r.kind === 'gider' && r.day === key).reduce((s, r) => s + Number(r.amount), 0);
-    return { d, key, v, future: d > today };
+    const dr = rows.filter((r) => r.kind === 'gider' && r.day === key);
+    const v = dr.reduce((s, r) => s + Number(r.amount), 0);
+    const cats = {};
+    dr.forEach((r) => { const k = catOf(r.category).id; cats[k] = (cats[k] || 0) + Number(r.amount); });
+    return { d, key, v, cats, future: d > today };
   });
   const maxV = Math.max(1, ...days.map((x) => x.v));
   const hoverDay = hover ? days.find((x) => x.key === hover) : null;
@@ -235,24 +299,11 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
       <section className="section">
         <div className="section-head">
           <h2>Günlük harcama</h2>
-          <span className="meta" aria-live="polite">{hoverDay ? fmtShort(hoverDay.d) + ' · ' + (hoverDay.v ? tl(hoverDay.v) : 'harcama yok') : 'Bir çubuğa dokun'}</span>
+          <span className="meta">{expense > 0 ? 'Günlük ortalama ' + tl(expense / Math.max(1, elapsed + 1)) : ''}</span>
         </div>
-        <div className="card rv-chart" onMouseLeave={() => setHover(null)}>
-          <div className={'rv-bars wl-bars' + (view === 'hafta' ? ' wk' : ' month')} role="list" aria-label="Günlük harcama grafiği">
-            {expense > 0 ? <span className="rv-ref" style={{ bottom: Math.min(100, ((expense / Math.max(1, elapsed + 1)) / maxV) * BAR_MAX) + '%' }} aria-hidden="true" /> : null}
-            {days.map((x) => (
-              <button type="button" role="listitem" key={x.key} className={'rv-col' + (hover === x.key ? ' on' : '') + (x.future ? ' future' : '') + ([0, 6].includes(x.d.getDay()) ? ' we' : '')}
-                onMouseEnter={() => setHover(x.key)} onFocus={() => setHover(x.key)} onClick={() => setHover(x.key)}
-                aria-label={fmtLong(x.d) + ': ' + (x.v ? tl(x.v) : 'harcama yok')}>
-                {x.v ? <span className="wl-lbl" aria-hidden="true">{kfmt(x.v)}</span> : null}
-                <span className="rv-bar" style={{ height: x.v ? Math.max(3, (x.v / maxV) * BAR_MAX) + '%' : 0 }} />
-              </button>
-            ))}
-          </div>
-          <div className="rv-axis" aria-hidden="true">
-            {view === 'hafta' ? days.map((x) => <span key={x.key}>{WEEKDAYS_SHORT[x.d.getDay()]}</span>) : <><span>1</span><span>{Math.round(n / 2)}</span><span>{n}</span></>}
-          </div>
-        </div>
+        <DailyChart days={days} view={view} today={today} avg={expense > 0 ? expense / Math.max(1, elapsed + 1) : 0}
+          colorOf={(id) => { const x = slices.find((y) => y.id === id); return x ? x.color : restIds.includes(id) ? '#868E96' : REST_COLOR; }}
+          hover={hover} setHover={setHover} />
       </section>
 
 
@@ -291,8 +342,8 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
               <div className="wl-gday">
                 <span><b>{fmtShort(fromDateInput(g.day))}</b> <span className="muted">{WEEKDAYS_SHORT[fromDateInput(g.day).getDay()]}</span></span>
                 <span className="wl-gsum">
-                  {g.inc ? <span className="in">+{tl(g.inc)}</span> : null}
-                  {g.exp ? <span className="out">−{tl(g.exp)}</span> : null}
+                  {g.inc ? <span className="pill in">+{tl(g.inc)}</span> : null}
+                  {g.exp ? <span className="pill out">−{tl(g.exp)}</span> : null}
                 </span>
               </div>
               {g.items.map((r) => {
