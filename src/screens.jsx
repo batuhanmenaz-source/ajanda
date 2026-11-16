@@ -170,6 +170,18 @@ function CallRow({ c, now, onToggle, onOpen, showDay }) {
   );
 }
 
+// Takvim kaydını kendi penceresinde aç
+export function openDayItem(e, actions) {
+  if (!e || !e.item) return;
+  if (e.kind === 'reminder') actions.openReminder(e.item);
+  else if (e.kind === 'call') actions.openCall(e.item);
+  else if (e.kind === 'campaign') actions.openCampaign(e.item);
+  else if (e.kind === 'special') actions.openSpecial(e.item);
+  else if (e.kind === 'collab') actions.openCollab(e.item);
+  else if (e.kind === 'note') actions.openNote(e.item);
+  else if (e.kind === 'google') actions.openGoogleEvent(e.item);
+}
+
 function CampaignMini({ c, tasks, onOpen, result }) {
   const isEvent = c.kind === 'etkinlik';
   const ts = tasksOf(tasks, c.id);
@@ -592,10 +604,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
   const liveCamps = campsAll.filter((c) => campaignStatus(c, now).key === 'live').length;
 
   const upcoming = [
-    ...open(rem).map((r) => ({ t: new Date(r.due_at), title: r.title, meta: r.marketplace, kind: 'rem' })),
-    ...open(calls).map((c) => ({ t: new Date(c.due_at), title: c.who + ' aranacak', meta: c.topic, kind: 'call' })),
-    ...gToday.filter((e) => !e.allDay).map((e) => ({ t: e.start, title: e.title, meta: e.calendar, kind: 'google' })),
-    ...yarimToday.map((x) => ({ t: new Date(x.due_at), title: (x.title || x.who + ' aranacak') + ' ❤️', meta: 'Yarim', kind: 'yarim' }))
+    ...open(rem).map((r) => ({ t: new Date(r.due_at), title: r.title, meta: r.marketplace, kind: 'rem', open: () => actions.openReminder(r) })),
+    ...open(calls).map((c) => ({ t: new Date(c.due_at), title: c.who + ' aranacak', meta: c.topic, kind: 'call', open: () => actions.openCall(c) })),
+    ...gToday.filter((e) => !e.allDay).map((e) => ({ t: e.start, title: e.title, meta: e.calendar, kind: 'google', open: () => actions.openGoogleEvent(e) })),
+    ...yarimToday.map((x) => ({ t: new Date(x.due_at), title: (x.title || x.who + ' aranacak') + ' ❤️', meta: 'Yarim', kind: 'yarim', open: () => (x.who && !x.title ? actions.openCall(x) : actions.openReminder(x)) }))
   ].filter((x) => x.t >= now).sort((a, b) => a.t - b.t);
   const next = upcoming[0];
   const lateCount = lateR.length + lateC.length;
@@ -611,6 +623,17 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
     }
     return null;
   }, [next, allData, events, today.getTime()]);
+  // Kartın tamamına dokununca: sıradaki işi aç; geciken varsa tek ise onu aç, birden çoksa listeye kaydır
+  const heroOpen = () => {
+    if (next) { next.open && next.open(); return; }
+    if (lateCount) {
+      if (lateCount === 1) { if (lateR[0]) actions.openReminder(lateR[0]); else actions.openCall(lateC[0]); return; }
+      const el = document.querySelector('.late-anchor') || document.querySelector('.late-list');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (later) openDayItem(later.e, actions);
+  };
   const LATER_KIND = { 'Hatırlatma': 'rem', Not: 'rem', Arama: 'call', Google: 'google', Yarim: 'yarim', Kampanya: 'camp', Influencer: 'inf', Etkinlik: 'event', 'Özel gün': 'special' };
 
   return (
@@ -629,7 +652,9 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
       </div>
     )}
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
-        <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : later ? (LATER_KIND[later.e.src] || 'free') : 'free')}>
+        <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : later ? (LATER_KIND[later.e.src] || 'free') : 'free') + (next || lateCount || later ? ' clickable' : '')}
+          role={next || lateCount || later ? 'button' : undefined} tabIndex={next || lateCount || later ? 0 : undefined}
+          onClick={heroOpen} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); heroOpen(); } }}>
           {next ? (
             <>
               <span className="k">{HERO_KIND[next.kind]} · {next.t - now < 60000 ? 'şimdi' : dur(next.t - now) + ' sonra'}</span>
@@ -650,7 +675,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
             <>
               <span className="k">Bugünlük saatli iş kalmadı</span>
               <span className="t">{lateCount} geciken iş seni bekliyor</span>
-              <span className="m">Aşağıdaki Gecikenler listesinden kapatabilirsin.</span>
+              <span className="m">{lateCount === 1 ? 'Dokun, açılsın.' : 'Dokun, listeye git.'}</span>
             </>
           ) : later ? (
             <>
@@ -768,7 +793,7 @@ function DayItemRow({ e, actions, compact }) {
   return (
     <div className={'ditem' + (compact ? ' compact' : '')}>
       <button type="button" className={'rowbtn row timeline' + (compact ? ' compact' : '')}
-        onClick={() => (e.kind === 'reminder' ? actions.openReminder(e.item) : e.kind === 'call' ? actions.openCall(e.item) : e.kind === 'campaign' ? actions.openCampaign(e.item) : e.kind === 'special' ? actions.openSpecial(e.item) : e.kind === 'collab' ? actions.openCollab(e.item) : e.kind === 'note' ? actions.openNote(e.item) : e.kind === 'google' ? actions.openGoogleEvent(e.item) : null)}>
+        onClick={() => openDayItem(e, actions)}>
         <span className="tcol">{e.time}</span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
