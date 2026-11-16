@@ -29,7 +29,9 @@ const KEYS = {
   USD: ['USD', 'ABD DOLARI', 'usd'],
   EUR: ['EUR', 'EURO', 'eur'],
   GRA: ['GRA', 'gram-altin', 'Gram Altın', 'GAU', 'gram altın'],
-  ONS: ['ONS', 'Ons', 'ons', 'XAU']
+  ONS: ['ONS', 'Ons', 'ons', 'XAU'],
+  CEY: ['CEYREKALTIN', 'ceyrek-altin', 'Çeyrek Altın', 'CEYREK', 'YENICEYREK', 'yeni-ceyrek-altin'],
+  TAM: ['TAMALTIN', 'tam-altin', 'Tam Altın', 'TAM', 'YENITAM', 'yeni-tam-altin']
 };
 const pick = (data, k) => { for (const c of KEYS[k]) if (data && data[c]) return data[c]; return null; };
 const field = (o, names) => { for (const n of names) if (o && o[n] != null) return o[n]; return null; };
@@ -83,6 +85,9 @@ export default async function handler(req, res) {
       }
     } catch (e) { console.warn(String(e)); }
   }
+  // Çeyrek / tam bulunamazsa gram altından yaklaşık hesap (22 ayar has: çeyrek ≈1,6 gr, tam ≈6,4 gr)
+  if (rates.GRA && !rates.CEY) rates.CEY = { v: rates.GRA.v * 1.6038, ch: rates.GRA.ch, approx: true };
+  if (rates.GRA && !rates.TAM) rates.TAM = { v: rates.GRA.v * 6.4152, ch: rates.GRA.ch, approx: true };
   if (!rates.USD) {
     res.setHeader('Cache-Control', 'no-store');
     res.status(502).json({ error: 'Kurlar şu an alınamadı.' });

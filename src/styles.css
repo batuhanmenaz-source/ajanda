@@ -1144,23 +1144,41 @@ button.pill { min-height: 32px; }
 .tstrip .wx-temp { font-size: 22px; }
 .tstrip .wx-l1 { font-size: 13px; }
 .tstrip .wx-l2 { font-size: 11px; }
-.fx { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: center; gap: 0; padding: 8px 6px; }
-.fx-empty { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; }
-.fx-i { display: flex; flex-direction: column; gap: 1px; padding: 0 10px; min-width: 0; }
-.fx-i + .fx-i { border-left: 1px solid var(--line-2); }
-.fx-k { font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap; }
-.fx-v { font-family: var(--display); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.fx-ch { font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.fx-ch.up { color: var(--green); }
-.fx-ch.down { color: var(--danger); }
-.fx-at { border: 0; background: transparent; font: inherit; font-size: 10px; color: var(--muted); padding: 4px 6px; cursor: pointer; align-self: start; white-space: nowrap; }
 @media (max-width: 759px) {
   .tstrip { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .tstrip .wx-feel { display: none; }
-  .fx { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 2px 6px; row-gap: 2px; }
-  .fx-i { padding: 0 6px; }
-  .fx-v { font-size: 14px; }
-  .fx-k { font-size: 10px; }
-  .fx-at { grid-column: 1 / -1; justify-self: end; padding: 0 8px; }
 }
 .tstrip .wx:not(.open) .wx-feel { display: none; }
+
+/* Piyasa kutusu: dolar, euro, gram / çeyrek / tam altın */
+.tstrip { grid-template-columns: minmax(250px, 1fr) minmax(0, 2.6fr); }
+.tstrip .wx.open ~ .fx { grid-column: 1 / -1; }
+.fx { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; }
+.fx-empty { display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 12px 14px; }
+.fx-head { display: flex; justify-content: space-between; align-items: center; }
+.fx-title { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.fx-at { border: 0; background: transparent; font: inherit; font-size: 11px; color: var(--muted); padding: 2px 4px; cursor: pointer; white-space: nowrap; }
+.fx-at:hover { color: var(--accent); }
+.fx-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.fx-i { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 12px; background: var(--bg); min-width: 0; }
+.fx-i.gold { background: #FBF5E6; }
+.fx-k { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-k i { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 10px; font-weight: 800; background: #DCE7F7; color: #1B4F91; }
+.fx-i.gold .fx-k i { background: #F2CF66; color: #6B4E00; }
+.fx-v { font-family: var(--display); font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.15; letter-spacing: -0.01em; }
+.fx-ch { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fx-ch.up { color: var(--green); }
+.fx-ch.down { color: var(--danger); }
+@media (max-width: 1100px) and (min-width: 760px) { .fx-v { font-size: 18px; } .fx-i { padding: 9px 10px; } }
+@media (max-width: 759px) {
+  .fx-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .fx-i.cur { grid-column: span 3; }
+  .fx-i.gold { grid-column: span 2; padding: 9px 9px; }
+  .fx-i.gold .fx-v { font-size: 16px; }
+  .fx-i.gold .fx-k { font-size: 11px; }
+  .fx-v { font-size: 20px; }
+}
+/* Hava ve piyasa alt alta, piyasa tam genişlikte */
+.tstrip { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.tstrip .wx-feel { display: none; }
+.tstrip .wx.open .wx-feel { display: inline; }
