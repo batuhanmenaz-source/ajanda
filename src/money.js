@@ -112,7 +112,8 @@ export function parseMoney(input, now = new Date()) {
 // ---------- Dönemler ----------
 export function periodRange(view, anchor) {
   const a = startOfDay(anchor);
-  if (view === 'hafta') { const s = weekStart(a); return { start: s, end: addDays(s, 6) }; }
+  // Haftalık = bitiş günü dahil son 7 gün (anchor bitiş günü)
+  if (view === 'hafta') return { start: addDays(a, -6), end: a };
   const s = new Date(a.getFullYear(), a.getMonth(), 1);
   return { start: s, end: new Date(a.getFullYear(), a.getMonth() + 1, 0) };
 }

@@ -6,7 +6,7 @@ import { tl, tlShort, parseTL } from './revenue.jsx';
 import {
   EXPENSE_CATS, INCOME_CATS, METHODS, catOf, catsFor, periodRange, shiftPeriod, sumBy, budgetStatus, fixedDue, fixedPaid
 } from './money.js';
-import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, fmtLong, rangeLabel, daysBetween, MONTHS, WEEKDAYS_SHORT } from './dates.js';
+import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, fmtLong, rangeLabel, daysBetween, MONTHS, WEEKDAYS_SHORT, weekStart } from './dates.js';
 
 // Çubuk üstü kısa tutar: 850, 2,5b, 17b, 1,2m
 const kfmt = (v) => {
@@ -75,7 +75,7 @@ function DailyChart({ days, view, today, avg, colorOf, hover, setHover }) {
                     {segs.map(([id, v]) => <span key={id} style={{ flexGrow: v, background: colorOf(id) }} />)}
                   </span>
                 </span>
-                <span className={'dc-d' + (we ? ' we' : '')}>{view === 'hafta' ? WEEKDAYS_SHORT[x.d.getDay()] : x.d.getDate()}</span>
+                <span className={'dc-d' + (we ? ' we' : '')}>{view === 'hafta' ? WEEKDAYS_SHORT[x.d.getDay()] + ' ' + x.d.getDate() : x.d.getDate()}</span>
               </button>
             );
           })}
@@ -144,7 +144,7 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
   const income = sumBy(rows, start, end, 'gelir');
   const expense = sumBy(rows, start, end, 'gider');
   // Kıyas: önceki dönemin aynı uzunluktaki kısmı (bu dönemse bugüne kadar)
-  const prev = periodRange(view, shiftPeriod(view, start, -1));
+  const prev = view === 'hafta' ? periodRange('hafta', addDays(start, -1)) : periodRange(view, shiftPeriod(view, start, -1));
   const elapsed = isCurrent ? daysBetween(start, today) : daysBetween(start, end);
   const prevEnd = addDays(prev.start, Math.min(elapsed, daysBetween(prev.start, prev.end)));
   const prevExpense = sumBy(money || [], prev.start, prevEnd, 'gider');
@@ -202,14 +202,14 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div className="seg" role="group" aria-label="Dönem" style={{ maxWidth: 320 }}>
-        <button type="button" className={view === 'hafta' ? 'on' : ''} onClick={() => setView('hafta')}>Haftalık</button>
+        <button type="button" className={view === 'hafta' ? 'on' : ''} onClick={() => setView('hafta')}>Son 7 gün</button>
         <button type="button" className={view === 'ay' ? 'on' : ''} onClick={() => setView('ay')}>Aylık</button>
       </div>
       <div className="week-nav">
         <button type="button" className="iconbtn" aria-label="Önceki dönem" onClick={() => go(-1)}><Icon.Left /></button>
         <span className="lbl">{label}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {!isCurrent ? <button type="button" className="linkbtn" style={{ marginRight: 6 }} onClick={() => { setAnchor(today); setHover(null); }}>{view === 'ay' ? 'Bu ay' : 'Bu hafta'}</button> : null}
+          {!isCurrent ? <button type="button" className="linkbtn" style={{ marginRight: 6 }} onClick={() => { setAnchor(today); setHover(null); }}>{view === 'ay' ? 'Bu ay' : 'Bugüne dön'}</button> : null}
           <button type="button" className="iconbtn" aria-label="Sonraki dönem" onClick={() => go(1)} disabled={isCurrent}><Icon.Right /></button>
         </div>
       </div>
@@ -725,7 +725,7 @@ export function BudgetSheet({ budgets, onClose, onSave }) {
 // Haftalık özet ve Bugün için küçük özet satırı
 export function weekSpend(money, now) {
   const t = startOfDay(now);
-  const { start } = periodRange('hafta', t);
+  const start = weekStart(t);
   const elapsed = daysBetween(start, t);
   const cur = sumBy(money || [], start, t, 'gider');
   const ls = addDays(start, -7);
