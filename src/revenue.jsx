@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Sheet } from './ui.jsx';
 import { MARKETPLACES, mpColor } from './constants.js';
+import { DailyRevenueChart } from './revchart.jsx';
 import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, fmtLong, dayLabel, WEEKDAYS_SHORT } from './dates.js';
 
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -203,10 +204,9 @@ export function RevenueMini({ revenue, now, actions, onOpen, target }) {
 }
 
 // ---------- Ekran ----------
-export function RevenueScreen({ revenue, loaded, error, target, now, actions, order }) {
+export function RevenueScreen({ revenue, loaded, error, target, now, actions, order, campaigns }) {
   const today = startOfDay(now);
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
-  const [hover, setHover] = useState(null);
   const [openDay, setOpenDay] = useState(null);
 
   const mk = monthKey(month);
@@ -249,20 +249,9 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
   const mpList = Object.entries(byMp).sort((a, b) => b[1] - a[1]);
   const mpMax = mpList.length ? mpList[0][1] : 0;
 
-  // Günlük grafik
-  const days = Array.from({ length: dim }, (_, i) => {
-    const d = new Date(month.getFullYear(), month.getMonth(), i + 1);
-    const key = toDateInput(d);
-    return { d, key, v: byDay[key] ? byDay[key].total : 0, future: d > today };
-  });
-  const maxV = Math.max(1, ...days.map((x) => x.v));
-  // Kıyas çizgisi: hedef varsa günlük hedef, yoksa ayın günlük ortalaması
-  const ref = (Number(target) || 0) > 0 ? Number(target) / dim : avg;
-  const refLabel = (Number(target) || 0) > 0 ? 'günlük hedef' : 'günlük ortalama';
-  const hoverDay = hover ? days.find((x) => x.key === hover) : null;
 
   const list = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
-  const go = (n) => { setHover(null); setOpenDay(null); setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1)); };
+  const go = (n) => { setOpenDay(null); setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1)); };
 
   if (error) {
     return <div className="card"><p className="empty">{error}</p></div>;
@@ -318,36 +307,7 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
         <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'yil')}>⬇ {month.getFullYear()} tümü</button>
       </div>
 
-      {/* Günlük grafik */}
-      <section className="section">
-        <div className="section-head">
-          <h2>Günlük ciro</h2>
-          <span className="meta" aria-live="polite">{hoverDay ? fmtShort(hoverDay.d) + ' · ' + (hoverDay.v ? tl(hoverDay.v) : 'girilmedi') : 'Bir çubuğa dokun'}</span>
-        </div>
-        <div className="card rv-chart" onMouseLeave={() => setHover(null)}>
-          <div className="rv-bars" role="list" aria-label="Günlük ciro grafiği">
-            {ref > 0 ? <span className="rv-ref" style={{ bottom: Math.min(100, (ref / maxV) * 100) + '%' }} aria-hidden="true" /> : null}
-            {days.map((x) => (
-              <button type="button" role="listitem" key={x.key} className={'rv-col' + (hover === x.key ? ' on' : '') + (x.future ? ' future' : '') + ([0, 6].includes(x.d.getDay()) ? ' we' : '') + (x.v && ref > 0 && x.v < ref ? ' low' : '')}
-                onMouseEnter={() => setHover(x.key)} onFocus={() => setHover(x.key)} onClick={() => setHover(x.key)}
-                aria-label={fmtLong(x.d) + ': ' + (x.v ? tl(x.v) : 'girilmedi')}>
-                <span className="rv-bar" style={{ height: x.v ? Math.max(3, (x.v / maxV) * 100) + '%' : 0 }} />
-              </button>
-            ))}
-          </div>
-          <div className="rv-axis" aria-hidden="true">
-            <span>1</span><span>{Math.round(dim / 2)}</span><span>{dim}</span>
-          </div>
-          {ref > 0 ? (
-            <div className="rv-legend">
-              <span><i className="hi" />{refLabel} üstü</span>
-              <span><i className="lo" />altı</span>
-              <span><i className="ln" />{refLabel} {tlShort(ref)}</span>
-              <span><i className="we" />hafta sonu</span>
-            </div>
-          ) : null}
-        </div>
-      </section>
+      <DailyRevenueChart month={month} revenue={revenue} campaigns={campaigns} today={today} target={target} onEdit={(k) => actions.openRevenue(k)} />
 
       {/* Pazaryeri dağılımı */}
       <section className="section">

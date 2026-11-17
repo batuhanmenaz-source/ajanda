@@ -24,7 +24,7 @@ export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" grid />
-      {seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} />
+      {seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} campaigns={data.campaigns} />
         : seg === 'bekleyenler' ? <FollowupsView data={data} now={now} actions={actions} />
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
         : seg === 'notlar' ? <MarketplaceNotes data={data} actions={actions} />
