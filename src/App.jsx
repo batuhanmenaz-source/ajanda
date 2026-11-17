@@ -855,6 +855,16 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         say('Kalp sayacı kaydedilemedi.');
       });
     },
+    // Bugün sayfasındaki bölüm +'ları: tür, tarih ve filtre (İş/Özel) hazır gelir
+    quickNew: (type, sc) => {
+      const nextHour = () => { const x = new Date(); x.setMinutes(0, 0, 0); x.setHours(x.getHours() + 1); return x; };
+      const scopeOf = sc === 'ozel' ? { scope: 'ozel' } : sc === 'is' ? { scope: 'is' } : {};
+      if (type === 'reminder') setSheet({ kind: 'item', item: { kind: 'reminder', due_at: nextHour().toISOString(), ...scopeOf } });
+      else if (type === 'call') setSheet({ kind: 'item', item: { kind: 'call', due_at: nextHour().toISOString(), ...scopeOf } });
+      else if (type === 'campaign') setSheet({ kind: 'campaign', item: { kind: 'kampanya' } });
+      else if (type === 'ad') setSheet({ kind: 'collab', item: { start_at: nextHour().toISOString() } });
+      else if (type === 'followup') setSheet({ kind: 'followup', item: { since: toDateInput(new Date()) } });
+    },
     newItemOn: (d) => { const x = new Date(d); x.setHours(9, 0, 0, 0); setSheet({ kind: 'item', item: { kind: 'reminder', due_at: x.toISOString() } }); },
     openCampaign: (c) => setSheet({ kind: 'campaign', item: c }),
     openGoogleEvent: (e) => setSheet({ kind: 'gevent', item: e }),

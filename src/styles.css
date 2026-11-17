@@ -1285,3 +1285,10 @@ button.pulse:hover { border-color: #C9C6BD; }
 .hero.clickable:active { filter: brightness(.96); }
 .hero.clickable:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .late-anchor, .late-list { scroll-margin-top: 90px; }
+/* Bölüm başlığında + */
+.section-tail { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.sec-add { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--tone, var(--accent)); background: var(--surface); color: var(--tone, var(--accent)); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; align-self: center; transition: background .12s, color .12s; }
+.sec-add span { font-size: 20px; font-weight: 600; line-height: 1; margin-top: -2px; }
+.sec-add:hover, .sec-add:active { background: var(--tone, var(--accent)); color: #fff; }
+.sec-add:focus-visible { outline: 2px solid var(--tone, var(--accent)); outline-offset: 2px; }
+.section-head:has(.sec-add) { align-items: center; }

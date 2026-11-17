@@ -15,12 +15,16 @@ export function Check({ on, onClick, label, square }) {
 }
 
 // tone: bölümün türünü gösteren renk (başlık işareti + kartın üst şeridi)
-export function Section({ title, meta, action, children, tone, tint }) {
+// onAdd: başlığın yanında bölüm renginde küçük + (o bölüme yeni kayıt)
+export function Section({ title, meta, action, children, tone, tint, onAdd, addLabel }) {
   return (
     <section className={'section' + (tone ? ' toned' : '') + (tint ? ' tinted' : '')} style={tone ? { '--tone': tone, '--tint': tint || 'transparent' } : undefined}>
       <div className="section-head">
         <h2>{title}</h2>
-        {action || (meta ? <span className="meta">{meta}</span> : null)}
+        <span className="section-tail">
+          {action || (meta ? <span className="meta">{meta}</span> : null)}
+          {onAdd ? <button type="button" className="sec-add" onClick={onAdd} aria-label={addLabel || 'Yeni ekle'} title={addLabel || 'Yeni ekle'}><span aria-hidden="true">+</span></button> : null}
+        </span>
       </div>
       {children}
     </section>

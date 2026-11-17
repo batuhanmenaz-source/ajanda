@@ -164,15 +164,15 @@ export function AdsView({ data, now, actions }) {
 }
 
 // Bugün sayfası: yayındakiler ve bugün başlayanlar
-export function AdsTodayCard({ data, now, actions, onAll }) {
+export function AdsTodayCard({ data, now, actions, onAll, showEmpty }) {
   const all = (data.collabs || []).filter((c) => adStart(c));
   const live = all.filter((c) => adStatus(c, now) === 'live').sort((a, b) => adEnd(a) - adEnd(b));
   const today = all.filter((c) => adStatus(c, now) === 'soon' && adStart(c) < addDays(startOfDay(now), 1)).sort((a, b) => adStart(a) - adStart(b));
-  if (!live.length && !today.length) return null;
+  if (!live.length && !today.length) return null; // boşken yer kaplamasın (yeni reklam Influencer sekmesinden ya da + ile)
   const meta = [live.length ? live.length + ' yayında' : '', today.length ? today.length + ' bugün başlıyor' : ''].filter(Boolean).join(' · ');
   const list = [...live, ...today];
   return (
-    <Section title="Influencer reklamları" meta={meta} tone="#0C8599" action={<button type="button" className="linkbtn" onClick={onAll}>Tümü</button>}>
+    <Section title="Influencer reklamları" meta={meta} tone="#0C8599" action={<button type="button" className="linkbtn" onClick={onAll}>Tümü</button>} onAdd={() => actions.quickNew('ad')} addLabel="Yeni reklam">
       <div className={'adt-grid' + (list.length === 1 ? ' one' : '')}>
         {list.slice(0, 4).map((c) => {
           const st = adStatus(c, now);

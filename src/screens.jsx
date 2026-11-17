@@ -715,7 +715,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
 
         <div className="tslot" style={{ order: 3 }}>
-        <Section title="Hatırlatmalar" meta={open(rem).length ? open(rem).length + ' açık' : rem.length ? 'hepsi tamam' : ''} tone={SRC_COLORS['Hatırlatma']}>
+        <Section title="Hatırlatmalar" meta={open(rem).length ? open(rem).length + ' açık' : rem.length ? 'hepsi tamam' : ''} tone={SRC_COLORS['Hatırlatma']} onAdd={() => actions.quickNew('reminder', scope)} addLabel="Yeni hatırlatma">
           <div className="card list">
             {rem.length ? <DoneFold items={rem} render={(r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />} /> : <p className="empty">Bugün için hatırlatma yok.</p>}
           </div>
@@ -723,7 +723,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
 
         <div className="tslot" style={{ order: 6 }}>
-        {scope !== 'ozel' ? <AdsTodayCard data={rawData} now={now} actions={actions} onAll={() => goTab('influencer')} /> : null}
+        {scope !== 'ozel' ? <AdsTodayCard data={rawData} now={now} actions={actions} onAll={() => goTab('influencer')} showEmpty /> : null}
         </div>
         <div className="tslot" style={{ order: 7 }}>
         {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
@@ -765,7 +765,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
 
         <div className="tslot" style={{ order: 4 }}>
-        <Section title="Aranacaklar" meta={open(calls).length ? open(calls).length + ' açık' : calls.length ? 'hepsi tamam' : ''} tone={SRC_COLORS.Arama}>
+        <Section title="Aranacaklar" meta={open(calls).length ? open(calls).length + ' açık' : calls.length ? 'hepsi tamam' : ''} tone={SRC_COLORS.Arama} onAdd={() => actions.quickNew('call', scope)} addLabel="Yeni arama">
           <div className="card list">
             {calls.length ? <DoneFold items={calls} render={(c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />} /> : <p className="empty">Bugün aranacak kimse yok.</p>}
           </div>
@@ -774,7 +774,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
 
         <div className="tslot" style={{ order: 5 }}>
         {scope !== 'ozel' ? (
-          <Section title={'Kampanyalar' + (campsAll.length ? ' · ' + (liveCamps ? liveCamps + ' aktif' : '') + (liveCamps && campsAll.length > liveCamps ? ', ' : '') + (campsAll.length > liveCamps ? (campsAll.length - liveCamps) + ' yakında' : '') : '')} tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>}>
+          <Section title={'Kampanyalar' + (campsAll.length ? ' · ' + (liveCamps ? liveCamps + ' aktif' : '') + (liveCamps && campsAll.length > liveCamps ? ', ' : '') + (campsAll.length > liveCamps ? (campsAll.length - liveCamps) + ' yakında' : '') : '')} tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>} onAdd={() => actions.quickNew('campaign', scope)} addLabel="Yeni kampanya">
             {camps.length ? <div className="camp-grid">{camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)}</div> : <div className="card"><p className="empty">Önümüzdeki 30 günde kampanya yok.</p></div>}
             {campsAll.length > camps.length ? <button type="button" className="linkbtn" style={{ alignSelf: 'center', padding: '4px 0' }} onClick={() => goTab('kampanya')}>+{campsAll.length - camps.length} kampanya daha</button> : null}
           </Section>
