@@ -88,8 +88,8 @@ export function MailSection({ mail, busy, reload, followups, actions, now }) {
       </Section>
     );
   }
-  const fl = showAll ? flagged : flagged.slice(0, 4);
-  const wt = showAll ? waiting : waiting.slice(0, 4);
+  const fl = showAll ? flagged : flagged.slice(0, 3);
+  const wt = showAll ? waiting : waiting.slice(0, 3);
   const more = flagged.length - fl.length + waiting.length - wt.length;
   return (
     <Section title={'Mailler' + (flagged.length ? ' · ' + flagged.length + ' bayraklı' : '')} tone="#1864AB"

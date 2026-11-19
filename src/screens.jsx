@@ -729,9 +729,6 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         <div className="tslot" style={{ order: 7 }}>
         {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
         </div>
-        <div className="tslot" style={{ order: 7 }}>
-        {scope !== 'ozel' && mail ? <MailSection mail={mail.mail} busy={mail.busy} reload={mail.reload} followups={rawData.followups} actions={actions} now={now} /> : null}
-        </div>
         <div className="tslot" style={{ order: 9 }}>
         {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
         </div>
@@ -750,6 +747,9 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
       <div className="today-col">
         <div className="tslot" style={{ order: 2 }}>
         {missedEl}
+        </div>
+        <div className="tslot" style={{ order: 2 }}>
+        {scope !== 'ozel' && mail ? <MailSection mail={mail.mail} busy={mail.busy} reload={mail.reload} followups={rawData.followups} actions={actions} now={now} /> : null}
         </div>
         <div className="tslot" style={{ order: 8 }}>
         <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
