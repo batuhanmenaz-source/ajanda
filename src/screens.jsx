@@ -15,6 +15,7 @@ import { RevenueMini } from './revenue.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FxStrip } from './fx.jsx';
 import { WalletPulse } from './wallet.jsx';
+import { MailSection } from './mail.jsx';
 import { FollowupsMini } from './work.jsx';
 import { AdsTodayCard, adWho, adStart, adEnd, dur } from './ads.jsx';
 
@@ -577,7 +578,7 @@ function WorkPulse({ data, rawData, now, lateCount, campsAll, goTab }) {
 }
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget }) {
+export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail }) {
   const allData = scopeData(rawData, scope);
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} contacts={allData.contacts} />;
   const [sumHidden, setSumHidden] = useState(false);
@@ -727,6 +728,9 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
         <div className="tslot" style={{ order: 7 }}>
         {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
+        </div>
+        <div className="tslot" style={{ order: 7 }}>
+        {scope !== 'ozel' && mail ? <MailSection mail={mail.mail} busy={mail.busy} reload={mail.reload} followups={rawData.followups} actions={actions} now={now} /> : null}
         </div>
         <div className="tslot" style={{ order: 9 }}>
         {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}

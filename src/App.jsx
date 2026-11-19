@@ -19,6 +19,7 @@ import { nextOccurrence } from './recur.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent } from './google.js';
 import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
 import { AdSheet } from './ads.jsx';
+import { useMail, MailSetupSheet } from './mail.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote } from './sync.js';
 
 const TABS = [
@@ -326,7 +327,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const fail = (e) => {
     console.error(e);
     const msg = (e && e.message) || '';
-    if (/collabs/.test(msg) && /ad_revenue/.test(msg)) say('Kaydedilemedi: Reklam cirosu için Supabase\'de 20 numaralı SQL\'i çalıştırman gerekiyor.');
+    if (/mail_id/.test(msg)) say('Kaydedilemedi: Mail takibi için Supabase\'de 21 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/collabs/.test(msg) && /ad_revenue/.test(msg)) say('Kaydedilemedi: Reklam cirosu için Supabase\'de 20 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /commission/.test(msg)) say('Kaydedilemedi: Komisyon oranı için Supabase\'de 18 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /start_at|end_at|platform|handle/.test(msg)) say('Kaydedilemedi: Influencer reklamları için Supabase\'de 17 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/followups|nudge_/.test(msg)) say('Kaydedilemedi: Bekleyenler için Supabase\'de 16 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -755,7 +757,20 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       await syncNudge({ ...f, ...patch });
       if (!f.done) { const n = Math.max(0, Math.round((startOfDay(new Date()) - fromDateInput(f.since)) / 86400000)); say('Tamamlandı ✓ ' + n + ' günde döndü'); }
     } catch (e) { patchLocal('followups', f.id, { done: f.done, done_at: f.done_at }); fail(e); }
-  };
+  };  // İş maili: cevap gelen gönderilmiş maillere bağlı bekleyenleri kendiliğinden kapat
+  const followupsRef = useRef([]);
+  followupsRef.current = data.followups || [];
+  const onMailAnswered = useCallback((ids) => {
+    const set = new Set(ids);
+    followupsRef.current.filter((f) => f.mail_id && !f.done && set.has(f.mail_id)).forEach((f) => {
+      const patch = { done: true, done_at: toDateInput(new Date()), note: ((f.note || '') + '\nMaile cevap geldi.').trim() };
+      patchLocal('followups', f.id, patch);
+      store.update('followups', f.id, patch).then(() => syncNudge({ ...f, ...patch })).catch((e) => console.error(e));
+      say('📧 Cevap geldi, kapatıldı: ' + f.title);
+    });
+  }, []);
+  const mailState = useMail(loading ? null : onMailAnswered);
+
   const deleteFollowup = async (f) => {
     if (!window.confirm('"' + f.title + '" silinsin mi?')) return;
     try { if (f.nudge_reminder_id) await removeReminderQuiet(f.nudge_reminder_id); } catch (e) { console.error(e); }
@@ -825,6 +840,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openYarim: () => { setSheet(null); setYarimSeg('ozet'); goTab('yarim'); },
     openMemory: (m) => setSheet({ kind: 'memory', item: m }),
     openFollowup: (f) => setSheet({ kind: 'followup', item: f }),
+    mailToReminder: (m) => { const x = new Date(); x.setMinutes(0, 0, 0); x.setHours(x.getHours() + 1); setSheet({ kind: 'item', item: { kind: 'reminder', title: m.subject + ' (' + m.fromName + ')', due_at: x.toISOString(), scope: 'is' } }); },
+    mailToFollowup: (m) => setSheet({ kind: 'followup', item: { title: m.subject, party: m.fromName, since: toDateInput(new Date()), note: 'Mail: ' + m.from } }),
+    mailTrack: (m) => saveFollowup({ title: m.subject, party: m.toName, since: toDateInput(new Date(m.date)), note: 'Mail: ' + m.to + ' (cevap gelince kendiliğinden kapanır)', mail_id: m.id }),
+    openMailSetup: () => setSheet({ kind: 'mailSetup' }),
     doneFollowup, exportReport, exportAds, goTab,
     openYarimItem: (x) => setSheet({ kind: 'yitem', item: x }),
     toggleYarimItem, planToCalendar, saveSurprise,
@@ -1053,7 +1072,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} />}
               {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden}
@@ -1103,6 +1122,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'fixed' && <FixedSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveFixed} onDelete={deleteFixed} onAddCat={addMoneyCat} />}
       {sheet && sheet.kind === 'budget' && <BudgetSheet budgets={budgets} onClose={() => setSheet(null)} onSave={saveBudgets} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} alertDefaults={alertDefs} />}
+      {sheet && sheet.kind === 'mailSetup' && <MailSetupSheet onClose={() => { setSheet(null); mailState.reload(); }} />}
       {sheet && sheet.kind === 'gevent' && <GoogleEventSheet ev={sheet.item} onClose={() => setSheet(null)} onConvert={(c) => setSheet({ kind: 'campaign', item: c })} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'alertDefaults' && <AlertDefaultsSheet defaults={alertDefs} onClose={() => setSheet(null)} onSave={saveAlertDefaults} />}
@@ -1129,7 +1149,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
       )}
       {sheet && sheet.kind === 'account' && (
-        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
+        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
           backup={backup} onBackupNow={() => runDriveBackup(false)} onDownload={downloadBackup} onRestore={restoreBackup}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}

@@ -832,7 +832,7 @@ function BackupSection({ demo, backup, onBackupNow, onDownload, onRestore, onRec
 }
 
 // ---------- Hesap ----------
-export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, onAlertDefaults, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
+export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, onAlertDefaults, onMailSetup, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
   const gText = { ok: 'Bağlı', checking: 'Kontrol ediliyor…', needs_login: 'Yeniden bağlanmalı', error: 'Ulaşılamıyor', off: 'Örnek modda kapalı' }[google] || google;
   return (
     <Sheet title="Hesap" onClose={onClose}>
@@ -844,6 +844,7 @@ export function AccountSheet({ email, google, demo, onClose, onReconnect, onRefr
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!demo && <button type="button" className="btn big" onClick={onReconnect}>Google Takvim'i yeniden bağla</button>}
         {onAlertDefaults ? <button type="button" className="btn big" onClick={onAlertDefaults}>🔔 Varsayılan hatırlatmalar</button> : null}
+        {onMailSetup ? <button type="button" className="btn big" onClick={onMailSetup}>📧 İş maili (IMAP) bağlantısı</button> : null}
         <button type="button" className="btn big" onClick={onMissedSetup}>Telefon bağlantısı (MacroDroid: cevapsız çağrı, arama, bildirim özeti)</button>
         <button type="button" className="btn big" onClick={onToggleYarim} aria-pressed={!yarimHidden}>{yarimHidden ? 'Yarim alanını göster' : 'Yarim alanını bu cihazda gizle'}</button>
         <button type="button" className="btn big" onClick={onRefresh}>Verileri yenile</button>

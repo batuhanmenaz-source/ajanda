@@ -1,5 +1,13 @@
 {
   "rewrites": [
-    { "source": "/((?!api/|assets/|icons/|ocr/|sw.js|workbox-|manifest.webmanifest|registerSW.js).*)", "destination": "/index.html" }
-  ]
+    {
+      "source": "/((?!api/|assets/|icons/|ocr/|sw.js|workbox-|manifest.webmanifest|registerSW.js).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/mail.js": {
+      "maxDuration": 30
+    }
+  }
 }
