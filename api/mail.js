@@ -69,7 +69,7 @@ export async function scan(client, { now = Date.now(), days = 21, me = '' } = {}
           const t = +(m.envelope.date || 0);
           const subj = normSubj(m.envelope.subject);
           const gotReply = replied.has(id) || inboxSubjects.some((x) => x.s && x.s === subj && x.from === toAddr && x.t > t);
-          const rec = { id, to: to.address, toName: to.name || to.address, subject: m.envelope.subject || '(konu yok)', date: new Date(t).toISOString(), days: Math.floor((now - t) / DAY), replied: gotReply };
+          const rec = { uid: m.uid, id, to: to.address, toName: to.name || to.address, subject: m.envelope.subject || '(konu yok)', date: new Date(t).toISOString(), days: Math.floor((now - t) / DAY), replied: gotReply };
           const prev = seen.get(subj + '|' + toAddr);
           if (!prev || +new Date(prev.date) < t) seen.set(subj + '|' + toAddr, rec);
         }
@@ -80,6 +80,64 @@ export async function scan(client, { now = Date.now(), days = 21, me = '' } = {}
   flagged.sort((a, b) => b.date.localeCompare(a.date));
   waiting.sort((a, b) => a.date.localeCompare(b.date));
   return { flagged, waiting, answered: answered.map((r) => r.id), sentFolder: sentPath };
+}
+
+// ---- Tek mailin içeriği (yalnızca istenince; hiçbir yere kaydedilmez) ----
+const ENT = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", ccedil: 'ç', Ccedil: 'Ç', ouml: 'ö', Ouml: 'Ö', uuml: 'ü', Uuml: 'Ü', rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”', ndash: '–', mdash: '—', hellip: '…', euro: '€', bull: '•' };
+export function htmlToText(h) {
+  return String(h || '')
+    .replace(/<(head|style|script|title)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6]|table|blockquote)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&#x([0-9a-f]+);/gi, (_, x) => String.fromCodePoint(parseInt(x, 16)))
+    .replace(/&#(\d+);/g, (_, x) => String.fromCodePoint(Number(x)))
+    .replace(/&([a-z]+);/gi, (m, n) => (ENT[n] != null ? ENT[n] : m));
+}
+// Metni toparla, alıntılanan eski yazışmayı ayır
+const QUOTE = /^\s*(-{2,}\s*(original message|özgün ileti|orijinal ileti|forwarded message|iletilen ileti)|(from|kimden|gönderen)\s*:\s*\S.*$|.{6,200}\b(wrote|yazdı):\s*$)/i;
+export function tidy(t) {
+  const lines = String(t || '').replace(/\r/g, '').replace(/[ \t ]+$/gm, '').split('\n');
+  let cut = lines.findIndex((l, i) => i > 0 && QUOTE.test(l));
+  if (cut < 0) cut = lines.findIndex((l, i) => i > 0 && /^>/.test(l));
+  const main = (cut > 0 ? lines.slice(0, cut) : lines).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return { text: main.slice(0, 6000), cut: main.length > 6000, quoted: cut > 0 };
+}
+function walk(node, out) {
+  if (!node) return;
+  if (node.childNodes) { node.childNodes.forEach((c) => walk(c, out)); return; }
+  const type = String(node.type || '').toLowerCase();
+  const name = (node.dispositionParameters && node.dispositionParameters.filename) || (node.parameters && node.parameters.name);
+  const isAtt = node.disposition === 'attachment' || (name && !type.startsWith('text/'));
+  if (isAtt) { if (name && !/^image\d*\.(png|jpe?g|gif)$/i.test(name)) out.files.push({ name, size: node.size || 0 }); return; }
+  if (type === 'text/plain' && !out.plain) out.plain = node.part || '1';
+  if (type === 'text/html' && !out.html) out.html = node.part || '1';
+}
+async function streamText(stream, max = 400000) {
+  const chunks = []; let n = 0;
+  for await (const c of stream) { chunks.push(c); n += c.length; if (n > max) break; }
+  return Buffer.concat(chunks).toString('utf8');
+}
+export async function readBody(client, { box, uid }) {
+  const lock = await client.getMailboxLock(box);
+  try {
+    const msg = await client.fetchOne(String(uid), { bodyStructure: true, envelope: true }, { uid: true });
+    if (!msg) return { error: 'Mail bulunamadı (silinmiş ya da taşınmış olabilir).' };
+    const out = { files: [] };
+    walk(msg.bodyStructure, out);
+    let text = '';
+    const part = out.plain || out.html;
+    if (part) {
+      const dl = await client.download(String(uid), part, { uid: true, maxBytes: 400000 });
+      const raw = await streamText(dl.content);
+      text = part === out.plain ? raw : htmlToText(raw);
+    }
+    const env = msg.envelope || {};
+    const who = (l) => (l || []).map((a) => a.name || a.address).filter(Boolean).join(', ');
+    return { ...tidy(text), files: out.files.slice(0, 12), from: who(env.from), to: who(env.to), cc: who(env.cc), date: env.date ? new Date(env.date).toISOString() : null };
+  } finally { lock.release(); }
 }
 
 // Sunucunun sertifikasını bağlanmadan önce görür (şifre gönderilmez)
@@ -159,6 +217,16 @@ export default async function handler(req, res) {
   });
   try {
     await client.connect();
+    const q = req.query || {};
+    if (q.uid) {
+      const uid = Number(q.uid);
+      if (!Number.isInteger(uid) || uid <= 0) { res.status(400).json({ error: 'Geçersiz mail.' }); return; }
+      let box = 'INBOX';
+      if (q.box === 'sent') { box = findSent((await client.list()) || []); if (!box) { res.status(404).json({ error: 'Gönderilmiş klasörü bulunamadı.' }); return; } }
+      const body = await readBody(client, { box, uid });
+      res.status(body.error ? 404 : 200).json(body);
+      return;
+    }
     const out = await scan(client, { me: IMAP_USER, days: Number(process.env.MAIL_DAYS || 21) });
     res.status(200).json({ configured: true, at: new Date().toISOString(), account: IMAP_USER, legacyTls: legacy, pinned: !cert.authorized, ...out });
   } catch (e) {

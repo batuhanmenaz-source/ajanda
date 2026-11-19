@@ -4,7 +4,7 @@ import { Section, Sheet } from './ui.jsx';
 import { supabase, DEMO } from './supabase.js';
 import { whenLabel } from './dates.js';
 
-const CACHE = 'ajanda-mail-v1';
+const CACHE = 'ajanda-mail-v2';
 const TTL = 5 * 60 * 1000;
 const read = () => { try { return JSON.parse(localStorage.getItem(CACHE) || 'null'); } catch { return null; } };
 const write = (v) => { try { localStorage.setItem(CACHE, JSON.stringify(v)); } catch { /* yok say */ } };
@@ -14,12 +14,12 @@ function demoMail() {
   const d = (n) => new Date(Date.now() - n * 86400000).toISOString();
   return { configured: true, at: new Date().toISOString(), account: 'batuhan@ornek.com',
     flagged: [
-      { id: 'f1@demo', fromName: 'Trendyol Kategori', from: 'kategori@trendyol.com', subject: 'Aralık kampanya takvimi ve katılım formu', date: d(0.2) },
-      { id: 'f2@demo', fromName: 'Ajans Medya', from: 'ajans@ornek.com', subject: 'Influencer brief revizyonu', date: d(1.3) }
+      { uid: 1, id: 'f1@demo', fromName: 'Trendyol Kategori', from: 'kategori@trendyol.com', subject: 'Aralık kampanya takvimi ve katılım formu', date: d(0.2) },
+      { uid: 2, id: 'f2@demo', fromName: 'Ajans Medya', from: 'ajans@ornek.com', subject: 'Influencer brief revizyonu', date: d(1.3) }
     ],
     waiting: [
-      { id: 's1@demo', toName: 'Beymen Kategori', to: 'kategori@beymen.com', subject: 'Varyant açma talebi – Missha serisi', date: d(5), days: 5 },
-      { id: 's2@demo', toName: 'Hepsiburada KAM', to: 'kam@hepsiburada.com', subject: 'Banner alanı fiyatı', date: d(2.4), days: 2 }
+      { uid: 3, id: 's1@demo', toName: 'Beymen Kategori', to: 'kategori@beymen.com', subject: 'Varyant açma talebi – Missha serisi', date: d(5), days: 5 },
+      { uid: 4, id: 's2@demo', toName: 'Hepsiburada KAM', to: 'kam@hepsiburada.com', subject: 'Banner alanı fiyatı', date: d(2.4), days: 2 }
     ],
     answered: ['s9@demo'] };
 }
@@ -36,6 +36,73 @@ export async function fetchMail(force) {
   const v = { ...j, got: Date.now() };
   if (!j.error) write(v);
   return v;
+}
+
+// Tek mailin içeriği: yalnızca dokununca çekilir, sadece bu oturumda bellekte tutulur (telefona/Supabase'e yazılmaz)
+const bodies = new Map();
+const DEMO_BODY = {
+  1: { from: 'Trendyol Kategori', to: 'Batuhan', text: 'Merhaba,\n\nAralık kampanya takvimi ektedir. Katılım formunu 25 Kasım Çarşamba 17:00\'ye kadar doldurmanızı rica ederiz.\n\nİyi çalışmalar', files: [{ name: 'Aralik_kampanya_takvimi.xlsx', size: 48211 }], quoted: false },
+  2: { from: 'Ajans Medya', to: 'Batuhan', text: 'Selam Batuhan,\n\nBrief\'teki ürün listesini güncelledik, revize hali ektedir. Onay verirsen içerik üreticilere iletiyoruz.', files: [{ name: 'brief_v2.pdf', size: 812000 }], quoted: true },
+  3: { from: 'Batuhan', to: 'Beymen Kategori', text: 'Merhabalar,\n\nMissha serisi için ekteki listede yer alan ürünlerin varyantlarının açılmasını rica ederim.\n\nTeşekkürler', files: [{ name: 'varyant_listesi.xlsx', size: 22100 }], quoted: false },
+  4: { from: 'Batuhan', to: 'Hepsiburada KAM', text: 'Merhaba,\n\nAralık ayı için ana sayfa banner alanı fiyatlarını paylaşabilir misiniz?', files: [], quoted: false }
+};
+export async function fetchBody(m, box) {
+  const key = box + ':' + m.uid;
+  if (bodies.has(key)) return bodies.get(key);
+  let v;
+  if (DEMO) { await new Promise((r) => setTimeout(r, 400)); v = DEMO_BODY[m.uid] || { text: '', files: [] }; }
+  else {
+    const { data } = await supabase.auth.getSession();
+    const token = data && data.session && data.session.access_token;
+    const r = await fetch('/api/mail?uid=' + encodeURIComponent(m.uid) + '&box=' + box, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    v = await r.json().catch(() => ({ error: 'Beklenmeyen yanıt (' + r.status + ')' }));
+    if (!r.ok && !v.error) v.error = 'Hata ' + r.status;
+  }
+  if (!v.error) bodies.set(key, v);
+  return v;
+}
+
+const kb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
+
+function MailBody({ m, box }) {
+  const [st, setSt] = useState({ busy: true });
+  const [full, setFull] = useState(false);
+  const load = useCallback(() => {
+    setSt({ busy: true });
+    fetchBody(m, box).then((v) => setSt(v)).catch((e) => setSt({ error: 'İçerik alınamadı: ' + e.message }));
+  }, [m, box]);
+  useEffect(() => { load(); }, [load]);
+  if (st.busy) return <div className="mail-body"><p className="mail-body-wait">Mail açılıyor…</p></div>;
+  if (st.error) return <div className="mail-body"><p className="mail-body-err">{st.error}</p><button type="button" className="linkbtn" onClick={load}>Tekrar dene</button></div>;
+  const text = st.text || '';
+  const long = text.length > 600;
+  const shown = long && !full ? text.slice(0, 600).replace(/\s+\S*$/, '') + '…' : text;
+  return (
+    <div className="mail-body">
+      <p className="mail-body-hd">{box === 'sent' ? 'Kime: ' + (st.to || m.toName) : 'Kimden: ' + (st.from || m.fromName)}{st.cc ? ' · Bilgi: ' + st.cc : ''}</p>
+      {text ? <div className="mail-body-tx">{shown}</div> : <p className="mail-body-wait">Bu mailde metin yok.</p>}
+      {long ? <button type="button" className="linkbtn" onClick={() => setFull(!full)}>{full ? 'Kısalt' : 'Devamını göster'}</button> : null}
+      {st.cut && full ? <p className="mail-body-wait">Mailin geri kalanı çok uzun, tamamı Outlook'ta.</p> : null}
+      {st.quoted ? <p className="mail-body-wait">Önceki yazışmalar gizlendi.</p> : null}
+      {st.files && st.files.length ? <div className="mail-files">{st.files.map((f, i) => <span key={i} className="mail-file">📎 {f.name}{f.size ? ' · ' + kb(f.size) : ''}</span>)}</div> : null}
+    </div>
+  );
+}
+
+function MailItem({ m, box, children, meta }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={'mail-item' + (open ? ' open' : '')}>
+      <div className="row mail-row">
+        <button type="button" className="mail-main mail-open" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <span className="mail-subj">{m.subject}</span>
+          <span className="mail-meta">{meta}</span>
+        </button>
+        <span className="mail-acts">{children}</span>
+      </div>
+      {open ? <MailBody m={m} box={box} /> : null}
+    </div>
+  );
 }
 
 export function useMail(onAnswered) {
@@ -99,33 +166,9 @@ export function MailSection({ mail, busy, reload, followups, actions, now, onAll
       </span>}>
       <div className="card list mail-card">
         {fl.length ? <div className="mail-sub">🚩 Bayrakladıkların</div> : null}
-        {fl.map((m) => (
-          <div key={m.id} className="row mail-row">
-            <span className="mail-main">
-              <span className="mail-subj">{m.subject}</span>
-              <span className="mail-meta">{m.fromName} · {whenLabel(new Date(m.date), now)}</span>
-            </span>
-            <span className="mail-acts">
-              <button type="button" className="chip" onClick={() => actions.mailToReminder(m)}>⏰ Hatırlat</button>
-              <button type="button" className="chip" onClick={() => actions.mailToFollowup(m)}>⏳ Bekleyen</button>
-            </span>
-          </div>
-        ))}
+        {fl.map((m) => <FlagRow key={m.id} m={m} actions={actions} now={now} />)}
         {wt.length ? <div className="mail-sub">✉️ Cevap bekleyen ({WAIT_MIN_DAYS}+ gün)</div> : null}
-        {wt.map((m) => {
-          const f = tracked.get(m.id);
-          return (
-            <div key={m.id} className="row mail-row">
-              <span className="mail-main">
-                <span className="mail-subj">{m.subject}</span>
-                <span className="mail-meta"><b className={m.days >= 7 ? 'hi' : m.days >= 4 ? 'mid' : ''}>{m.days} gündür cevap yok</b> · {m.toName}</span>
-              </span>
-              <span className="mail-acts">
-                {f ? <span className="mail-tracked">Takipte ✓</span> : <button type="button" className="chip" onClick={() => actions.mailTrack(m)}>⏳ Takibe al</button>}
-              </span>
-            </div>
-          );
-        })}
+        {wt.map((m) => <WaitRow key={m.id} m={m} tracked={tracked.get(m.id)} actions={actions} />)}
         {more > 0 ? <button type="button" className="done-fold" onClick={() => (onAll ? onAll() : setShowAll(true))}>+{more} mail daha · tümünü gör</button> : null}
       </div>
     </Section>
@@ -134,29 +177,17 @@ export function MailSection({ mail, busy, reload, followups, actions, now, onAll
 
 function FlagRow({ m, actions, now }) {
   return (
-    <div className="row mail-row">
-      <span className="mail-main">
-        <span className="mail-subj">{m.subject}</span>
-        <span className="mail-meta">{m.fromName} · {whenLabel(new Date(m.date), now)}</span>
-      </span>
-      <span className="mail-acts">
-        <button type="button" className="chip" onClick={() => actions.mailToReminder(m)}>⏰ Hatırlat</button>
-        <button type="button" className="chip" onClick={() => actions.mailToFollowup(m)}>⏳ Bekleyen</button>
-      </span>
-    </div>
+    <MailItem m={m} box="inbox" meta={m.fromName + ' · ' + whenLabel(new Date(m.date), now)}>
+      <button type="button" className="chip" onClick={() => actions.mailToReminder(m)}>⏰ Hatırlat</button>
+      <button type="button" className="chip" onClick={() => actions.mailToFollowup(m)}>⏳ Bekleyen</button>
+    </MailItem>
   );
 }
 function WaitRow({ m, tracked, actions }) {
   return (
-    <div className="row mail-row">
-      <span className="mail-main">
-        <span className="mail-subj">{m.subject}</span>
-        <span className="mail-meta"><b className={m.days >= 7 ? 'hi' : m.days >= 4 ? 'mid' : ''}>{m.days ? m.days + ' gündür cevap yok' : 'bugün gönderildi'}</b> · {m.toName}</span>
-      </span>
-      <span className="mail-acts">
-        {tracked ? <span className="mail-tracked">Takipte ✓</span> : <button type="button" className="chip" onClick={() => actions.mailTrack(m)}>⏳ Takibe al</button>}
-      </span>
-    </div>
+    <MailItem m={m} box="sent" meta={<><b className={m.days >= 7 ? 'hi' : m.days >= 4 ? 'mid' : ''}>{m.days ? m.days + ' gündür cevap yok' : 'bugün gönderildi'}</b> · {m.toName}</>}>
+      {tracked ? <span className="mail-tracked">Takipte ✓</span> : <button type="button" className="chip" onClick={() => actions.mailTrack(m)}>⏳ Takibe al</button>}
+    </MailItem>
   );
 }
 

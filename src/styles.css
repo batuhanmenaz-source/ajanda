@@ -1409,3 +1409,14 @@ button.pulse:hover { border-color: #C9C6BD; }
 /* İş → Mailler */
 .mail-top { display: flex; gap: 8px; align-items: center; }
 .mail-top input { flex: 1; min-width: 0; }
+.mail-open { background: none; border: 0; padding: 0; margin: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.mail-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.mail-item.open .mail-subj { -webkit-line-clamp: unset; color: #1864AB; }
+.mail-body { margin: 0 14px 12px; padding: 10px 12px; border-radius: 10px; background: #F1F6FC; border-left: 3px solid #1864AB; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.mail-body-hd { margin: 0; font-size: 12px; color: var(--muted); }
+.mail-body-tx { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.5; color: var(--ink); width: 100%; }
+.mail-body-wait { margin: 0; font-size: 12px; color: var(--muted); }
+.mail-body-err { margin: 0; font-size: 13px; color: var(--danger); }
+.mail-files { display: flex; flex-wrap: wrap; gap: 6px; }
+.mail-file { font-size: 12px; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-body .linkbtn { padding: 0; }
