@@ -1,13 +1,14 @@
 // İş ve Özel sekmeleri: alt sekmelerle ilgili ekranları bir araya toplar
 import { HabitsCard, ListsView, SpecialDatesSection, HabitHistory } from './life.jsx';
 import { AdsView } from './ads.jsx';
+import { MailView } from './mail.jsx';
 import { CampaignsScreen, MarketplaceNotes, DailyNotes } from './screens.jsx';
 import { RevenueScreen } from './revenue.jsx';
 import { WalletView } from './wallet.jsx';
 import { YarimPage } from './yarim.jsx';
 import { FollowupsView, ReportsView } from './work.jsx';
 
-export const WORK_TABS = [['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['bekleyenler', 'Bekleyenler'], ['notlar', 'Notlar'], ['influencer', 'Influencer'], ['raporlar', 'Raporlar']];
+export const WORK_TABS = [['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['mailler', 'Mailler'], ['bekleyenler', 'Bekleyenler'], ['influencer', 'Influencer'], ['notlar', 'Notlar'], ['raporlar', 'Raporlar']];
 export const PRIVATE_TABS = [['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
 export function SubTabs({ tabs, value, onChange, label, grid }) {
@@ -20,11 +21,12 @@ export function SubTabs({ tabs, value, onChange, label, grid }) {
   );
 }
 
-export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder }) {
+export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder, mail }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" grid />
       {seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} campaigns={data.campaigns} />
+        : seg === 'mailler' ? <MailView mail={mail} followups={data.followups} actions={actions} now={now} />
         : seg === 'bekleyenler' ? <FollowupsView data={data} now={now} actions={actions} />
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
         : seg === 'notlar' ? <MarketplaceNotes data={data} actions={actions} />

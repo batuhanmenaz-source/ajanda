@@ -60,7 +60,7 @@ export function useMail(onAnswered) {
 }
 
 // Bugün sayfası: Mailler
-export function MailSection({ mail, busy, reload, followups, actions, now }) {
+export function MailSection({ mail, busy, reload, followups, actions, now, onAll }) {
   const [showAll, setShowAll] = useState(false);
   if (!mail || mail.configured === false) return null;
   if (mail.needTrust) {
@@ -93,7 +93,10 @@ export function MailSection({ mail, busy, reload, followups, actions, now }) {
   const more = flagged.length - fl.length + waiting.length - wt.length;
   return (
     <Section title={'Mailler' + (flagged.length ? ' · ' + flagged.length + ' bayraklı' : '')} tone="#1864AB"
-      action={<button type="button" className="linkbtn" onClick={reload} aria-label="Mailleri yenile">{busy ? 'Yenileniyor…' : '↻ ' + new Date(mail.got || mail.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</button>}>
+      action={<span style={{ display: 'inline-flex', gap: 12, alignItems: 'center' }}>
+        <button type="button" className="linkbtn" onClick={reload} aria-label="Mailleri yenile">{busy ? 'Yenileniyor…' : '↻ ' + new Date(mail.got || mail.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</button>
+        {onAll ? <button type="button" className="linkbtn" onClick={onAll}>Tümü</button> : null}
+      </span>}>
       <div className="card list mail-card">
         {fl.length ? <div className="mail-sub">🚩 Bayrakladıkların</div> : null}
         {fl.map((m) => (
@@ -123,9 +126,79 @@ export function MailSection({ mail, busy, reload, followups, actions, now }) {
             </div>
           );
         })}
-        {more > 0 ? <button type="button" className="done-fold" onClick={() => setShowAll(true)}>+{more} mail daha</button> : null}
+        {more > 0 ? <button type="button" className="done-fold" onClick={() => (onAll ? onAll() : setShowAll(true))}>+{more} mail daha · tümünü gör</button> : null}
       </div>
     </Section>
+  );
+}
+
+function FlagRow({ m, actions, now }) {
+  return (
+    <div className="row mail-row">
+      <span className="mail-main">
+        <span className="mail-subj">{m.subject}</span>
+        <span className="mail-meta">{m.fromName} · {whenLabel(new Date(m.date), now)}</span>
+      </span>
+      <span className="mail-acts">
+        <button type="button" className="chip" onClick={() => actions.mailToReminder(m)}>⏰ Hatırlat</button>
+        <button type="button" className="chip" onClick={() => actions.mailToFollowup(m)}>⏳ Bekleyen</button>
+      </span>
+    </div>
+  );
+}
+function WaitRow({ m, tracked, actions }) {
+  return (
+    <div className="row mail-row">
+      <span className="mail-main">
+        <span className="mail-subj">{m.subject}</span>
+        <span className="mail-meta"><b className={m.days >= 7 ? 'hi' : m.days >= 4 ? 'mid' : ''}>{m.days ? m.days + ' gündür cevap yok' : 'bugün gönderildi'}</b> · {m.toName}</span>
+      </span>
+      <span className="mail-acts">
+        {tracked ? <span className="mail-tracked">Takipte ✓</span> : <button type="button" className="chip" onClick={() => actions.mailTrack(m)}>⏳ Takibe al</button>}
+      </span>
+    </div>
+  );
+}
+
+// İş → Mailler: tüm bayraklılar ve cevap bekleyenler, arama ile
+export function MailView({ mail: st, followups, actions, now }) {
+  const [q, setQ] = useState('');
+  const [all, setAll] = useState(false);
+  if (!st || !st.mail) return <div className="card"><p className="empty">Mailler yükleniyor…</p></div>;
+  const mail = st.mail;
+  if (mail.configured === false || mail.needTrust || mail.error) {
+    return (
+      <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+        <p style={{ margin: 0 }}>{mail.error || (mail.needTrust ? 'Mail sunucusunun sertifikası onay bekliyor.' : 'İş maili henüz bağlanmadı.')}</p>
+        <button type="button" className="btn" onClick={actions.openMailSetup}>📧 Mail bağlantısı</button>
+      </div>
+    );
+  }
+  const k = q.trim().toLocaleLowerCase('tr-TR');
+  const hit = (m) => !k || [m.subject, m.fromName, m.from, m.toName, m.to].some((x) => String(x || '').toLocaleLowerCase('tr-TR').includes(k));
+  const tracked = new Map((followups || []).filter((f) => f.mail_id).map((f) => [f.mail_id, f]));
+  const flagged = (mail.flagged || []).filter(hit);
+  const waiting = (mail.waiting || []).filter((w) => all || w.days >= WAIT_MIN_DAYS).filter(hit);
+  const trackedOpen = (followups || []).filter((f) => f.mail_id && !f.done).length;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 820 }}>
+      <div className="mail-top">
+        <input type="search" className="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Konu ya da kişi ara…" aria-label="Maillerde ara" />
+        <button type="button" className="btn" onClick={st.reload} disabled={st.busy}>{st.busy ? 'Yenileniyor…' : '↻ Yenile'}</button>
+      </div>
+      <p className="hint" style={{ margin: '-6px 0 0' }}>{mail.account} · son kontrol {new Date(mail.got || mail.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}{trackedOpen ? ' · ' + trackedOpen + ' mail takipte (Bekleyenler)' : ''}</p>
+      <Section title={'🚩 Bayrakladıkların · ' + flagged.length}>
+        <div className="card list mail-card">
+          {flagged.length ? flagged.map((m) => <FlagRow key={m.id} m={m} actions={actions} now={now} />) : <p className="empty">{k ? 'Aramaya uyan bayraklı mail yok.' : "Outlook'ta bayrakladığın mail yok."}</p>}
+        </div>
+      </Section>
+      <Section title={'✉️ Cevap bekleyen · ' + waiting.length} action={<label className="wl-check" style={{ fontSize: 12 }}><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /><span>Son 2 günü de göster</span></label>}>
+        <div className="card list mail-card">
+          {waiting.length ? waiting.map((m) => <WaitRow key={m.id} m={m} tracked={tracked.get(m.id)} actions={actions} />) : <p className="empty">{k ? 'Aramaya uyan mail yok.' : 'Cevap bekleyen mail yok.'}</p>}
+        </div>
+      </Section>
+      <p className="hint" style={{ margin: 0 }}>Son 3 haftada gönderdiğin ve cevap gelmeyen mailler listelenir. Takibe aldıkların cevap gelince Bekleyenler'den kendiliğinden kapanır.</p>
+    </div>
   );
 }
 

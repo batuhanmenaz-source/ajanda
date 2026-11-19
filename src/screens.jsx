@@ -749,7 +749,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         {missedEl}
         </div>
         <div className="tslot" style={{ order: 2 }}>
-        {scope !== 'ozel' && mail ? <MailSection mail={mail.mail} busy={mail.busy} reload={mail.reload} followups={rawData.followups} actions={actions} now={now} /> : null}
+        {scope !== 'ozel' && mail ? <MailSection mail={mail.mail} busy={mail.busy} reload={mail.reload} followups={rawData.followups} actions={actions} now={now} onAll={() => goTab('mailler')} /> : null}
         </div>
         <div className="tslot" style={{ order: 8 }}>
         <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
