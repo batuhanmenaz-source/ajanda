@@ -1122,7 +1122,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'fixed' && <FixedSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveFixed} onDelete={deleteFixed} onAddCat={addMoneyCat} />}
       {sheet && sheet.kind === 'budget' && <BudgetSheet budgets={budgets} onClose={() => setSheet(null)} onSave={saveBudgets} />}
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} alertDefaults={alertDefs} />}
-      {sheet && sheet.kind === 'mailSetup' && <MailSetupSheet onClose={() => { setSheet(null); mailState.reload(); }} />}
+      {sheet && sheet.kind === 'mailSetup' && <MailSetupSheet onClose={() => { setSheet(null); mailState.reload(); }} onTrust={(fp) => store.saveSettings({ mail_cert_fp: fp })} />}
       {sheet && sheet.kind === 'gevent' && <GoogleEventSheet ev={sheet.item} onClose={() => setSheet(null)} onConvert={(c) => setSheet({ kind: 'campaign', item: c })} />}
       {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'alertDefaults' && <AlertDefaultsSheet defaults={alertDefs} onClose={() => setSheet(null)} onSave={saveAlertDefaults} />}

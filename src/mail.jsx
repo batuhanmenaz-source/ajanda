@@ -63,6 +63,14 @@ export function useMail(onAnswered) {
 export function MailSection({ mail, busy, reload, followups, actions, now }) {
   const [showAll, setShowAll] = useState(false);
   if (!mail || mail.configured === false) return null;
+  if (mail.needTrust) {
+    return (
+      <Section title="Mailler" tone="#1864AB">
+        <div className="card"><p className="empty">Mail sunucusunun sertifikası onay bekliyor. Sağ üstteki etiket › Hesap › 📧 İş maili bağlantısı.</p>
+          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 12 }}><button type="button" className="btn" onClick={actions.openMailSetup}>Onayla</button></div></div>
+      </Section>
+    );
+  }
   if (mail.error) {
     return (
       <Section title="Mailler" tone="#1864AB" action={<button type="button" className="linkbtn" onClick={reload}>{busy ? 'Deneniyor…' : 'Tekrar dene'}</button>}>
@@ -122,10 +130,16 @@ export function MailSection({ mail, busy, reload, followups, actions, now }) {
 }
 
 // Hesap → İş maili: kurulum adımları ve bağlantı testi
-export function MailSetupSheet({ onClose }) {
+export function MailSetupSheet({ onClose, onTrust }) {
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
   const test = async () => { setBusy(true); try { setRes(await fetchMail(true)); } catch (e) { setRes({ error: e.message }); } finally { setBusy(false); } };
+  const trust = async () => {
+    setBusy(true);
+    try { await onTrust(res.cert.fp); setRes(await fetchMail(true)); }
+    catch (e) { setRes({ ...res, trustError: /mail_cert_fp/.test(String(e && e.message)) ? "Önce Supabase'de 22 numaralı SQL'i çalıştır." : 'Kaydedilemedi: ' + (e && e.message) }); }
+    finally { setBusy(false); }
+  };
   return (
     <Sheet title="İş maili (IMAP)" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -151,6 +165,19 @@ export function MailSetupSheet({ onClose }) {
         {res ? (
           <div className="card" style={{ padding: 14 }}>
             {res.configured === false ? <p style={{ margin: 0 }}>Henüz ayarlanmamış. Eksik: <b>{(res.missing || []).join(', ')}</b></p>
+              : res.needTrust ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <p style={{ margin: 0 }}><b>{res.changed ? 'Sunucunun sertifikası değişmiş.' : 'Mail sunucun kendi imzaladığı bir sertifika kullanıyor.'}</b> {res.changed ? 'Sunucu sertifikasını yenilediyse normaldir; emin değilsen IT\'ye sor.' : 'Şirket mail sunucularında sık görülür; Outlook da ilk kurulumda bunun için bir kez "güven" diye sormuş olabilir.'} Ajanda bu sertifikayı onaylarsan sadece ona güvenir; sertifika değişirse tekrar sorar.</p>
+                  <div className="cert-box">
+                    <span><b>Ad:</b> {res.cert.subject || '—'}</span>
+                    <span><b>Veren:</b> {res.cert.issuer || '—'}</span>
+                    <span><b>Geçerlilik sonu:</b> {res.cert.validTo || '—'}</span>
+                    <span className="fp"><b>Parmak izi:</b> {res.cert.fp}</span>
+                  </div>
+                  <button type="button" className="btn big primary" disabled={busy} onClick={trust}>Bu sertifikaya güven ve bağlan</button>
+                  {res.trustError ? <p style={{ margin: 0, color: 'var(--danger)' }}>{res.trustError}</p> : null}
+                </div>
+              )
               : res.error ? <p style={{ margin: 0, color: 'var(--danger)' }}>{res.error}</p>
                 : <p style={{ margin: 0, color: 'var(--green)' }}>✓ Bağlandı ({res.account}). {(res.flagged || []).length} bayraklı, {(res.waiting || []).length} cevap bekleyen mail. Gönderilmiş klasörü: {res.sentFolder || 'bulunamadı'}.</p>}
           </div>

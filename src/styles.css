@@ -1403,3 +1403,5 @@ button.pulse:hover { border-color: #C9C6BD; }
   .mail-acts { width: 100%; }
   .mail-acts .chip { flex: 1 1 0; justify-content: center; }
 }
+.cert-box { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--bg); font-size: 12px; color: var(--ink-2); }
+.cert-box .fp { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; }

@@ -5,6 +5,7 @@
 //   MAIL_OWNER = Ajanda'ya giriş yaptığın e-posta (başka hiçbir hesap bu uca erişemez)
 import { createClient } from '@supabase/supabase-js';
 import { ImapFlow } from 'imapflow';
+import tls from 'tls';
 
 const DAY = 86400000;
 const SENT_NAMES = ['sent', 'sent items', 'sent messages', 'gönderilmiş öğeler', 'gönderilenler', 'gönderilmiş', 'inbox.sent', 'inbox.sent items'];
@@ -81,6 +82,26 @@ export async function scan(client, { now = Date.now(), days = 21, me = '' } = {}
   return { flagged, waiting, answered: answered.map((r) => r.id), sentFolder: sentPath };
 }
 
+// Sunucunun sertifikasını bağlanmadan önce görür (şifre gönderilmez)
+const LEGACY = { ciphers: 'DEFAULT@SECLEVEL=0', minVersion: 'TLSv1' };
+const WEAK = /too weak|SECLEVEL|dh key too small|unsupported protocol|wrong version number|no protocols available/i;
+function peek(host, port, legacy) {
+  return new Promise((resolve, reject) => {
+    const sock = tls.connect({ host, port, servername: host, rejectUnauthorized: false, ...(legacy ? LEGACY : {}) }, () => {
+      const c = sock.getPeerCertificate(true);
+      const raw = c && c.raw;
+      resolve({
+        authorized: sock.authorized, reason: sock.authorizationError ? String(sock.authorizationError) : null,
+        fp: c && c.fingerprint256, subject: (c && c.subject && c.subject.CN) || '', issuer: (c && c.issuer && (c.issuer.O || c.issuer.CN)) || '',
+        validTo: c && c.valid_to, pem: raw ? '-----BEGIN CERTIFICATE-----\n' + raw.toString('base64').match(/.{1,64}/g).join('\n') + '\n-----END CERTIFICATE-----\n' : null
+      });
+      sock.destroy();
+    });
+    sock.setTimeout(10000, () => { sock.destroy(); reject(new Error('Zaman aşımı')); });
+    sock.on('error', reject);
+  });
+}
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -95,37 +116,51 @@ export default async function handler(req, res) {
   const url = process.env.VITE_SUPABASE_URL || 'https://ppjswmsskurwwumojjkh.supabase.co';
   const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!jwt || !key) { res.status(401).json({ error: 'Oturum gerekli.' }); return; }
+  let sb, user;
   try {
-    const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data, error } = await sb.auth.getUser(jwt);
     if (error || !data || !data.user) { res.status(401).json({ error: 'Oturum geçersiz.' }); return; }
     if (String(data.user.email || '').toLowerCase() !== MAIL_OWNER.trim().toLowerCase()) { res.status(403).json({ error: 'Bu hesap maile erişemez.' }); return; }
+    user = data.user;
   } catch (e) {
     res.status(500).json({ error: 'Oturum doğrulanamadı.' });
     return;
   }
 
-  // Bazı paylaşımlı hosting sunucuları eski (zayıf anahtarlı) sertifika kullanır; Node bunları varsayılan
-  // olarak reddeder ("EE certificate key too weak"). Önce normal dener, bu hatada yalnız bu bağlantı için
-  // güvenlik seviyesini düşürüp tekrar dener. Sertifika doğrulaması kapatılmaz, bağlantı yine şifrelidir.
-  const make = (legacy) => new ImapFlow({
-    host: IMAP_HOST, port, secure: port === 993, auth: { user: IMAP_USER, pass: IMAP_PASS }, logger: false,
-    socketTimeout: 20000, greetingTimeout: 10000, connectionTimeout: 10000,
-    tls: legacy ? { servername: IMAP_HOST, ciphers: 'DEFAULT@SECLEVEL=0', minVersion: 'TLSv1' } : { servername: IMAP_HOST }
-  });
-  const WEAK = /too weak|SECLEVEL|dh key too small|unsupported protocol|wrong version number|no protocols available/i;
-  let client = make(false);
-  let legacy = false;
+  // 1) Sertifikaya bak (şifre göndermeden). Eski/zayıf sertifikada uyumlu TLS ile tekrar dene.
+  let legacy = false, cert;
   try {
-    try { await client.connect(); }
-    catch (e) {
-      if (!WEAK.test(String(e && e.message))) throw e;
-      try { client.close(); } catch { /* yok say */ }
-      client = make(true); legacy = true;
-      await client.connect();
+    try { cert = await peek(IMAP_HOST, port, false); }
+    catch (e) { if (!WEAK.test(String(e && e.message))) throw e; legacy = true; cert = await peek(IMAP_HOST, port, true); }
+  } catch (e) {
+    res.status(502).json({ configured: true, error: 'Mail sunucusuna bağlanılamadı: ' + String(e && e.message).slice(0, 160) });
+    return;
+  }
+  // 2) Sertifika herkesçe tanınan bir kurumdan değilse (kendi imzalı vb.) yalnızca onaylanmış parmak izine güven.
+  let tlsOpts = { servername: IMAP_HOST, ...(legacy ? LEGACY : {}) };
+  if (!cert.authorized) {
+    let pinned = process.env.IMAP_CERT_FP || null;
+    if (!pinned) {
+      const { data: st } = await sb.from('app_settings').select('mail_cert_fp').eq('user_id', user.id).maybeSingle();
+      pinned = st && st.mail_cert_fp;
     }
+    if (!pinned || pinned !== cert.fp) {
+      res.status(200).json({ configured: true, needTrust: true, changed: !!pinned, cert: { fp: cert.fp, subject: cert.subject, issuer: cert.issuer, validTo: cert.validTo, reason: cert.reason } });
+      return;
+    }
+    // Onaylı sertifikanın kendisi kök kabul edilir; ad uyuşmazlığı (paylaşımlı hosting) parmak izi eşleştiği için sorun değil
+    // Zayıf anahtar da bu sertifikaya özgü kabul edilir (parmak izi zaten birebir eşleşti)
+    tlsOpts = { ...tlsOpts, ...LEGACY, ca: cert.pem, checkServerIdentity: () => undefined };
+  }
+  const client = new ImapFlow({
+    host: IMAP_HOST, port, secure: port !== 143, auth: { user: IMAP_USER, pass: IMAP_PASS }, logger: false,
+    socketTimeout: 20000, greetingTimeout: 10000, connectionTimeout: 10000, tls: tlsOpts
+  });
+  try {
+    await client.connect();
     const out = await scan(client, { me: IMAP_USER, days: Number(process.env.MAIL_DAYS || 21) });
-    res.status(200).json({ configured: true, at: new Date().toISOString(), account: IMAP_USER, legacyTls: legacy, ...out });
+    res.status(200).json({ configured: true, at: new Date().toISOString(), account: IMAP_USER, legacyTls: legacy, pinned: !cert.authorized, ...out });
   } catch (e) {
     const msg = String((e && (e.responseText || e.message)) || e);
     const auth = /auth|login|credentials|password|LOGIN failed/i.test(msg) && !/certificate/i.test(msg);
