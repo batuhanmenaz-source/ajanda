@@ -346,6 +346,10 @@ function seedLife() {
         ad(-30, 42, { handle: '@ciltbakimgunlugu', platform: 'TikTok', title: '3 video seri', brand: 'DERMA:B', marketplace: 'Hepsiburada', fee: 8000, commission: 15 }),
         ad(4, 28, { handle: '@makyajkutusu', platform: 'Instagram', title: 'Story serisi', brand: 'ZEROID', marketplace: 'Trendyol', fee: 6000, commission: 20 }),
         ad(74, 74 + 168, { handle: '@guzelliksirlari', platform: 'YouTube', title: 'Rutin videosu', brand: 'Missha', marketplace: 'Amazon', fee: 22000 }),
+        (() => { const r = (k) => ({ s: H(-24 * 14 - 10 + k * 168).toISOString(), e: H(-24 * 14 - 10 + (k + 1) * 168).toISOString() });
+          const runs = [{ ...r(0), fee: 81246.21, rev: 487477.24 }, { ...r(1), fee: 7530.96, rev: 45185.73 }, { ...r(2), fee: null, rev: null }];
+          return ad(-24 * 14 - 10, -24 * 14 - 10 + 3 * 168, { title: 'Kasım 1000-2003', platform: 'Diğer', brand: 'Missha', marketplace: 'Hepsiburada', commission: 20, runs, renew: true, fee: 88777.17, ad_revenue: 532662.97 }); })(),
+        ad(-48, 120, { title: 'Kasım %30 2-2', platform: 'Diğer', marketplace: 'Trendyol', commission: 30, commission2: 20, fee: 192.39 }),
         ad(-300, -228, { handle: '@elifguzellik', platform: 'Instagram', title: 'Kasım kampanyası paylaşımı', brand: 'Missha', marketplace: 'Trendyol', fee: 12000, commission: 20 })
       ];
     })(),

@@ -151,7 +151,7 @@ export async function exportReport({ rep, label }) {
   rep.inf.list.forEach((x) => inf.push([S(x.name), N(x.n), N(x.fee, TL), N(x.rev || 0, TL), ratio(x.rev, x.feeR)]));
   inf.push([B(S('Toplam')), B(N(rep.inf.count)), B(N(rep.inf.fee, TL)), B(N(rep.inf.rev || 0, TL)), ratio(rep.inf.rev, rep.inf.feeR)]);
   const com = [[H('Komisyon oranı'), H('Reklam'), H('Bütçe (KDV hariç)'), H('Reklam cirosu (KDV dahil)'), H('Ciro / bütçe')]];
-  (rep.inf.byPct || []).forEach((x) => com.push([S(x.rate == null ? 'Girilmemiş' : '%' + x.rate.toLocaleString('tr-TR')), N(x.n), N(x.fee, TL), N(x.rev || 0, TL), ratio(x.rev, x.feeR)]));
+  (rep.inf.byPct || []).forEach((x) => com.push([S(x.label || 'Girilmemiş'), N(x.n), N(x.fee, TL), N(x.rev || 0, TL), ratio(x.rev, x.feeR)]));
   const ads = adRows(rep.inf.ads || [], rep.inf.contacts);
   const c0 = rep.ciro || { all: {}, byMp: [] };
   const ciro = [[H('Pazaryeri'), H('Genel ciro'), H('Kampanyalı ciro'), H('Kampanyasız ciro'), H('Kampanyalı gün'), H('Kampanyasız gün'), H('Kampanyalı günlük ort.'), H('Kampanyasız günlük ort.'), H('Günlük fark')]];
@@ -166,8 +166,8 @@ export async function exportReport({ rep, label }) {
     { name: 'Kampanyalar', rows: camps, widths: [28, 14, 12, 12, 7, 16, 14, 13, 11], sticky: 1 },
     { name: 'Pazaryerleri', rows: mps, widths: [16, 11, 14, 16, 11, 16], sticky: 1 },
     { name: 'Influencer', rows: inf, widths: [24, 9, 18, 24, 13], sticky: 1 },
-    { name: 'Reklamlar', rows: ads, widths: [22, 28, 11, 12, 13, 17, 17, 11, 18, 24, 13, 11], sticky: 1 },
-    { name: 'Komisyon', rows: com, widths: [16, 9, 18, 24, 13], sticky: 1 },
+    { name: 'Reklamlar', rows: ads, widths: [22, 28, 11, 12, 13, 8, 17, 17, 11, 11, 18, 24, 13, 11], sticky: 1 },
+    { name: 'Komisyon', rows: com, widths: [30, 9, 18, 24, 13], sticky: 1 },
     { name: 'Bekleyenler', rows: fu, widths: [24, 16, 20, 14], sticky: 1 }
   ], 'rapor-' + slug(label) + '.xlsx');
 }
@@ -178,7 +178,7 @@ function adRows(list, contacts) {
   const when = (iso) => (iso ? new Date(iso) : null);
   // Excel saat dilimi bilmez: yerel saati olduğu gibi yaz
   const xl = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()));
-  const rows = [[H('Hesap'), H('Reklam'), H('Platform'), H('Marka'), H('Pazaryeri'), H('Başlangıç'), H('Bitiş'), H('Komisyon'), H('Bütçe (KDV hariç)'), H('Reklam cirosu (KDV dahil)'), H('Ciro / bütçe'), H('Durum')]];
+  const rows = [[H('Hesap'), H('Reklam'), H('Platform'), H('Marka'), H('Pazaryeri'), H('Tekrar'), H('Başlangıç'), H('Bitiş'), H('Komisyon'), H('Dolaylı komisyon'), H('Bütçe (KDV hariç)'), H('Reklam cirosu (KDV dahil)'), H('Ciro / bütçe'), H('Durum')]];
   const now = new Date();
   const sorted = [...list].sort((a, b) => String(b.start_at || b.publish_date || '').localeCompare(String(a.start_at || a.publish_date || '')));
   let fee = 0, rev = 0, feeR = 0;
@@ -188,15 +188,16 @@ function adRows(list, contacts) {
     const f = Number(c.fee) || 0, r = Number(c.ad_revenue) || 0;
     fee += f; rev += r; if (r > 0) feeR += f;
     const st = c.status === 'iptal' ? 'İptal' : e0 && e0 < now ? 'Bitti' : s0 && s0 > now ? 'Yaklaşan' : 'Yayında';
-    rows.push([S(who(c)), S(c.title || ''), S(c.platform || ''), S(c.brand || ''), S(c.marketplace || ''),
+    rows.push([S(who(c)), S(c.title || ''), S(c.platform || ''), S(c.brand || ''), S(c.marketplace || ''), S(c.run ? c.run + '/' + c.runCount : ''),
       s0 ? { value: xl(s0), type: Date, format: 'dd.mm.yyyy hh:mm' } : S(''), e0 ? { value: xl(e0), type: Date, format: 'dd.mm.yyyy hh:mm' } : S(''),
       c.commission != null && c.commission !== '' ? N(Number(c.commission) / 100, PCT) : S(''),
+      c.commission2 != null && c.commission2 !== '' ? N(Number(c.commission2) / 100, PCT) : S(''),
       f ? N(f, TL) : S(''), r ? N(r, TL) : S(''), r > 0 && f > 0 ? N(r / f, '0.0"x"') : S(''), S(st)]);
   });
-  rows.push([B(S('Toplam')), B(S(sorted.length + ' reklam')), S(''), S(''), S(''), S(''), S(''), S(''), B(N(fee, TL)), B(N(rev, TL)), rev > 0 && feeR > 0 ? B(N(rev / feeR, '0.0"x"')) : S(''), S('')]);
+  rows.push([B(S('Toplam')), B(S(sorted.length + ' reklam')), S(''), S(''), S(''), S(''), S(''), S(''), S(''), S(''), B(N(fee, TL)), B(N(rev, TL)), rev > 0 && feeR > 0 ? B(N(rev / feeR, '0.0"x"')) : S(''), S('')]);
   return rows;
 }
 
 export async function exportAds({ ads, contacts, label }) {
-  await save([{ name: 'Reklamlar', rows: adRows(ads, contacts), widths: [22, 28, 11, 12, 13, 17, 17, 11, 18, 24, 13, 11], sticky: 1 }], 'influencer-reklamlari-' + slug(label || 'tum') + '.xlsx');
+  await save([{ name: 'Reklamlar', rows: adRows(ads, contacts), widths: [22, 28, 11, 12, 13, 8, 17, 17, 11, 11, 18, 24, 13, 11], sticky: 1 }], 'influencer-reklamlari-' + slug(label || 'tum') + '.xlsx');
 }

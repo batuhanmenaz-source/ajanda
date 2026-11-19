@@ -1,6 +1,6 @@
 // İş: Bekleyen talepler ve Raporlar
 import { useMemo, useState } from 'react';
-import { adWho, adStart, adEnd } from './ads.jsx';
+import { adWho, adStart, adEnd, expandRuns, commKey, commText } from './ads.jsx';
 import { Sheet, Section, Check } from './ui.jsx';
 import { MARKETPLACES, mpColor } from './constants.js';
 import { tl, tlShort } from './revenue.jsx';
@@ -243,11 +243,12 @@ export function buildReport({ data, revenue, now, period, mp }) {
     return { name: n, count: cs.length, days: cs.reduce((s, x) => s + x.days, 0), ciro: cs.reduce((s, x) => s + (x.r ? x.r.cur : 0), 0), avgDelta: ds.length ? ds.reduce((s, x) => s + x.r.delta, 0) / ds.length : null, periodCiro };
   }).filter((x) => x.count || x.periodCiro).sort((x, y) => y.count - x.count || y.periodCiro - x.periodCiro);
   // Influencer
-  const collabs = (data.collabs || []).filter((c) => c.publish_date && c.publish_date >= A && c.publish_date <= B && c.status !== 'iptal' && (!mp || c.marketplace === mp));
+  // Tekrarlı reklamlar dönemlerine ayrılır: her dönem kendi ayına sayılır
+  const collabs = expandRuns((data.collabs || []).filter((c) => c.status !== 'iptal' && (!mp || c.marketplace === mp)), now).filter((c) => c.publish_date && c.publish_date >= A && c.publish_date <= B);
   const byInf = {};
   collabs.forEach((c) => { const k = adWho(c, data.contacts); byInf[k] = byInf[k] || { name: k, n: 0, fee: 0, rev: 0, feeR: 0 }; byInf[k].n++; byInf[k].fee += Number(c.fee) || 0; byInf[k].rev += Number(c.ad_revenue) || 0; if (Number(c.ad_revenue) > 0) byInf[k].feeR += Number(c.fee) || 0; });
   const byPct = {};
-  collabs.forEach((c) => { const has = c.commission != null && c.commission !== ''; const k = has ? Number(c.commission) : -1; byPct[k] = byPct[k] || { rate: has ? k : null, n: 0, fee: 0, rev: 0, feeR: 0 }; byPct[k].n++; byPct[k].fee += Number(c.fee) || 0; byPct[k].rev += Number(c.ad_revenue) || 0; if (Number(c.ad_revenue) > 0) byPct[k].feeR += Number(c.fee) || 0; });
+  collabs.forEach((c) => { const k = commKey(c); byPct[k] = byPct[k] || { key: k, rate: k ? parseFloat(k) : null, label: commText(k, true), n: 0, fee: 0, rev: 0, feeR: 0 }; byPct[k].n++; byPct[k].fee += Number(c.fee) || 0; byPct[k].rev += Number(c.ad_revenue) || 0; if (Number(c.ad_revenue) > 0) byPct[k].feeR += Number(c.fee) || 0; });
   const ended = collabs.filter((c) => adEnd(c) && adEnd(c) < now).sort((x, y) => (adStart(y) || 0) - (adStart(x) || 0));
   // Bekleyenler
   const fups = (data.followups || []).filter((f) => !mp || f.marketplace === mp);
@@ -255,7 +256,7 @@ export function buildReport({ data, revenue, now, period, mp }) {
   return {
     range: [a, b], camps, best, totals, byMp, ciro,
     inf: { count: collabs.length, fee: collabs.reduce((s, c) => s + (Number(c.fee) || 0), 0), rev: collabs.reduce((s, c) => s + (Number(c.ad_revenue) || 0), 0), feeR: collabs.filter((c) => Number(c.ad_revenue) > 0).reduce((s, c) => s + (Number(c.fee) || 0), 0),
-      ads: collabs, ended, endedNoRev: ended.filter((c) => !(Number(c.ad_revenue) > 0)).length, contacts: data.contacts, list: Object.values(byInf).sort((x, y) => y.fee - x.fee), byPct: Object.values(byPct).sort((x, y) => (x.rate == null) - (y.rate == null) || x.rate - y.rate) },
+      ads: collabs, ended, endedNoRev: ended.filter((c) => !(Number(c.ad_revenue) > 0)).length, contacts: data.contacts, list: Object.values(byInf).sort((x, y) => y.fee - x.fee), byPct: Object.values(byPct).sort((x, y) => (x.rate == null) - (y.rate == null) || x.rate - y.rate || x.key.length - y.key.length) },
     fup: { open: openF.length, oldest: openF.length ? Math.max(...openF.map((f) => waitDays(f, now))) : 0, stats: responseStats(fups) }
   };
 }
@@ -369,7 +370,7 @@ export function ReportsView({ data, revenue, now, actions }) {
           </div>
           {rep.inf.list.slice(0, 5).map((x) => <div key={x.name} className="row fup-stat"><span className="title">{x.name}</span><span className="meta">{x.n} reklam · {tlShort(x.fee)}</span><span className="fup-avg">{x.rev ? tlShort(x.rev) + ' ciro' : '—'}</span></div>)}
           {rep.inf.byPct.some((x) => x.rate != null) ? <div className="row fup-stat rp-sub"><span className="title">Komisyona göre</span></div> : null}
-          {rep.inf.byPct.some((x) => x.rate != null) ? rep.inf.byPct.map((x) => <div key={String(x.rate)} className="row fup-stat"><span className="title">{x.rate == null ? 'Girilmemiş' : '%' + x.rate.toLocaleString('tr-TR') + ' komisyon'}</span><span className="meta">{x.n} reklam · {x.fee ? tlShort(x.fee) : '—'}</span><span className="fup-avg">{x.rev ? tlShort(x.rev) + ' ciro' : '—'}</span></div>) : null}
+          {rep.inf.byPct.some((x) => x.rate != null) ? rep.inf.byPct.map((x) => <div key={x.key} className="row fup-stat"><span className="title">{x.label}</span><span className="meta">{x.n} reklam · {x.fee ? tlShort(x.fee) : '—'}</span><span className="fup-avg">{x.rev ? tlShort(x.rev) + ' ciro' : '—'}</span></div>) : null}
         </div>
       </Section>
 

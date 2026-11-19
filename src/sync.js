@@ -112,7 +112,7 @@ export async function syncCollab(c, who) {
     // Saatli reklam: takvimde başlangıç→bitiş aralığı, bitişe ayrıca hatırlatma
     const s = new Date(c.start_at);
     const e = c.end_at ? new Date(c.end_at) : new Date(s.getTime() + 3600000);
-    const name = c.handle || who || 'Influencer';
+    const name = (Array.isArray(c.runs) && c.runs.length ? '🔁 ' : '') + (c.handle || who || 'Influencer');
     const tail = (c.brand ? ' · ' + c.brand : '') + (c.title ? ' — ' + c.title : '');
     const description = [c.platform ? 'Platform: ' + c.platform : '', c.marketplace ? 'Pazaryeri: ' + c.marketplace : '', c.link || '', c.notes || '', 'Ajanda influencer reklamı'].filter(Boolean).join('\n');
     const id = await saveTimed(c.google_event_id, { summary: '🎬 ' + name + tail, description, start: s, minutes: Math.max(15, Math.round((e - s) / 60000)), overrides: timedOverrides(c, s) });
