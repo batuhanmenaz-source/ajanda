@@ -105,15 +105,32 @@ export default async function handler(req, res) {
     return;
   }
 
-  const client = new ImapFlow({ host: IMAP_HOST, port, secure: port === 993, auth: { user: IMAP_USER, pass: IMAP_PASS }, logger: false, socketTimeout: 20000, greetingTimeout: 10000, connectionTimeout: 10000, tls: { servername: IMAP_HOST } });
+  // Bazı paylaşımlı hosting sunucuları eski (zayıf anahtarlı) sertifika kullanır; Node bunları varsayılan
+  // olarak reddeder ("EE certificate key too weak"). Önce normal dener, bu hatada yalnız bu bağlantı için
+  // güvenlik seviyesini düşürüp tekrar dener. Sertifika doğrulaması kapatılmaz, bağlantı yine şifrelidir.
+  const make = (legacy) => new ImapFlow({
+    host: IMAP_HOST, port, secure: port === 993, auth: { user: IMAP_USER, pass: IMAP_PASS }, logger: false,
+    socketTimeout: 20000, greetingTimeout: 10000, connectionTimeout: 10000,
+    tls: legacy ? { servername: IMAP_HOST, ciphers: 'DEFAULT@SECLEVEL=0', minVersion: 'TLSv1' } : { servername: IMAP_HOST }
+  });
+  const WEAK = /too weak|SECLEVEL|dh key too small|unsupported protocol|wrong version number|no protocols available/i;
+  let client = make(false);
+  let legacy = false;
   try {
-    await client.connect();
+    try { await client.connect(); }
+    catch (e) {
+      if (!WEAK.test(String(e && e.message))) throw e;
+      try { client.close(); } catch { /* yok say */ }
+      client = make(true); legacy = true;
+      await client.connect();
+    }
     const out = await scan(client, { me: IMAP_USER, days: Number(process.env.MAIL_DAYS || 21) });
-    res.status(200).json({ configured: true, at: new Date().toISOString(), account: IMAP_USER, ...out });
+    res.status(200).json({ configured: true, at: new Date().toISOString(), account: IMAP_USER, legacyTls: legacy, ...out });
   } catch (e) {
     const msg = String((e && (e.responseText || e.message)) || e);
-    const auth = /auth|login|credentials|password|LOGIN failed/i.test(msg);
-    res.status(502).json({ configured: true, error: auth ? 'Mail sunucusu giriş bilgilerini kabul etmedi (IMAP_USER / IMAP_PASS).' : 'Mail sunucusuna bağlanılamadı: ' + msg.slice(0, 160) });
+    const auth = /auth|login|credentials|password|LOGIN failed/i.test(msg) && !/certificate/i.test(msg);
+    const cert = /certificate|self.signed|altname|hostname/i.test(msg);
+    res.status(502).json({ configured: true, error: auth ? 'Mail sunucusu giriş bilgilerini kabul etmedi (IMAP_USER / IMAP_PASS).' : (cert ? 'Mail sunucusunun sertifikası doğrulanamadı: ' : 'Mail sunucusuna bağlanılamadı: ') + msg.slice(0, 160) });
   } finally {
     try { await client.logout(); } catch { /* yok say */ }
   }
