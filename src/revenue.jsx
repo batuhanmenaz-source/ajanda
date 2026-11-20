@@ -204,8 +204,14 @@ export function RevenueMini({ revenue, now, actions, onOpen, target }) {
 }
 
 // ---------- Ekran ----------
-export function RevenueScreen({ revenue, loaded, error, target, now, actions, order, campaigns }) {
+const MPF_KEY = 'ajanda-ciro-mp';
+export function RevenueScreen({ revenue: allRev, loaded, error, target, now, actions, order, campaigns }) {
   const today = startOfDay(now);
+  // Pazaryeri filtresi: seçilince ekrandaki her şey (günlük bakış, özet, grafik, günler) yalnız o pazaryeri
+  const [mpF, setMpFRaw] = useState(() => { try { return localStorage.getItem(MPF_KEY) || ''; } catch { return ''; } });
+  const setMpF = (v) => { setMpFRaw(v); try { if (v) localStorage.setItem(MPF_KEY, v); else localStorage.removeItem(MPF_KEY); } catch { /* yok say */ } };
+  const mpChoices = (order || MARKETPLACES.map((m) => m.name)).filter((n) => allRev.some((r) => r.marketplace === n));
+  const revenue = useMemo(() => (mpF ? allRev.filter((r) => r.marketplace === mpF) : allRev), [allRev, mpF]);
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [openDay, setOpenDay] = useState(null);
 
@@ -243,9 +249,11 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
   const forecast = isCurrent && enteredDays ? avg * dim : null;
   const tgt = Number(target) || 0;
 
-  // Pazaryeri dağılımı (çoktan aza)
+  // Pazaryeri dağılımı (çoktan aza) — filtreden bağımsız, tüm pazaryerleri
+  const allRows = allRev.filter((r) => r.day.startsWith(mk));
+  const allTotal = allRows.reduce((a, r) => a + Number(r.amount), 0);
   const byMp = {};
-  rows.forEach((r) => { byMp[r.marketplace] = (byMp[r.marketplace] || 0) + Number(r.amount); });
+  allRows.forEach((r) => { byMp[r.marketplace] = (byMp[r.marketplace] || 0) + Number(r.amount); });
   const mpList = Object.entries(byMp).sort((a, b) => b[1] - a[1]);
   const mpMax = mpList.length ? mpList[0][1] : 0;
 
@@ -259,7 +267,17 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {loaded ? <RevenueGlance revenue={revenue} now={now} actions={actions} order={order} /> : null}
+      {mpChoices.length > 1 ? (
+        <div className="mp-filter" role="group" aria-label="Pazaryeri filtresi">
+          <button type="button" className={'chip' + (!mpF ? ' on' : '')} aria-pressed={!mpF} onClick={() => setMpF('')}>Tümü</button>
+          {mpChoices.map((n) => (
+            <button key={n} type="button" className={'chip mpf' + (mpF === n ? ' on' : '')} aria-pressed={mpF === n} onClick={() => setMpF(mpF === n ? '' : n)} style={mpF === n ? { background: mpColor(n), borderColor: mpColor(n), color: '#fff' } : null}>
+              <span className="dot" style={{ background: mpF === n ? '#fff' : mpColor(n) }} />{n}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {loaded ? <RevenueGlance key={mpF || 'all'} revenue={revenue} now={now} actions={actions} order={order} /> : null}
       <div className="section-head" style={{ marginBottom: -8 }}><h2>Aylık görünüm</h2></div>
       <div className="week-nav">
         <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
@@ -273,7 +291,7 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
       {/* Özet */}
       <section className="rv-summary card">
         <div className="rv-hero">
-          <span className="rv-k">{isCurrent ? 'Bu ay toplam ciro' : MONTHS[month.getMonth()] + ' toplam ciro'}</span>
+          <span className="rv-k">{mpF ? <><span className="dot" style={{ background: mpColor(mpF), display: 'inline-block', marginRight: 6 }} />{mpF} · </> : null}{isCurrent ? 'Bu ay toplam ciro' : MONTHS[month.getMonth()] + ' toplam ciro'}</span>
           <span className="rv-big">{tl(total)}</span>
           {delta !== null ? (
             <span className="rv-delta">
@@ -281,6 +299,7 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
               {(delta >= 0 ? '+' : '') + (delta * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}% geçen ayın {isCurrent ? 'aynı dönemine' : 'tamamına'} göre
             </span>
           ) : <span className="rv-delta muted">{loaded ? 'Geçen ayla kıyas için veri yok' : 'Yükleniyor…'}</span>}
+          {mpF && allTotal ? <span className="rv-delta muted">Tüm ciro içindeki payı %{Math.round((total / allTotal) * 100)}</span> : null}
         </div>
         <div className="rv-stats">
           <div><span className="rv-k">Günlük ortalama</span><span className="rv-v">{tl(avg)}</span></div>
@@ -288,7 +307,7 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
           <div><span className="rv-k">Sipariş</span><span className="rv-v">{orders ? orders.toLocaleString('tr-TR') : '—'}</span></div>
           <div><span className="rv-k">Girilen gün</span><span className="rv-v">{enteredDays} / {isCurrent ? today.getDate() : dim}</span></div>
         </div>
-        {tgt > 0 ? (
+        {mpF ? null : tgt > 0 ? (
           <div className="rv-target">
             <div className="rv-target-row">
               <span className="rv-k">Aylık hedef {tl(tgt)}</span>
@@ -311,16 +330,16 @@ export function RevenueScreen({ revenue, loaded, error, target, now, actions, or
 
       {/* Pazaryeri dağılımı */}
       <section className="section">
-        <div className="section-head"><h2>Pazaryerleri</h2><span className="meta">{MONTHS[month.getMonth()]}</span></div>
+        <div className="section-head"><h2>Pazaryerleri</h2><span className="meta">{MONTHS[month.getMonth()]} · dokun, filtrele</span></div>
         <div className="card list">
           {mpList.length ? mpList.map(([name, v]) => (
-            <div key={name} className="rv-mp">
+            <button key={name} type="button" className={'rv-mp rv-mp-btn' + (mpF === name ? ' on' : mpF ? ' dim' : '')} onClick={() => setMpF(mpF === name ? '' : name)} aria-pressed={mpF === name}>
               <div className="rv-mp-top">
                 <span className="tag"><span className="dot" style={{ background: mpColor(name) }} />{name}</span>
-                <span className="rv-mp-v">{tl(v)} <span className="muted">· %{total ? Math.round((v / total) * 100) : 0}</span></span>
+                <span className="rv-mp-v">{tl(v)} <span className="muted">· %{allTotal ? Math.round((v / allTotal) * 100) : 0}</span></span>
               </div>
               <div className="rv-mp-bar"><div style={{ width: (v / mpMax) * 100 + '%' }} /></div>
-            </div>
+            </button>
           )) : <p className="empty">{loaded ? 'Bu ay için ciro girilmedi.' : 'Yükleniyor…'}</p>}
         </div>
       </section>
