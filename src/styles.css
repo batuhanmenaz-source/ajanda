@@ -1797,8 +1797,6 @@ button.it-row:hover { background: var(--chip); }
 }
 
 /* ---------- Bugün üst şeridi: alışkanlıklar ---------- */
-@media (min-width: 1000px) { .tstrip { grid-template-columns: minmax(220px, 1fr) minmax(0, 1.7fr) minmax(230px, 1.1fr); } }
-@media (min-width: 760px) and (max-width: 999px) { .tstrip .hs { grid-column: 1 / -1; } }
 .hs { padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; border-top: 3px solid #7048E8; min-width: 0; }
 .hs.all { background: linear-gradient(160deg, #F3F0FF, #fff 70%); }
 .hs-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -1828,3 +1826,15 @@ button.it-row:hover { background: var(--chip); }
 .it-tbar.end > span { background: linear-gradient(90deg, #FFA8A8, #E03131); }
 .it-tbar em { font-style: normal; font-size: 10.5px; font-weight: 700; color: #237A38; white-space: nowrap; width: 72px; text-align: right; }
 .it-tbar.soon em { color: #B35C00; } .it-tbar.end em { color: var(--danger); }
+
+/* Başlık köşesi: alışkanlık simgeleri */
+.topbar-r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+.hdots { display: flex; gap: 6px; flex: 0 0 auto; }
+.hd-i { position: relative; flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; border: 1.5px dashed #C9C2E8; background: #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; transition: background .15s, border-color .15s; }
+.hd-i .hd-e { font-size: 17px; line-height: 1; filter: grayscale(1); opacity: .55; font-weight: 700; color: var(--ink-2); }
+.hd-i:hover { border-color: #7048E8; }
+.hd-i:focus-visible { outline: 2px solid #7048E8; outline-offset: 2px; }
+.hd-i.on { border: 1.5px solid #7048E8; background: #F3F0FF; }
+.hd-i.on .hd-e { filter: none; opacity: 1; }
+.hd-ck { position: absolute; right: -3px; bottom: -3px; width: 15px; height: 15px; border-radius: 50%; background: #7048E8; color: #fff; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--bg); }
+@media (max-width: 420px) { .hd-i { width: 30px; height: 30px; } .hd-i .hd-e { font-size: 15px; } }

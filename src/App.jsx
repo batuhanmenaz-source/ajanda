@@ -11,7 +11,7 @@ import { alertDefaults as mergeAlertDefaults } from './alerts.js';
 import { MemorySheet, YarimItemSheet, nextSaturdayEvening, randomSurpriseDate, pickSurpriseIdea, SURPRISE_PREFIX } from './yarim.jsx';
 import { specialUpcoming, specialLabel } from './special.js';
 import { FollowupSheet } from './work.jsx';
-import { HabitSheet, ListSheet, ContactSheet, SpecialDateSheet, findContact, nextFriday17, SUMMARY_TITLE } from './life.jsx';
+import { HabitSheet, HabitDots, ListSheet, ContactSheet, SpecialDateSheet, findContact, nextFriday17, SUMMARY_TITLE } from './life.jsx';
 import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES, DEFAULT_PREPS, YARIM_STARTS } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, fromDateInput, whenLabel } from './dates.js';
@@ -1068,9 +1068,12 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
             <div className="sub">{head[1]}</div>
             <h1>{head[0]}</h1>
           </div>
-          <button type="button" className={'pill' + (google === 'needs_login' ? ' warn' : '')} onClick={() => setSheet({ kind: 'account' })} aria-label={'Hesap ve bağlantı: ' + gPill.text}>
-            <span className="dot" style={{ background: gPill.color }} />{gPill.text}
-          </button>
+          <div className="topbar-r">
+            {tab === 'bugun' && scope !== 'is' && !loading ? <HabitDots data={data} now={now} actions={actions} /> : null}
+            <button type="button" className={'pill' + (google === 'needs_login' ? ' warn' : '')} onClick={() => setSheet({ kind: 'account' })} aria-label={'Hesap ve bağlantı: ' + gPill.text}>
+              <span className="dot" style={{ background: gPill.color }} />{gPill.text}
+            </button>
+          </div>
         </header>
 
         <main className="content">

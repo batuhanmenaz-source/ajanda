@@ -271,6 +271,29 @@ export function HabitsCard({ data, now, actions }) {
   );
 }
 
+// Başlığın köşesinde küçük alışkanlık simgeleri: dokununca bugün yapıldı / geri al
+export function HabitDots({ data, now, actions }) {
+  const habits = [...(data.habits || [])].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  if (!habits.length) return null;
+  const today = startOfDay(now);
+  const T = toDateInput(today);
+  const states = habits.map((h) => ({ h, ...streak(data.habit_logs || [], h.id, today) }));
+  return (
+    <div className="hdots" role="group" aria-label="Bugünün alışkanlıkları">
+      {states.map(({ h, n, set }) => {
+        const on = set.has(T);
+        const label = h.name + (n ? ' · ' + n + ' gün seri' : '') + (on ? ' · bugün yapıldı, geri almak için dokun' : ' · yapınca dokun');
+        return (
+          <button key={h.id} type="button" className={'hd-i' + (on ? ' on' : '')} aria-pressed={on} aria-label={label} title={label} onClick={() => actions.toggleHabit(h, T)}>
+            <span className="hd-e" aria-hidden="true">{h.emoji || (h.name || '?').trim().charAt(0).toLocaleUpperCase('tr-TR')}</span>
+            {on ? <span className="hd-ck" aria-hidden="true">✓</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Bugün sayfası üst şeridi: alışkanlıklar küçük kutucuklar halinde, dokununca işaretlenir
 export function HabitStrip({ data, now, actions, onAll }) {
   const habits = [...(data.habits || [])].sort((a, b) => (a.sort || 0) - (b.sort || 0));
