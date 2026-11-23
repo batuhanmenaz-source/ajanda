@@ -72,6 +72,24 @@ const relLabel = (key, now) => {
   return lbl === fmtShort(d) ? fmtShort(d) + ' ' + WEEKDAYS_SHORT[d.getDay()] : lbl + ' · ' + fmtShort(d);
 };
 
+const GECEN = ['geçen pazara', 'geçen pazartesiye', 'geçen salıya', 'geçen çarşambaya', 'geçen perşembeye', 'geçen cumaya', 'geçen cumartesiye'];
+const kShort = (v) => (v >= 1e6 ? (v / 1e6).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ' mn' : v >= 1e3 ? Math.round(v / 1e3).toLocaleString('tr-TR') + ' bin' : Math.round(v).toLocaleString('tr-TR'));
+
+// Küçük çizgi grafik (son 7 gün) — son nokta vurgulu
+function Spark({ vals, color }) {
+  const mx = Math.max(1, ...vals);
+  const pts = vals.map((v, i) => [(i / (vals.length - 1)) * 100, v ? 26 - (v / mx) * 22 : null]);
+  let d = '';
+  pts.forEach((p, i) => { if (p[1] == null) return; d += (i && pts[i - 1][1] != null ? ' L' : ' M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); });
+  const last = pts[pts.length - 1];
+  return (
+    <svg className="rg-spark" viewBox="-3 0 106 30" preserveAspectRatio="none" aria-hidden="true">
+      <path d={d.trim() + (d ? '' : '')} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" opacity=".85" />
+      {last[1] != null ? <circle cx={last[0]} cy={last[1]} r="2.6" fill={color} vectorEffect="non-scaling-stroke" /> : null}
+    </svg>
+  );
+}
+
 export function RevenueGlance({ revenue, now, actions, order }) {
   const t = startOfDay(now);
   const T = toDateInput(t);
@@ -79,75 +97,106 @@ export function RevenueGlance({ revenue, now, actions, order }) {
   // Veri sonradan yüklenirse varsayılan günü güncelle (kullanıcı gün değiştirmediyse)
   const [touched, setTouched] = useState(false);
   useEffect(() => { if (!touched) setDay(glanceDefaultDay(revenue, now)); }, [revenue, now, touched]);
-  const go = (n) => { setTouched(true); setDay(toDateInput(addDays(fromDateInput(day), n))); };
+  const pick = (k) => { setTouched(true); setDay(k); };
+  const go = (n) => pick(toDateInput(addDays(fromDateInput(day), n)));
+  const dd = fromDateInput(day);
   const cur = dayStat(revenue, day);
-  const wk = dayStat(revenue, toDateInput(addDays(fromDateInput(day), -7)));
-  const prev = dayStat(revenue, toDateInput(addDays(fromDateInput(day), -1)));
+  const wk = dayStat(revenue, toDateInput(addDays(dd, -7)));
+  const prev = dayStat(revenue, toDateInput(addDays(dd, -1)));
   const known = (order || MARKETPLACES.map((m) => m.name)).filter((n) => cur.by[n] || wk.by[n]);
   const mps = known.filter((n) => cur.by[n]).sort((a, b) => cur.by[b].v - cur.by[a].v);
-  // Geçen hafta girilmiş ama bu gün girilmemiş pazaryerleri: küçük satır
   const missing = known.filter((n) => !cur.by[n]);
-  // Her pazaryeri için son 7 gün (seçili gün dahil)
-  const last7 = Array.from({ length: 7 }, (_, i) => toDateInput(addDays(fromDateInput(day), i - 6)));
-  const spark = (mp) => {
-    const vals = last7.map((k) => { const r = revenue.find((x) => x.day === k && x.marketplace === mp); return r ? Number(r.amount) : 0; });
-    const mx = Math.max(1, ...vals);
-    return vals.map((v, i) => ({ v, h: v ? Math.max(8, (v / mx) * 100) : 0, last: i === 6 }));
-  };
+
+  // Son 7 gün (seçili gün en sağda)
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(dd, i - 6); const k = toDateInput(d); const st = dayStat(revenue, k);
+    return { d, k, total: st.total, by: st.by };
+  });
+  const wkMax = Math.max(1, ...week.map((x) => x.total));
+  const entered = week.filter((x) => x.total > 0);
+  const avg7 = entered.length ? entered.reduce((a, x) => a + x.total, 0) / entered.length : 0;
+  const stackOrder = (order || MARKETPLACES.map((m) => m.name));
+  const mpVals = (n) => week.map((x) => (x.by[n] ? x.by[n].v : 0));
+
   return (
-    <section className="card gl" aria-label="Günlük ciro">
-      <div className="gl-head">
-        <button type="button" className="iconbtn" aria-label="Önceki gün" onClick={() => go(-1)}><Icon.Left /></button>
-        <div className="gl-title">
-          <span className="rv-k">Günlük ciro</span>
-          <span className="gl-day">{relLabel(day, now)}</span>
-        </div>
-        <button type="button" className="iconbtn" aria-label="Sonraki gün" onClick={() => go(1)} disabled={day >= T}><Icon.Right /></button>
-      </div>
-      {cur.rows.length ? (
-        <>
-          <div className="gl-total">
-            <span className="rv-big">{tl(cur.total)}</span>
-            <span className="gl-sub">
-              <Delta v={dlt(cur.total, wk.total)} />{wk.total ? ' geçen ' + ['pazara', 'pazartesiye', 'salıya', 'çarşambaya', 'perşembeye', 'cumaya', 'cumartesiye'][fromDateInput(day).getDay()] + ' göre' : ''}
-              {prev.total ? <span className="muted"> · önceki gün {tlShort(prev.total)}</span> : null}
-              {cur.orders ? <span className="muted"> · {cur.orders.toLocaleString('tr-TR')} sipariş</span> : null}
-            </span>
-          </div>
-          <div className="gl-grid">
-            {mps.map((n) => {
-              const c = cur.by[n];
-              const w = wk.by[n];
-              return (
-                <div key={n} className="gl-tile">
-                  <span className="tag"><span className="dot" style={{ background: mpColor(n) }} />{n}</span>
-                  <span className="gl-v">{c ? tl(c.v) : '—'}</span>
-                  <span className="gl-meta">
-                    {c && w ? <Delta v={dlt(c.v, w.v)} small /> : <span className="muted">{c ? 'geçen hafta yok' : 'girilmedi'}</span>}
-                    {c && c.o ? <span className="muted">{c.o} sip.</span> : null}
-                  </span>
-                  <span className="gl-spark" aria-hidden="true">
-                    {spark(n).map((x, i) => <span key={i} className={x.last ? 'on' : ''} style={{ height: x.h + '%', background: x.v ? mpColor(n) : 'transparent' }} />)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {missing.length ? (
-            <div className="gl-missing">
-              <span className="muted">Girilmedi:</span>
-              {missing.map((n) => <button key={n} type="button" className="gl-miss" onClick={() => actions.openRevenue(day)}><span className="dot" style={{ background: mpColor(n) }} />{n}</button>)}
+    <section className="card rg" aria-label="Günlük ciro">
+      <div className="rg-top">
+        <div className="rg-left">
+          <div className="rg-nav">
+            <button type="button" className="iconbtn" aria-label="Önceki gün" onClick={() => go(-1)}><Icon.Left /></button>
+            <div className="rg-day">
+              <span>Günlük ciro</span>
+              <b>{relLabel(day, now)}</b>
             </div>
-          ) : null}
-          <span className="hint">Yüzdeler geçen haftanın aynı gününe göre · çubuklar son 7 gün</span>
-          <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => actions.openRevenue(day)}>Bu günü düzenle</button>
-        </>
-      ) : (
-        <div className="gl-empty">
-          <span>Bu günün cirosu girilmedi.</span>
-          <button type="button" className="btn primary" onClick={() => actions.openRevenue(day)}>Ciro gir</button>
+            <button type="button" className="iconbtn" aria-label="Sonraki gün" onClick={() => go(1)} disabled={day >= T}><Icon.Right /></button>
+          </div>
+          {cur.rows.length ? (
+            <>
+              <span className="rg-big">{tl(cur.total)}</span>
+              <div className="rg-chips">
+                {wk.total ? <span className={'rg-chip ' + (cur.total >= wk.total ? 'up' : 'down')}><b>{cur.total >= wk.total ? '▲' : '▼'} %{Math.abs(Math.round(dlt(cur.total, wk.total) * 100))}</b>{GECEN[dd.getDay()]} göre</span> : null}
+                {prev.total ? <span className={'rg-chip ' + (cur.total >= prev.total ? 'up' : 'down')}><b>{cur.total >= prev.total ? '▲' : '▼'} %{Math.abs(Math.round(dlt(cur.total, prev.total) * 100))}</b>önceki güne göre</span> : null}
+                {avg7 ? <span className={'rg-chip ' + (cur.total >= avg7 ? 'up' : 'down')}><b>{cur.total >= avg7 ? '▲' : '▼'} %{Math.abs(Math.round(dlt(cur.total, avg7) * 100))}</b>7 gün ortalamasına göre</span> : null}
+                {cur.orders ? <span className="rg-chip"><b>{cur.orders.toLocaleString('tr-TR')}</b>sipariş</span> : null}
+              </div>
+            </>
+          ) : (
+            <div className="gl-empty">
+              <span>Bu günün cirosu girilmedi.</span>
+              <button type="button" className="btn primary" onClick={() => actions.openRevenue(day)}>Ciro gir</button>
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Son 7 gün: pazaryeri renkleriyle katmanlı, güne dokununca o gün seçilir */}
+        <div className="rg-week" role="list" aria-label="Son 7 gün">
+          {week.map((x) => (
+            <button key={x.k} type="button" role="listitem" className={'rg-wcol' + (x.k === day ? ' on' : '') + ([0, 6].includes(x.d.getDay()) ? ' we' : '')}
+              disabled={x.k > T} onClick={() => pick(x.k)} aria-label={relLabel(x.k, now) + ': ' + (x.total ? tl(x.total) : 'girilmedi')}>
+              <span className="rg-wv">{x.total ? kShort(x.total) : '—'}</span>
+              <span className="rg-wbar-wrap">
+                <span className="rg-wbar" style={{ height: x.total ? Math.max(4, (x.total / wkMax) * 100) + '%' : '0' }}>
+                  {stackOrder.filter((n) => x.by[n]).map((n) => <i key={n} style={{ flexGrow: x.by[n].v, background: mpColor(n) }} />)}
+                </span>
+              </span>
+              <span className="rg-wd"><b>{WEEKDAYS_SHORT[x.d.getDay()]}</b>{x.d.getDate()}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {cur.rows.length ? (
+        <div className="rg-table">
+          <div className="rg-th"><span>Pazaryeri</span><span>Ciro</span><span className="rg-hide">Pay</span><span>Geçen hafta</span><span className="rg-hide">Son 7 gün</span></div>
+          {mps.map((n) => {
+            const c = cur.by[n]; const w = wk.by[n]; const share = c.v / cur.total; const dv = w ? dlt(c.v, w.v) : null;
+            return (
+              <div key={n} className="rg-tr" style={{ '--mp': mpColor(n) }}>
+                <span className="rg-name"><i />{n}{c.o ? <small>{c.o} sip.</small> : null}</span>
+                <span className="rg-amt">{tl(c.v)}</span>
+                <span className="rg-share rg-hide"><span className="rg-sbar"><span style={{ width: share * 100 + '%' }} /></span><em>%{Math.round(share * 100)}</em></span>
+                <span className={'rg-dv ' + (dv == null ? '' : dv >= 0 ? 'up' : 'down')}>{dv == null ? '—' : (dv >= 0 ? '▲ ' : '▼ ') + '%' + Math.abs(Math.round(dv * 100))}</span>
+                <span className="rg-hide"><Spark vals={mpVals(n)} color={mpColor(n)} /></span>
+              </div>
+            );
+          })}
+          {missing.map((n) => (
+            <button key={n} type="button" className="rg-tr miss" style={{ '--mp': mpColor(n) }} onClick={() => actions.openRevenue(day)}>
+              <span className="rg-name"><i />{n}</span>
+              <span className="rg-amt">girilmedi</span>
+              <span className="rg-hide" />
+              <span className="rg-dv add">+ Gir</span>
+              <span className="rg-hide"><Spark vals={mpVals(n)} color={mpColor(n)} /></span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {cur.rows.length ? (
+        <div className="rg-foot">
+          <span className="hint">"Geçen hafta" = {GECEN[dd.getDay()]} göre değişim</span>
+          <button type="button" className="linkbtn" onClick={() => actions.openRevenue(day)}>Bu günü düzenle</button>
+        </div>
+      ) : null}
     </section>
   );
 }
