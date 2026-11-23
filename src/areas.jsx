@@ -46,7 +46,7 @@ export function PrivateScreen({ seg: seg0, setSeg, data, now, actions, budgets, 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SubTabs tabs={tabs} value={seg} onChange={setSeg} label="Özel bölümler" grid />
-      {seg === 'ozet' ? <PersonalDashboard data={data} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} setSeg={setSeg} />
+      {seg === 'ozet' ? <PersonalDashboard data={data} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} setSeg={setSeg} health={health && health.state} />
         : seg === 'yarim' ? <YarimPage {...yarim} data={data} now={now} actions={actions} />
         : seg === 'listeler' ? <ListsView data={data} actions={actions} />
         : seg === 'saglik' && health ? <HealthPage state={health.state} now={now} hidden={health.hidden} onToggleHidden={health.toggle} onExport={actions.exportHealth} />
