@@ -135,6 +135,7 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
   const [anchor, setAnchor] = useState(today);
   const [hover, setHover] = useState(null);
   const [catFilter, setCatFilter] = useState(null);
+  const [allTx, setAllTx] = useState(false);
 
   const { start, end } = periodRange(view, anchor);
   const isCurrent = today >= start && today <= end;
@@ -337,7 +338,7 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
 
       <Section title="Hareketler" meta={list.length ? list.length + ' kayıt' + (catFilter ? ' · ' + (catFilter === '_rest' ? 'Diğerleri' : catOf(catFilter).label) : '') : ''}>
         <div className="card list">
-          {groups.length ? groups.map((g) => (
+          {groups.length ? (allTx ? groups : groups.slice(0, 7)).map((g) => (
             <div key={g.day} className="wl-group">
               <div className="wl-gday">
                 <span><b>{fmtShort(fromDateInput(g.day))}</b> <span className="muted">{WEEKDAYS_SHORT[fromDateInput(g.day).getDay()]}</span></span>
@@ -361,6 +362,7 @@ export function WalletView({ money, fixed, budgets, now, actions, error }) {
               })}
             </div>
           )) : <p className="empty">{catFilter ? 'Bu kategoride kayıt yok.' : 'Bu dönemde kayıt yok.'}</p>}
+          {groups.length > 7 ? <button type="button" className="done-fold" onClick={() => setAllTx(!allTx)}>{allTx ? 'Son 7 güne dön ▴' : 'Tüm hareketleri göster (' + groups.length + ' gün, ' + list.length + ' kayıt) ▾'}</button> : null}
         </div>
       </Section>
     </div>

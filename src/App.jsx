@@ -43,14 +43,14 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   // İş ve Özel sekmelerinin alt bölümleri
   const ss = (k, d) => { try { return sessionStorage.getItem(k) || d; } catch { return d; } };
   const [isSeg, setIsSegState] = useState(() => (ss('ajanda-sales', '') === 'ciro' ? 'ciro' : ss('ajanda-is-seg', 'ozet')));
-  const [ozelSeg, setOzelSegState] = useState(() => ss('ajanda-ozel-seg', 'cuzdan'));
+  const [ozelSeg, setOzelSegState] = useState(() => ss('ajanda-ozel-seg', 'ozet'));
   const [yarimSeg, setYarimSegState] = useState(() => ss('ajanda-yarim-seg', 'ozet'));
   const setYarimSeg = (v) => { setYarimSegState(v); try { sessionStorage.setItem('ajanda-yarim-seg', v); } catch { /* yok say */ } };
   const [yarimPrefs, setYarimPrefs] = useState({});
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const setIsSeg = (v) => { setIsSegState(v); try { sessionStorage.setItem('ajanda-is-seg', v); sessionStorage.removeItem('ajanda-sales'); } catch { /* yok say */ } };
   // Alt menüden İş'e geçince her zaman Ciro açılır (içindeyken seçilen bölüm korunur)
-  const navTo = (id) => { if (id === 'is' && tab !== 'is') setIsSeg('ozet'); setTab(id); };
+  const navTo = (id) => { if (id === 'is' && tab !== 'is') setIsSeg('ozet'); if (id === 'ozel' && tab !== 'ozel') setOzelSeg('ozet'); setTab(id); };
   const setOzelSeg = (v) => { setOzelSegState(v); try { sessionStorage.setItem('ajanda-ozel-seg', v); } catch { /* yok say */ } };
   const goTab = (t) => {
     if (t === 'ozet' || t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer' || t === 'bekleyenler' || t === 'raporlar' || t === 'mailler') { setSheet(null); setIsSeg(t); setTab('is'); }

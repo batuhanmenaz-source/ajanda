@@ -1,12 +1,12 @@
 // Renkli özet kutuları: İş → Özet ve sekmelerin üst şeridi
 const pctTxt = (v) => (v == null ? '' : (v >= 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(v * 100)) + '%');
 
-export function Tile({ tone, label, value, unit, sub, delta, warn, onClick, children }) {
+export function Tile({ tone, label, value, unit, sub, delta, warn, onClick, children, invert }) {
   return (
-    <button type="button" className={'wd-tile' + (warn ? ' warn' : '')} style={{ '--tone': tone }} onClick={onClick}>
+    <button type="button" className={'wd-tile' + (warn ? ' warn' : '') + (delta != null ? ' has-d' : '')} style={{ '--tone': tone }} onClick={onClick}>
       <span className="wd-tile-k"><i aria-hidden="true" />{label}</span>
       <span className="wd-tile-v">{value}{unit ? <small> {unit}</small> : null}</span>
-      {delta != null ? <span className={'wd-delta ' + (delta >= 0 ? 'up' : 'down')}>{pctTxt(delta)}</span> : null}
+      {delta != null ? <span className={'wd-delta ' + ((delta >= 0) !== !!invert ? 'up' : 'down')}>{pctTxt(delta)}</span> : null}
       {sub ? <span className="wd-tile-s">{sub}</span> : null}
       {children}
     </button>
