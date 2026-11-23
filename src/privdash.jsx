@@ -6,7 +6,7 @@ import { catOf, budgetStatus, fixedDue, fixedPaid } from './money.js';
 import { specialUpcoming, specialLabel, SPECIAL_ICON } from './special.js';
 import { Tile } from './statstrip.jsx';
 import { HabitsCard } from './life.jsx';
-import { weekStartOf, weekKeys, periodStats, healthTips, hm, ymdLocal, STEP_GOAL, AZM_GOAL, SLEEP_GOAL } from './health.jsx';
+import { weekStartOf, weekKeys, periodStats, healthTips, hm, ymdLocal, AZM_GOAL, goalsOf, SPORTS } from './health.jsx';
 
 const PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6', '#e34948'];
 const dlt = (a, b) => (b > 0 ? a / b - 1 : null);
@@ -78,13 +78,14 @@ export function PersonalDashboard({ data, now, actions, budgets, yarimHidden, se
   if (hOk) {
     const wk = weekKeys(weekStartOf(t), t);
     const only = wk.cur.length === 1;
-    const c = periodStats(h, wk.cur), p = periodStats(h, wk.prev);
+    const g = goalsOf(health.goals);
+    const c = periodStats(h, wk.cur, g), p = periodStats(h, wk.prev, g);
     const Y = ymdLocal(addDays(t, -1));
     const night = h.sleep[T] || h.sleep[Y];
     const last7k = Array.from({ length: 7 }, (_, i) => ymdLocal(addDays(t, i - 6)));
     const avgSleep7 = (() => { const xs = last7k.map((k) => h.sleep[k]).filter(Boolean); return xs.length ? xs.reduce((a, x) => a + x.asleep, 0) / xs.length : null; })();
-    const tips = healthTips(c, p, wk.partial, only);
-    hs = { c, p, night, avgSleep7, stepsToday: h.steps[T], last7k, tip: tips.find((x) => x.tone === 'warn') || tips[0], exWeek: (h.exercise || []).filter((e) => wk.cur.includes(e.day)) };
+    const tips = healthTips(c, p, { partial: wk.partial, onlyToday: only, goals: g, today: t, weekIndex: Math.round(weekStartOf(t).getTime() / (7 * 86400000)) });
+    hs = { g, sp: SPORTS.find((x) => x[0] === g.sport) || SPORTS[0], c, p, night, avgSleep7, stepsToday: h.steps[T], last7k, tip: tips.find((x) => x.tone === 'warn') || tips[0], exWeek: (h.exercise || []).filter((e) => wk.cur.includes(e.day)) };
   }
 
   return (
@@ -113,12 +114,12 @@ export function PersonalDashboard({ data, now, actions, budgets, yarimHidden, se
         <Tile tone="#7048E8" label="Alışkanlıklar" value={habits.length ? doneToday + '/' + habits.length : '—'} unit={habits.length ? 'bugün' : ''} onClick={go('aliskanlik')}
           sub={habits.length ? 'son 7 günde %' + Math.round(weekRate * 100) + ' tamamlandı' : 'alışkanlık eklenmedi'} />
         {hs ? (
-          <Tile tone={hs.night && hs.night.asleep < SLEEP_GOAL ? '#F08C00' : '#7048E8'} label="Dün gece uyku" value={hs.night ? hm(hs.night.asleep) : '—'} onClick={go('saglik')}
+          <Tile tone={hs.night && hs.night.asleep < hs.g.sleep * 60 - 15 ? '#F08C00' : '#7048E8'} label="Dün gece uyku" value={hs.night ? hm(hs.night.asleep) : '—'} onClick={go('saglik')}
             delta={hs.night && hs.avgSleep7 ? hs.night.asleep / hs.avgSleep7 - 1 : null} sub={hs.avgSleep7 ? '7 gün ort. ' + hm(hs.avgSleep7) : ''} />
         ) : null}
         {hs ? (
-          <Tile tone="#2F9E44" label="Hareket · bu hafta" value={hs.c.azm != null ? Math.round(hs.c.azm) : '—'} unit={'/ ' + AZM_GOAL + ' aktif dk'} onClick={go('saglik')}
-            sub={(hs.stepsToday != null ? 'bugün ' + hs.stepsToday.toLocaleString('tr-TR') + ' adım' : '') + (hs.exWeek.length ? ' · ' + hs.exWeek.length + ' antrenman' : '')} />
+          <Tile tone="#1098AD" label={hs.sp[2] + ' ' + hs.sp[1] + ' · bu hafta'} value={hs.c.sportCount + '/' + hs.g.perWeek} unit="seans" onClick={go('saglik')}
+            sub={(hs.c.azm != null ? Math.round(hs.c.azm) + '/' + AZM_GOAL + ' aktif dk' : '') + (hs.stepsToday != null ? ' · bugün ' + hs.stepsToday.toLocaleString('tr-TR') + ' adım' : '')} />
         ) : h && h.connected === false ? <Tile tone="#868E96" label="Sağlık" value="—" sub="Google Health bağlı değil · bağla" onClick={go('saglik')} /> : null}
         <Tile tone="#D4A000" label="Özel günler" value={specials[0] ? (specials[0].inDays || 'Bugün') : '—'} unit={specials[0] && specials[0].inDays ? 'gün' : ''} onClick={go('ozelgun')}
           sub={specials[0] ? (SPECIAL_ICON[specials[0].s.kind] || '⭐') + ' ' + specials[0].s.title + (specials.length > 1 ? ' · 60 günde ' + specials.length + ' gün' : '') : '60 gün içinde yok'} />
@@ -179,7 +180,7 @@ export function PersonalDashboard({ data, now, actions, budgets, yarimHidden, se
                 return (
                   <div key={k} className={'pd-hl-d' + (k === T ? ' on' : '')} title={(st != null ? st.toLocaleString('tr-TR') + ' adım' : '') + (sl ? ' · ' + hm(sl.asleep) + ' uyku' : '')}>
                     <span className="pd-hl-bars">
-                      <b style={{ height: st ? Math.min(100, (st / STEP_GOAL) * 100) + '%' : 0, background: '#40C057' }} />
+                      <b style={{ height: st ? Math.min(100, (st / hs.g.steps) * 100) + '%' : 0, background: '#40C057' }} />
                       <b style={{ height: sl ? Math.min(100, (sl.asleep / 540) * 100) + '%' : 0, background: '#7048E8' }} />
                     </span>
                     <em>{['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'][d.getDay()]}{(h.exercise || []).some((e) => e.day === k) ? '💪' : ''}</em>
@@ -187,7 +188,7 @@ export function PersonalDashboard({ data, now, actions, budgets, yarimHidden, se
                 );
               })}
             </div>
-            <div className="pd-hl-leg"><span><i style={{ background: '#40C057' }} />adım (10 bin = tam)</span><span><i style={{ background: '#7048E8' }} />uyku (9 sa = tam)</span></div>
+            <div className="pd-hl-leg"><span><i style={{ background: '#40C057' }} />adım (hedef = tam)</span><span><i style={{ background: '#7048E8' }} />uyku (9 sa = tam)</span></div>
             {hs.tip ? <div className={'hp-tip ' + hs.tip.tone} style={{ marginTop: 10 }}><span className="hp-tip-ic" aria-hidden="true">{hs.tip.icon}</span><span><b>{hs.tip.title}</b><br />{hs.tip.text}</span></div> : null}
           </Card>
         ) : null}

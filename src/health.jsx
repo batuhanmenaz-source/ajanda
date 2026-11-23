@@ -9,6 +9,13 @@ const DAY = 86400000;
 export const STEP_GOAL = 10000;
 export const AZM_GOAL = 150; // DSÖ: haftada en az 150 dk orta yoğunlukta hareket
 export const SLEEP_GOAL = 7 * 60;
+// Kişisel hedefler (Ayarlar'da saklanır, cihazlar arası aynı)
+export const SPORTS = [['yuzme', 'Yüzme', '🏊', ['SWIMMING']], ['kosu', 'Koşu', '🏃', ['RUNNING', 'TREADMILL']], ['agirlik', 'Ağırlık / kuvvet', '🏋️', ['WEIGHTLIFTING', 'STRENGTH_TRAINING']], ['yuruyus', 'Yürüyüş', '🚶', ['WALKING', 'HIKING']], ['bisiklet', 'Bisiklet', '🚴', ['BIKING']], ['karisik', 'Karışık', '💪', null]];
+export const AIMS = [['kondisyon', 'Kondisyon'], ['kilo', 'Kilo vermek'], ['kas', 'Kas / güç'], ['genel', 'Genel sağlık']];
+export const DEFAULT_GOALS = { sport: 'yuzme', perWeek: 3, minutes: 45, aim: 'kondisyon', steps: 8000, sleep: 7.5, targetWeight: null, height: null, age: null, notes: '' };
+export const goalsOf = (g) => ({ ...DEFAULT_GOALS, ...(g || {}) });
+const sportOf = (g) => SPORTS.find((x) => x[0] === g.sport) || SPORTS[SPORTS.length - 1];
+const isSport = (g, e) => { const t = sportOf(g)[3]; return !t || t.includes(e.type); };
 
 export const ymdLocal = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const fromKey = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
@@ -100,14 +107,17 @@ const bedMin = (iso) => { const d = new Date(iso); let m = d.getHours() * 60 + d
 const minClock = (m) => { if (m == null) return '—'; let x = Math.round(m + 18 * 60) % 1440; return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); };
 const sd = (xs) => { const v = xs.filter((x) => x != null); if (v.length < 3) return null; const a = v.reduce((p, c) => p + c, 0) / v.length; return Math.sqrt(v.reduce((p, c) => p + (c - a) ** 2, 0) / v.length); };
 
-export function periodStats(h, keys) {
+export function periodStats(h, keys, goals) {
+  const g = goalsOf(goals);
+  const sp = (h.exercise || []).filter((e) => keys.includes(e.day) && isSport(g, e));
+  const swims = sp.filter((e) => e.type === 'SWIMMING');
   const ex = (h.exercise || []).filter((e) => keys.includes(e.day));
   const nights = keys.map((k) => h.sleep && h.sleep[k]).filter(Boolean);
   const w = keys.map((k) => h.weight && h.weight[k]).filter((x) => x != null);
   return {
     days: keys.length,
     steps: avg(keys.map((k) => h.steps && h.steps[k])),
-    stepsGoalDays: keys.filter((k) => h.steps && h.steps[k] >= STEP_GOAL).length,
+    stepsGoalDays: keys.filter((k) => h.steps && h.steps[k] >= g.steps).length,
     km: sum(keys.map((k) => h.distance && h.distance[k])),
     azm: sum(keys.map((k) => h.azm && h.azm[k])),
     kcal: avg(keys.map((k) => h.kcal && h.kcal[k])),
@@ -123,6 +133,11 @@ export function periodStats(h, keys) {
     exCount: ex.length,
     exMin: sum(ex.map((e) => e.min)) || 0,
     exDays: new Set(ex.map((e) => e.day)).size,
+    sportCount: sp.length,
+    sportMin: sum(sp.map((e) => e.min)) || 0,
+    sportDays: [...new Set(sp.map((e) => e.day))].sort(),
+    swimM: swims.length ? Math.round((sum(swims.map((e) => e.km)) || 0) * 1000) : null,
+    swimPace: avg(swims.map((e) => e.pace)),
     weightFirst: w.length ? w[0] : null,
     weightLast: w.length ? w[w.length - 1] : null
   };
@@ -139,41 +154,101 @@ export function weekKeys(start, today) {
 
 const pctCh = (a, b) => (a != null && b ? (a - b) / b : null);
 
-// ---------- Tavsiyeler (genel bilgi, kişisel tıbbi öneri değil) ----------
-export function healthTips(c, p, partial, onlyToday) {
+// ---------- Tavsiyeler (kurala dayalı, hedefe göre; genel bilgi, tıbbi tavsiye değil) ----------
+const WDN = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+const NUTRI = {
+  yuzme: [
+    'Yüzerken terlediğini fark etmezsin ama sıvı kaybedersin: yüzmeden önce ve sonra birer büyük bardak su iç.',
+    'Yüzmeden 1,5–2 saat önce hafif ve karbonhidratlı bir şey ye (yulaf, muz, tam buğday ekmekli peynirli tost); ağır yemekten hemen sonra yüzme.',
+    'Yüzmeden sonraki 1–2 saat içinde protein ve karbonhidratı birlikte al: yoğurt + meyve, yumurtalı tost, ayran + simit gibi.',
+    'Havuz sonrası açlık sık görülür; hazırda sağlıklı bir atıştırmalık (kuruyemiş, meyve, yoğurt) olursa abur cubura yönelmezsin.'
+  ],
+  kilo: ['Kilo verirken kas kaybetmemek için her ana öğüne bir avuç içi kadar protein (et, tavuk, balık, yumurta, baklagil) koy.', 'Akşamları büyük porsiyon yerine tabağın yarısını sebzeyle doldurmak toplam kaloriyi kendiliğinden düşürür.'],
+  kas: ['Kas için gün boyunca proteini öğünlere dağıt; antrenman sonrası öğünü atlama.', 'Antrenman günlerinde karbonhidratı kesme: pirinç, bulgur, makarna enerjini ve toparlanmanı destekler.'],
+  kondisyon: ['Antrenman günlerinde öğün atlama; enerji düşükse performans da düşer.', 'Günlük su ihtiyacını idrar rengiyle takip edebilirsin: açık sarı yeterli demektir.'],
+  genel: ['Tabağının yarısı sebze, çeyreği protein, çeyreği tam tahıl olacak şekilde düzenlemek dengeli beslenmenin kolay bir yolu.']
+};
+export function healthTips(c, p, ctx) {
+  const { partial, onlyToday, goals, today, weekIndex = 0 } = ctx || {};
+  const g = goalsOf(goals);
+  const [, spName, spIcon] = sportOf(g);
+  const sleepGoal = g.sleep * 60;
   const t = [];
+  // 1) Antrenman hedefi (en önemli)
+  const done = c.sportCount;
+  const target = g.perWeek;
+  if (partial && today) {
+    const todayIdx = (today.getDay() + 6) % 7; // 0 = Pazartesi
+    const daysLeft = 6 - todayIdx + (c.sportDays.includes(ymdLocal(today)) ? 0 : 1); // bugün henüz yapılmadıysa bugün de sayılır
+    const left = Math.max(0, target - done);
+    if (left === 0) t.push({ tone: 'good', icon: spIcon, title: 'Haftalık ' + spName.toLocaleLowerCase('tr-TR') + ' hedefi tamam: ' + done + '/' + target, text: 'Bu haftanın planını bitirdin. Kalan günlerde hafif yürüyüş ya da esneme toparlanmaya iyi gelir.' });
+    else {
+      // Kalan seansları arada bir gün boşluk bırakacak şekilde öner
+      const cand = [];
+      for (let i = c.sportDays.includes(ymdLocal(today)) ? 1 : 0; (today.getDay() + 6) % 7 + i <= 6; i++) cand.push(addD(today, i));
+      const lastDone = c.sportDays.length ? fromKey(c.sportDays[c.sportDays.length - 1]) : null;
+      const sugg = [];
+      cand.forEach((d) => { const prev = sugg.length ? sugg[sugg.length - 1] : lastDone; if (sugg.length < left && (!prev || Math.round((d - prev) / DAY) >= 2)) sugg.push(d); });
+      cand.forEach((d) => { if (sugg.length < left && !sugg.includes(d)) sugg.push(d); });
+      sugg.sort((x, y) => x - y);
+      const tight = left > daysLeft;
+      t.push({
+        tone: tight ? 'warn' : 'info', icon: spIcon, title: spName + ': ' + done + '/' + target + ' bu hafta',
+        text: tight ? 'Hafta bitene kadar ' + daysLeft + ' gün var, ' + left + ' seans kaldı. Hepsini sıkıştırmak yerine kalanları kısa tut ya da bu haftayı ' + (done + daysLeft) + ' seansla kapat; art arda günlerde yoğunluğu düşük tut.'
+          : left + ' seans kaldı. Öneri: ' + sugg.map((d) => WDN[d.getDay()]).join(', ') + '. Seanslar arasında bir gün ara bırakmak kasların toparlanması için iyi olur.'
+      });
+    }
+  } else if (!partial) {
+    if (done >= target) t.push({ tone: 'good', icon: spIcon, title: spName + ' hedefi tamam: ' + done + '/' + target, text: 'Planladığın kadar antrenman yaptın. İstikrar, tek seferlik yoğun antrenmandan daha çok işe yarar.' });
+    else t.push({ tone: 'warn', icon: spIcon, title: spName + ': ' + done + '/' + target, text: (target - done) + ' seans eksik kaldı. Gelecek haftanın seans günlerini şimdiden takvime ekle; sabit günler alışkanlığı kolaylaştırır.' });
+  }
+  // Art arda günler
+  const consec = c.sportDays.some((d, i) => i && Math.round((fromKey(d) - fromKey(c.sportDays[i - 1])) / DAY) === 1);
+  if (consec && target <= 4) t.push({ tone: 'info', icon: '📅', title: 'Art arda antrenman günleri', text: 'Haftada ' + target + ' seans için aralarına birer gün dinlenme koymak hem performansı hem toparlanmayı iyileştirir.' });
+  // Seans süresi
+  if (done && c.sportMin / done < g.minutes * 0.7) t.push({ tone: 'info', icon: '⏱️', title: 'Seanslar hedeften kısa', text: 'Ortalama seans ' + Math.round(c.sportMin / done) + ' dakika, hedefin ' + g.minutes + ' dakika. Süreyi her hafta 5 dakika artırarak hedefe ulaşabilirsin.' });
+  // Yüzmeye özel: mesafe ve tempo
+  if (c.swimM != null && p.swimM) {
+    const ch = (c.swimM - p.swimM) / p.swimM;
+    if (!partial && ch > 0.3) t.push({ tone: 'warn', icon: '🏊', title: 'Mesafe hızlı arttı (+%' + Math.round(ch * 100) + ')', text: 'Haftalık yüzme mesafesini kademeli artırmak (haftada %10–20) omuz zorlanmasını önler.' });
+  }
+  if (c.swimPace && p.swimPace && c.swimPace < p.swimPace * 0.97) t.push({ tone: 'good', icon: '🏊', title: 'Tempon gelişiyor', text: '100 metre temposu geçen haftaya göre ' + Math.round((p.swimPace - c.swimPace) * 100) + ' saniye hızlandı.' });
+  // 2) Uyku
   if (c.sleep != null) {
-    if (c.sleep < SLEEP_GOAL) t.push({ tone: 'warn', icon: '😴', title: 'Uyku süren hedefin altında', text: 'Bu hafta gecelik ortalama ' + hm(c.sleep) + ' uyudun. Yetişkinler için genelde 7–9 saat öneriliyor; antrenmandan sonra toparlanma da büyük ölçüde uykuda oluyor. Yatış saatini 20–30 dakika öne çekmeyi dene.' });
-    else t.push({ tone: 'good', icon: '😴', title: 'Uyku süren iyi', text: 'Gecelik ortalama ' + hm(c.sleep) + '. Bu süreyi korumak antrenmanlardan toparlanmanı kolaylaştırır.' });
-    if (c.bedSd != null && c.bedSd > 60) t.push({ tone: 'warn', icon: '🕰️', title: 'Yatış saatin düzensiz', text: 'Yatış saatin günden güne ortalama ' + Math.round(c.bedSd) + ' dakika oynuyor. Hafta sonu dahil her gün aynı saatlerde yatıp kalkmak uyku kalitesini artırır.' });
-    if (c.shortNights >= 2) t.push({ tone: 'warn', icon: '⚠️', title: c.shortNights + ' gece 6 saatin altında', text: 'Kısa uyunan gecelerin ertesinde ağır antrenman yerine hafif tempolu bir gün planlamak daha güvenli.' });
+    if (c.sleep < sleepGoal - 15) t.push({ tone: 'warn', icon: '😴', title: 'Uyku hedefin altında: ' + hm(c.sleep), text: 'Hedefin ' + hm(sleepGoal) + '. Antrenmandan sonraki toparlanma büyük ölçüde uykuda olur; yatış saatini 20–30 dakika öne çek.' });
+    else if (!c.shortNights) t.push({ tone: 'good', icon: '😴', title: 'Uyku hedefine uygun: ' + hm(c.sleep), text: 'Bu düzeni korumak antrenmanlardan toparlanmanı kolaylaştırır.' });
+    if (c.bedSd != null && c.bedSd > 60) t.push({ tone: 'warn', icon: '🕰️', title: 'Yatış saatin düzensiz', text: 'Yatış saatin günden güne ortalama ' + Math.round(c.bedSd) + ' dakika oynuyor. Her gün benzer saatte yatıp kalkmak uyku kalitesini artırır.' });
+    if (c.shortNights >= 2) t.push({ tone: 'warn', icon: '⚠️', title: c.shortNights + ' gece 6 saatin altında', text: 'Kısa uyunan gecelerin ertesinde ağır antrenman yerine hafif tempolu bir seans daha güvenli.' });
   }
-  if (c.azm != null) {
-    const goal = Math.round(AZM_GOAL * (c.days / 7));
-    if (c.azm < goal) {
-      const left = AZM_GOAL - c.azm;
-      t.push({ tone: 'info', icon: '⚡', title: 'Aktif dakika: ' + nf(c.azm) + ' / ' + AZM_GOAL, text: 'Dünya Sağlık Örgütü haftada en az 150 dakika orta yoğunlukta hareket öneriyor.' + (partial && left > 0 ? ' Hafta bitene kadar ' + left + ' dakika kaldı; günde yaklaşık ' + Math.ceil(left / Math.max(1, 7 - c.days + 1)) + ' dakika tempolu yürüyüş yeterli.' : '') });
-    } else t.push({ tone: 'good', icon: '⚡', title: 'Aktif dakika hedefi tamam', text: 'Bu hafta ' + nf(c.azm) + ' aktif dakika topladın; haftalık 150 dakika önerisini karşıladın.' });
-    if (!onlyToday && p.azm && c.azm > p.azm * 1.3 && p.azm >= 30) t.push({ tone: 'warn', icon: '📈', title: 'Yük hızlı arttı', text: 'Aktif dakikaların geçen haftaya göre %' + Math.round((c.azm / p.azm - 1) * 100) + ' arttı. Spora yeni başlarken yükü haftadan haftaya kademeli artırmak sakatlık riskini azaltır.' });
-  }
-  if (!onlyToday && c.steps != null && c.steps < 7000) t.push({ tone: 'info', icon: '👟', title: 'Gün içi hareket az', text: 'Günlük ortalaman ' + nf(c.steps) + ' adım. Antrenman dışında da gün içinde kısa yürüyüşler (öğle arası, telefon görüşmeleri) toplam hareketi artırır.' });
+  // 3) Nabız
   if (c.rhr != null && p.rhr != null) {
     const d = c.rhr - p.rhr;
-    if (d >= 4) t.push({ tone: 'warn', icon: '❤️', title: 'Dinlenme nabzın yükseldi', text: 'Geçen haftaya göre ' + Math.round(d) + ' atım yüksek (' + Math.round(c.rhr) + ' bpm). Yorgunluk, az uyku, stres ya da başlayan bir hastalık bunu yapabilir; bir iki gün hafif antrenman yap. Yüksek seyir sürerse bir doktora danış.' });
-    else if (d <= -2) t.push({ tone: 'good', icon: '❤️', title: 'Dinlenme nabzın düşüyor', text: 'Geçen haftaya göre ' + Math.round(-d) + ' atım düştü (' + Math.round(c.rhr) + ' bpm). Düzenli antrenmanla kondisyon geliştikçe genelde böyle olur.' });
+    if (d >= 4) t.push({ tone: 'warn', icon: '❤️', title: 'Dinlenme nabzın yükseldi (+' + Math.round(d) + ')', text: 'Yorgunluk, az uyku, stres ya da başlayan bir hastalık bunu yapabilir; bir iki gün hafif antrenman yap. Yüksek seyir sürerse bir doktora danış.' });
+    else if (d <= -2) t.push({ tone: 'good', icon: '❤️', title: 'Dinlenme nabzın düşüyor (' + Math.round(c.rhr) + ' bpm)', text: 'Düzenli antrenmanla kondisyon geliştikçe genelde böyle olur.' });
   }
-  if (c.exDays >= 6) t.push({ tone: 'warn', icon: '🛌', title: 'Dinlenme günü ver', text: 'Bu hafta ' + c.exDays + ' gün antrenman yaptın. Kaslar dinlenme günlerinde güçlenir; haftada en az bir tam dinlenme günü planla.' });
-  else if (c.exCount === 0 && !partial) t.push({ tone: 'info', icon: '🏋️', title: 'Bu hafta antrenman kaydı yok', text: 'Saat antrenman kaydetmediyse Google Health uygulamasından antrenmanı başlatabilir ya da elle ekleyebilirsin.' });
-  if (c.weightLast != null && p.weightLast != null) {
-    const d = c.weightLast - p.weightLast;
-    if (Math.abs(d) >= 1) t.push({ tone: 'info', icon: '⚖️', title: 'Kilo ' + (d > 0 ? 'arttı' : 'azaldı') + ': ' + (d > 0 ? '+' : '') + nf(d, 1) + ' kg', text: 'Haftalık 0,5–1 kg civarı değişim genelde sürdürülebilir kabul edilir. Daha hızlı değişimlerde beslenme ve su tüketimine dikkat et.' });
+  // 4) Gün içi hareket
+  if (!onlyToday && c.steps != null && c.steps < g.steps * 0.75) t.push({ tone: 'info', icon: '👟', title: 'Gün içi adım hedefin gerisinde', text: 'Ortalama ' + nf(c.steps) + ' adım, hedefin ' + nf(g.steps) + '. Antrenman olmayan günlerde 20–30 dakikalık yürüyüş hem adımı hem toparlanmayı destekler.' });
+  // 5) Kilo hedefi
+  if (g.targetWeight && c.weightLast != null) {
+    const diff = c.weightLast - g.targetWeight;
+    const ch = p.weightLast != null ? c.weightLast - p.weightLast : null;
+    if (Math.abs(diff) < 0.5) t.push({ tone: 'good', icon: '⚖️', title: 'Hedef kilodasın', text: 'Şimdi amaç korumak: antrenman düzenini ve öğün düzenini sürdür.' });
+    else if (ch != null && Math.abs(ch) > 1) t.push({ tone: 'warn', icon: '⚖️', title: 'Kilo hızlı değişti (' + (ch > 0 ? '+' : '') + nf(ch, 1) + ' kg)', text: 'Haftada 0,5–1 kg civarı değişim sürdürülebilir kabul edilir. Hedefe ' + nf(Math.abs(diff), 1) + ' kg var; acele etmeden ilerle.' });
+    else t.push({ tone: 'info', icon: '⚖️', title: 'Hedefe ' + nf(Math.abs(diff), 1) + ' kg', text: ch != null ? 'Bu hafta ' + (ch > 0 ? '+' : '') + nf(ch, 1) + ' kg. Haftada 0,5 kg civarı sağlıklı bir hız.' : 'Kilo ölçümlerini haftada en az bir kez aynı saatte yap; karşılaştırma daha doğru olur.' });
   }
-  return t;
+  // 6) Dinlenme
+  if (c.exDays >= 6) t.push({ tone: 'warn', icon: '🛌', title: 'Dinlenme günü ver', text: 'Bu hafta ' + c.exDays + ' gün antrenman yaptın; haftada en az bir tam dinlenme günü planla.' });
+  // 7) Beslenme: her hafta sıradaki bir öneri (yüzme + hedef)
+  const pool = [...(g.sport === 'yuzme' ? NUTRI.yuzme : []), ...(NUTRI[g.aim] || NUTRI.genel)];
+  if (pool.length) t.push({ tone: 'info', icon: '🥗', title: 'Beslenme', text: pool[Math.abs(weekIndex) % pool.length] });
+  const order = { warn: 0, info: 1, good: 2 };
+  return t.sort((x, y) => order[x.tone] - order[y.tone]);
 }
 
 // ---------- Bugün: küçük şerit ----------
 export function HealthMini({ state, now, onOpen }) {
-  const { health: h } = state || {};
+  const { health: h, goals: gRaw } = state || {};
+  const g = goalsOf(gRaw);
   if (!h || h.connected === false) return null;
   if (h.expired || (h.error && !h.steps)) {
     return (
@@ -194,7 +269,7 @@ export function HealthMini({ state, now, onOpen }) {
       <span className="hm-i"><span aria-hidden="true">😴</span><b>{night ? hm(night.asleep) : '—'}</b></span>
       <span className="hm-i hm-steps">
         <span aria-hidden="true">👟</span><b>{st != null ? nf(st) : '—'}</b>
-        <span className="hm-bar" aria-hidden="true"><span style={{ width: Math.min(100, ((st || 0) / STEP_GOAL) * 100) + '%' }} /></span>
+        <span className="hm-bar" aria-hidden="true"><span style={{ width: Math.min(100, ((st || 0) / g.steps) * 100) + '%' }} /></span>
       </span>
       {azmW != null ? <span className="hm-i"><span aria-hidden="true">⚡</span><b>{nf(azmW)}</b><small>/{AZM_GOAL} dk</small></span> : null}
       <span className="hm-go" aria-hidden="true">›</span>
@@ -209,6 +284,151 @@ function ConnectBtn() {
       <button type="button" className="btn primary" onClick={async () => { setErr(''); const r = await connectHealth(); if (r && r.error) setErr(r.error); }}>Google Health'e bağlan</button>
       {err ? <p className="hint" style={{ color: 'var(--danger)' }}>{err}</p> : null}
     </>
+  );
+}
+
+// ---------- Hedeflerim ----------
+function GoalsCard({ goals, saved, onSave }) {
+  const [open, setOpen] = useState(!saved);
+  const [f, setF] = useState(goals);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setF(goals); }, [JSON.stringify(goals)]);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const numIn = (k, v, min, max, step = 1) => {
+    const n = v === '' ? null : Number(String(v).replace(',', '.'));
+    set(k, n == null || !Number.isFinite(n) ? null : Math.min(max, Math.max(min, Math.round(n / step) * step)));
+  };
+  const sp = sportOf(goals);
+  if (!open) {
+    return (
+      <button type="button" className="card hp-goals-sum" onClick={() => setOpen(true)}>
+        <span aria-hidden="true">🎯</span>
+        <span><b>Hedefim:</b> {sp[1]} · haftada {goals.perWeek} × {goals.minutes} dk · {AIMS.find((a) => a[0] === goals.aim)[1].toLocaleLowerCase('tr-TR')} · {nf(goals.steps)} adım · {String(goals.sleep).replace('.', ',')} sa uyku{goals.targetWeight ? ' · hedef ' + String(goals.targetWeight).replace('.', ',') + ' kg' : ''}</span>
+        <span className="hp-goals-edit">Düzenle</span>
+      </button>
+    );
+  }
+  return (
+    <section className="card hp-goals">
+      <div className="hp-goals-hd"><b>🎯 Hedeflerim</b>{saved ? <button type="button" className="linkbtn" onClick={() => { setF(goals); setOpen(false); }}>Kapat</button> : null}</div>
+      {!saved ? <p className="hint" style={{ margin: 0 }}>Tavsiyeler bu hedeflere göre hazırlanır. Sonra istediğin zaman değiştirebilirsin.</p> : null}
+      <div className="field"><label>Ana spor</label>
+        <div className="typechips">{SPORTS.map(([k, l, ic]) => <button key={k} type="button" className={'chip' + (f.sport === k ? ' on' : '')} aria-pressed={f.sport === k} onClick={() => set('sport', k)}>{ic} {l}</button>)}</div>
+      </div>
+      <div className="field"><label>Amacın</label>
+        <div className="typechips">{AIMS.map(([k, l]) => <button key={k} type="button" className={'chip' + (f.aim === k ? ' on' : '')} aria-pressed={f.aim === k} onClick={() => set('aim', k)}>{l}</button>)}</div>
+      </div>
+      <div className="hp-goals-grid">
+        <div className="field"><label htmlFor="hg-pw">Haftada kaç gün</label><input id="hg-pw" type="number" inputMode="numeric" min="1" max="7" value={f.perWeek ?? ''} onChange={(e) => numIn('perWeek', e.target.value, 1, 7)} /></div>
+        <div className="field"><label htmlFor="hg-min">Seans süresi (dk)</label><input id="hg-min" type="number" inputMode="numeric" min="10" max="240" step="5" value={f.minutes ?? ''} onChange={(e) => numIn('minutes', e.target.value, 10, 240)} /></div>
+        <div className="field"><label htmlFor="hg-st">Günlük adım</label><input id="hg-st" type="number" inputMode="numeric" min="1000" max="30000" step="500" value={f.steps ?? ''} onChange={(e) => numIn('steps', e.target.value, 1000, 30000, 500)} /></div>
+        <div className="field"><label htmlFor="hg-sl">Uyku (saat)</label><input id="hg-sl" type="number" inputMode="decimal" min="5" max="10" step="0.5" value={f.sleep ?? ''} onChange={(e) => numIn('sleep', e.target.value, 5, 10, 0.5)} /></div>
+        <div className="field"><label htmlFor="hg-tw">Hedef kilo (kg, isteğe bağlı)</label><input id="hg-tw" type="number" inputMode="decimal" min="35" max="200" step="0.5" value={f.targetWeight ?? ''} onChange={(e) => numIn('targetWeight', e.target.value, 35, 200, 0.5)} /></div>
+        <div className="field"><label htmlFor="hg-h">Boy (cm, isteğe bağlı)</label><input id="hg-h" type="number" inputMode="numeric" min="120" max="230" value={f.height ?? ''} onChange={(e) => numIn('height', e.target.value, 120, 230)} /></div>
+        <div className="field"><label htmlFor="hg-age">Yaş (isteğe bağlı)</label><input id="hg-age" type="number" inputMode="numeric" min="16" max="100" value={f.age ?? ''} onChange={(e) => numIn('age', e.target.value, 16, 100)} /></div>
+      </div>
+      <div className="field"><label htmlFor="hg-notes">Koç için not (isteğe bağlı)</label>
+        <textarea id="hg-notes" rows={2} maxLength={300} value={f.notes || ''} onChange={(e) => set('notes', e.target.value)} placeholder="Örn. akşamları geç yiyorum, laktozu sevmem, omzumda eski bir sakatlık var" />
+      </div>
+      <button type="button" className="btn primary" disabled={busy} onClick={async () => { setBusy(true); const ok = await onSave(f); setBusy(false); if (ok !== false) setOpen(false); }}>{busy ? 'Kaydediliyor…' : 'Hedefleri kaydet'}</button>
+    </section>
+  );
+}
+
+// ---------- Yapay zekâ koç (isteğe bağlı; yalnız düğmeye basınca, haftalık özet sayılarla) ----------
+export function buildCoachPayload(h, goals, today, start) {
+  const g = goalsOf(goals);
+  const r = (x, d = 0) => (x == null ? null : +x.toFixed(d));
+  const weeks = [];
+  for (let i = 0; i < 4; i++) {
+    const st = addD(start, -7 * i);
+    const wk = weekKeys(st, today);
+    if (!wk.cur.length) continue;
+    const c = periodStats(h, wk.cur, g);
+    weeks.push({
+      hafta: ymdLocal(st), gun_sayisi: wk.cur.length,
+      ort_adim: r(c.steps), aktif_dk_toplam: r(c.azm), ort_uyku_dk: r(c.sleep), ort_derin_dk: r(c.deep), ort_rem_dk: r(c.rem),
+      ort_yatis: c.bed != null ? minClock(c.bed) : null, ort_kalkis: c.wake != null ? minClock(c.wake) : null, yatis_sapma_dk: r(c.bedSd),
+      kisa_gece: c.shortNights, dinlenme_nabzi: r(c.rhr, 1), ort_kalori: r(c.kcal), ana_spor_seans: c.sportCount, ana_spor_dk: r(c.sportMin),
+      yuzme_m: c.swimM, yuzme_tempo_sn_100m: c.swimPace ? r(c.swimPace * 100) : null, kilo_son: r(c.weightLast, 1)
+    });
+  }
+  const from = ymdLocal(addD(start, -7));
+  const ex = (h.exercise || []).filter((e) => e.day >= from).map((e) => ({
+    gun: e.day, tur: exName(e), dk: e.min, kcal: e.kcal, m: e.km ? Math.round(e.km * 1000) : null, boy: e.laps || null,
+    tempo_sn_100m: e.pace ? Math.round(e.pace * 100) : null, ort_nabiz: e.hr || null
+  }));
+  return {
+    bugun: ymdLocal(today) + ' ' + WD[today.getDay()],
+    hedefler: { ana_spor: sportOf(g)[1], haftada_seans: g.perWeek, seans_dk: g.minutes, amac: AIMS.find((a) => a[0] === g.aim)[1], gunluk_adim: g.steps, uyku_saat: g.sleep, hedef_kilo: g.targetWeight, boy_cm: g.height, yas: g.age, not: (g.notes || '').slice(0, 300) },
+    haftalar: weeks, antrenmanlar: ex
+  };
+}
+export async function requestCoach(week, payload, force) {
+  if (DEMO) {
+    await new Promise((r) => setTimeout(r, 900));
+    return { week, at: new Date().toISOString(), model: 'örnek', data: {
+      ozet: 'Bu hafta 2 yüzme seansı yaptın ve uykun hedefe yakın. Dinlenme nabzının düşmesi kondisyonunun geliştiğini gösteriyor.',
+      iyi: ['Seanslar arasında bir gün dinlenme bırakmışsın.', '100 m temposu geçen haftaya göre 4 saniye hızlanmış.'],
+      gelistir: ['Pazar akşamları yatış saatin 1 saatten fazla kayıyor; pazartesi enerjini düşürüyor.', 'Seans süren hedefin altında kaldı; ısınma ve soğumayı da sayarak 45 dakikaya tamamla.'],
+      plan: [['Pazartesi', 'Dinlenme · 30 dk yürüyüş'], ['Salı', 'Yüzme · 45 dk: 200 m ısınma, 6×100 m orta tempo (30 sn ara), 200 m yavaş'], ['Çarşamba', 'Dinlenme · omuz esneme 10 dk'], ['Perşembe', 'Yüzme · 45 dk teknik: kol çekişi ve nefes çalışması'], ['Cuma', 'Hafif yürüyüş'], ['Cumartesi', 'Yüzme · 50 dk: 1.200–1.400 m sakin tempo'], ['Pazar', 'Tam dinlenme']].map(([gun, oneri]) => ({ gun, oneri })),
+      beslenme: ['Yüzme günlerinde kahvaltıda yulaf + yoğurt + meyve; enerji verir ve hafif tutar.', 'Yüzmeden sonra 1–2 saat içinde yumurtalı tost ya da ayran + simit gibi protein + karbonhidrat.', 'Havuza giderken yanına su al; havuzdan çıkınca 1–2 bardak iç.'],
+      uyari: ''
+    } };
+  }
+  const { data } = await supabase.auth.getSession();
+  const token = data && data.session && data.session.access_token;
+  const r = await fetch('/api/health?action=coach', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: JSON.stringify({ week, payload, force: !!force }) });
+  const j = await r.json().catch(() => ({ error: 'Beklenmeyen yanıt (' + r.status + ')' }));
+  if (!r.ok && !j.error) j.error = 'Hata ' + r.status;
+  return j;
+}
+
+function CoachCard({ coach, onCoach, payload, weekId }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const run = async (force) => {
+    setBusy(true); setErr('');
+    const r = await onCoach(weekId, payload(), force);
+    setBusy(false);
+    if (r && r.error) setErr(r.error);
+  };
+  const d = coach && coach.data;
+  const age = coach ? Date.now() - new Date(coach.at).getTime() : 0;
+  return (
+    <section className="card hp-coach" aria-label="Yapay zekâ koç">
+      <div className="hp-coach-hd">
+        <b>🤖 Koçun haftalık yorumu</b>
+        {d ? <span className="hint">{new Date(coach.at).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> : null}
+      </div>
+      {d ? (
+        <>
+          {d.ozet ? <p className="hp-coach-sum">{d.ozet}</p> : null}
+          {d.uyari ? <div className="hp-tip warn"><span className="hp-tip-ic" aria-hidden="true">⚠️</span><span>{d.uyari}</span></div> : null}
+          <div className="hp-coach-cols">
+            {d.iyi && d.iyi.length ? <div><h4>İyi gidenler</h4><ul>{d.iyi.map((x, i) => <li key={i}>{x}</li>)}</ul></div> : null}
+            {d.gelistir && d.gelistir.length ? <div><h4>Geliştirilecekler</h4><ul>{d.gelistir.map((x, i) => <li key={i}>{x}</li>)}</ul></div> : null}
+          </div>
+          {d.plan && d.plan.length ? (
+            <div><h4>Önümüzdeki 7 gün</h4>
+              <div className="hp-plan">{d.plan.map((x, i) => <div key={i} className="hp-plan-r"><b>{x.gun}</b><span>{x.oneri}</span></div>)}</div>
+            </div>
+          ) : null}
+          {d.beslenme && d.beslenme.length ? <div><h4>🥗 Beslenme</h4><ul>{d.beslenme.map((x, i) => <li key={i}>{x}</li>)}</ul></div> : null}
+          {typeof d === 'string' ? <p style={{ whiteSpace: 'pre-wrap' }}>{d}</p> : null}
+          <div className="hp-coach-ft">
+            <span className="hint">Genel öneridir; tıbbi tavsiye değildir.</span>
+            {age > 6 * 3600000 ? <button type="button" className="linkbtn" onClick={() => run(true)} disabled={busy}>{busy ? 'Hazırlanıyor…' : 'Güncelle'}</button> : null}
+          </div>
+        </>
+      ) : (
+        <div className="hp-coach-empty">
+          <p>Hedeflerine ve bu haftanın verilerine bakıp antrenman planı, toparlanma ve beslenme önerisi hazırlar. Yalnızca haftalık özet sayılar gönderilir; adın ya da e-postan gönderilmez.</p>
+          <button type="button" className="btn primary" onClick={() => run(false)} disabled={busy}>{busy ? 'Koç değerlendiriyor… (10–20 sn)' : 'Koçtan yorum al'}</button>
+        </div>
+      )}
+      {err ? <p className="hint" style={{ color: 'var(--danger)', margin: 0 }}>{err}</p> : null}
+    </section>
   );
 }
 
@@ -235,7 +455,8 @@ function Trend({ c, p, better = 'up', fmt }) {
   return <span className={'hp-d ' + (good == null ? '' : good ? 'good' : 'bad')}>{up ? '▲' : '▼'} %{Math.abs(Math.round(ch * 100))}{fmt ? <small> ({fmt(p)})</small> : null}</span>;
 }
 
-export function HealthPage({ state, now, hidden, onToggleHidden, onExport }) {
+export function HealthPage({ state, now, hidden, onToggleHidden, onExport, goals: goalsRaw, onSaveGoals, coach, onCoach }) {
+  const goals = goalsOf(goalsRaw);
   const { health: h, busy, reload } = state || {};
   const today = new Date(now); today.setHours(0, 0, 0, 0);
   const thisWeek = weekStartOf(today);
@@ -248,13 +469,16 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport }) {
   const onlyToday = wk.partial && wk.cur.length === 1;
   const actKeys = wk.partial && !onlyToday ? wk.cur.slice(0, -1) : wk.cur;
   const mix = (all, act) => (all && act ? { ...all, steps: act.steps, stepsGoalDays: act.stepsGoalDays, km: act.km, azm: all.azm, kcal: act.kcal } : all);
-  const c = useMemo(() => (ok ? mix(periodStats(h, wk.cur), periodStats(h, actKeys)) : null), [h, ok, wk.cur.join()]);
+  const gk = JSON.stringify(goals);
+  const c = useMemo(() => (ok ? mix(periodStats(h, wk.cur, goals), periodStats(h, actKeys, goals)) : null), [h, ok, wk.cur.join(), gk]);
   const p = useMemo(() => {
     if (!ok) return null;
-    const full = periodStats(h, Array.from({ length: 7 }, (_, i) => ymdLocal(addD(start, i - 7))));
-    return { ...mix(periodStats(h, wk.prev), periodStats(h, wk.prev.slice(0, actKeys.length))), weightLast: full.weightLast };
-  }, [h, ok, wk.prev.join()]);
-  const tips = useMemo(() => (c && p ? healthTips(c, p, wk.partial, onlyToday) : []), [c, p, wk.partial, onlyToday]);
+    const full = periodStats(h, Array.from({ length: 7 }, (_, i) => ymdLocal(addD(start, i - 7))), goals);
+    return { ...mix(periodStats(h, wk.prev, goals), periodStats(h, wk.prev.slice(0, actKeys.length), goals)), weightLast: full.weightLast };
+  }, [h, ok, wk.prev.join(), gk]);
+  const weekIndex = Math.round(start.getTime() / (7 * DAY));
+  const tips = useMemo(() => (c && p ? healthTips(c, p, { partial: wk.partial, onlyToday, goals, today, weekIndex }) : []), [c, p, wk.partial, onlyToday, gk, weekIndex]);
+  const weekId = ymdLocal(start);
 
   if (!h) return <div className="card"><p className="empty">{busy ? 'Sağlık verisi yükleniyor…' : 'Yükleniyor…'}</p></div>;
   if (h.connected === false) {
@@ -280,14 +504,16 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport }) {
   const label = off === 0 ? 'Bu hafta' : off === 1 ? 'Geçen hafta' : off + ' hafta önce';
   const cmpLabel = onlyToday ? 'geçen pazartesiye göre; adım ve kalori için gün bitince kıyaslanır' : wk.partial ? 'geçen haftanın aynı günlerine göre; adım ve kalori bitmiş günlerden' : 'önceki haftaya göre';
   const pa = onlyToday ? {} : p;
-  const maxSteps = Math.max(STEP_GOAL, ...wk.all.map((k) => h.steps[k] || 0));
+  const maxSteps = Math.max(goals.steps, ...wk.all.map((k) => h.steps[k] || 0));
   const maxSleep = Math.max(9 * 60, ...wk.all.map((k) => (h.sleep[k] ? h.sleep[k].asleep : 0)));
   const weekEx = (h.exercise || []).filter((e) => wk.all.includes(e.day));
   const needScope = h.errors && Object.values(h.errors).some((e) => /^403|permission|scope/i.test(e));
   const oldest = h.from || Object.keys(h.steps || {}).sort()[0] || wk.all[0];
   const canBack = ymdLocal(addD(start, -1)) >= oldest;
+  const [, spName, spIcon] = sportOf(goals);
   const tiles = [
-    { k: '👟 Adım', v: nf(c.steps), u: onlyToday ? 'bugün' : '/gün', sub: c.stepsGoalDays + ' gün 10 bin üstü', tr: <Trend c={c.steps} p={pa.steps} /> },
+    { k: spIcon + ' ' + spName, v: c.sportCount + '/' + goals.perWeek, u: 'seans', sub: c.swimM ? nf(c.swimM) + ' m' + (c.swimPace ? ' · ' + pace100(c.swimPace) : '') : c.sportMin ? hm(c.sportMin) + ' toplam' : 'bu hafta henüz yok', tr: <Trend c={c.sportMin || null} p={p.sportMin || null} />, hi: true },
+    { k: '👟 Adım', v: nf(c.steps), u: onlyToday ? 'bugün' : '/gün', sub: c.stepsGoalDays + ' gün hedef (' + nf(goals.steps) + ') üstü', tr: <Trend c={c.steps} p={pa.steps} /> },
     { k: '⚡ Aktif dakika', v: nf(c.azm), u: 'dk', sub: <span className="hp-goal"><span style={{ width: Math.min(100, ((c.azm || 0) / AZM_GOAL) * 100) + '%' }} /></span>, tr: <Trend c={c.azm} p={pa.azm} /> },
     { k: '😴 Uyku', v: hm(c.sleep), u: '/gece', sub: c.bed != null ? 'yatış ' + minClock(c.bed) + ' · kalkış ' + minClock(c.wake) : '', tr: <Trend c={c.sleep} p={p.sleep} /> },
     { k: '❤️ Dinlenme nabzı', v: c.rhr != null ? nf(c.rhr) : '—', u: 'bpm', sub: 'düşük olması iyi', tr: <Trend c={c.rhr} p={p.rhr} better="down" /> },
@@ -298,6 +524,7 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport }) {
 
   return (
     <div className="hp">
+      <GoalsCard goals={goals} saved={!!goalsRaw} onSave={onSaveGoals} />
       <div className="hp-top">
         <div className="week-nav hp-nav">
           <button type="button" className="iconbtn" aria-label="Önceki hafta" onClick={() => setOff(off + 1)} disabled={!canBack}>‹</button>
@@ -313,7 +540,7 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport }) {
 
       <div className="hp-tiles">
         {tiles.map((x) => (
-          <div key={x.k} className="hp-tile">
+          <div key={x.k} className={'hp-tile' + (x.hi ? ' hi' : '')}>
             <span className="hp-k">{x.k}</span>
             <span className="hp-v">{x.v}<small> {x.u}</small></span>
             {x.tr}
@@ -332,8 +559,8 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport }) {
           return (
             <div key={k} className={'hp-row' + (k === ymdLocal(today) ? ' today' : '') + (fut ? ' fut' : '')}>
               <span className="hp-day"><b>{WDS[d.getDay()]}</b> {d.getDate()}{ex.length ? <span className="hp-ex" title={ex.map(exName).join(', ')}>{ex.map((e) => EX_ICON[e.type] || '💪').join('')}</span> : null}</span>
-              <span className="hp-barc">{h.steps[k] != null ? <><span className="hp-bar st" style={{ width: (h.steps[k] / maxSteps) * 100 + '%', background: h.steps[k] >= STEP_GOAL ? '#2B8A3E' : '#69DB7C' }} /><em>{nf(h.steps[k])}</em></> : <em className="muted">—</em>}</span>
-              <span className="hp-barc">{s ? <><span className="hp-bar" style={{ width: (s.asleep / maxSleep) * 100 + '%', background: s.asleep >= SLEEP_GOAL ? '#7048E8' : '#B197FC' }} /><em>{Math.floor(s.asleep / 60)}:{String(Math.round(s.asleep % 60)).padStart(2, '0')}</em></> : <em className="muted">—</em>}</span>
+              <span className="hp-barc">{h.steps[k] != null ? <><span className="hp-bar st" style={{ width: (h.steps[k] / maxSteps) * 100 + '%', background: h.steps[k] >= goals.steps ? '#2B8A3E' : '#69DB7C' }} /><em>{nf(h.steps[k])}</em></> : <em className="muted">—</em>}</span>
+              <span className="hp-barc">{s ? <><span className="hp-bar" style={{ width: (s.asleep / maxSleep) * 100 + '%', background: s.asleep >= goals.sleep * 60 - 15 ? '#7048E8' : '#B197FC' }} /><em>{Math.floor(s.asleep / 60)}:{String(Math.round(s.asleep % 60)).padStart(2, '0')}</em></> : <em className="muted">—</em>}</span>
               <span className="hp-num">{h.azm[k] != null ? nf(h.azm[k]) : '—'}</span>
               <span className="hp-num">{h.rhr[k] != null ? nf(h.rhr[k]) : '—'}</span>
             </div>
@@ -356,8 +583,10 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport }) {
         </section>
       ) : null}
 
+      <CoachCard coach={coach && coach.week === weekId ? coach : null} onCoach={onCoach} payload={() => buildCoachPayload(h, goals, today, start)} weekId={weekId} />
+
       <section className="section">
-        <div className="section-head"><h2>Tavsiyeler</h2></div>
+        <div className="section-head"><h2>Tavsiyeler</h2><span className="meta">{spName.toLocaleLowerCase('tr-TR')} · haftada {goals.perWeek} · {AIMS.find((a) => a[0] === goals.aim)[1].toLocaleLowerCase('tr-TR')}</span></div>
         <div className="hp-tips">
           {tips.length ? tips.map((x, i) => (
             <div key={i} className={'hp-tip ' + x.tone}>

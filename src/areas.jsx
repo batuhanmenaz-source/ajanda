@@ -49,7 +49,7 @@ export function PrivateScreen({ seg: seg0, setSeg, data, now, actions, budgets, 
       {seg === 'ozet' ? <PersonalDashboard data={data} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} setSeg={setSeg} health={health && health.state} />
         : seg === 'yarim' ? <YarimPage {...yarim} data={data} now={now} actions={actions} />
         : seg === 'listeler' ? <ListsView data={data} actions={actions} />
-        : seg === 'saglik' && health ? <HealthPage state={health.state} now={now} hidden={health.hidden} onToggleHidden={health.toggle} onExport={actions.exportHealth} />
+        : seg === 'saglik' && health ? <HealthPage state={health.state} now={now} hidden={health.hidden} onToggleHidden={health.toggle} onExport={actions.exportHealth} goals={health.goals} onSaveGoals={health.saveGoals} coach={health.coach} onCoach={health.askCoach} />
         : seg === 'aliskanlik' ? <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 760 }}><HabitsCard data={data} now={now} actions={actions} /><HabitHistory data={data} now={now} /></div>
           : seg === 'ozelgun' ? <div style={{ maxWidth: 760 }}><SpecialDatesSection data={data} now={now} actions={actions} /></div>
             : seg === 'gunluk' ? <DailyNotes data={data} now={now} actions={actions} />

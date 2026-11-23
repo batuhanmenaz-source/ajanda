@@ -21,7 +21,7 @@ import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, su
 import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
-import { useHealth, connectHealth, disconnectHealth } from './health.jsx';
+import { useHealth, connectHealth, disconnectHealth, requestCoach } from './health.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote } from './sync.js';
 
 const TABS = [
@@ -181,6 +181,17 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   // Yarim alanı bu cihazda gizli mi? (cihaza özel; telefonda açık, iş bilgisayarında kapalı olabilir)
   const [yarimHidden, setYarimHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-yarim-hidden') === '1'; } catch { return false; } });
   const [healthHidden, setHealthHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-health-hidden') === '1'; } catch { return false; } });
+  const [healthGoals, setHealthGoals] = useState(null);
+  const [healthCoach, setHealthCoach] = useState(null);
+  const saveHealthGoals = async (g) => {
+    try { const s2 = await store.saveSettings({ health_goals: g }); setHealthGoals(s2.health_goals || g); say('Hedeflerin kaydedildi 🎯'); return true; }
+    catch (e) { if (/health_goals/.test(String(e && e.message))) say('Kaydedilemedi: Supabase\'de 26 numaralı SQL\'i çalıştırman gerekiyor.'); else fail(e); return false; }
+  };
+  const askCoach = async (week, payload, force) => {
+    const r = await requestCoach(week, payload, force);
+    if (r && !r.error) setHealthCoach(r);
+    return r;
+  };
   const toggleHealthHidden = () => {
     const v = !healthHidden;
     setHealthHiddenState(v);
@@ -210,7 +221,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setMoneyCats(s.money_cats || []); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setMoneyCats(s.money_cats || []); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setHealthGoals(s.health_goals || null); setHealthCoach(s.health_coach || null); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -1111,10 +1122,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={healthState} healthHidden={healthHidden} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={{ ...healthState, goals: healthGoals }} healthHidden={healthHidden} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} mail={mailState} />}
-              {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} health={{ state: healthState, hidden: healthHidden, toggle: toggleHealthHidden }}
+              {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} health={{ state: { ...healthState, goals: healthGoals }, hidden: healthHidden, toggle: toggleHealthHidden, goals: healthGoals, saveGoals: saveHealthGoals, coach: healthCoach, askCoach }}
                 yarim={{ seg: yarimSeg, setSeg: setYarimSeg, love, prefs: yarimPrefs, photoUrl }} />}
               {tab === 'aramalar' && <CallsScreen data={viewData} now={now} actions={actions} missedConfigured={!!love.token} />}
             </>
