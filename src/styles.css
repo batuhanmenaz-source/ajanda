@@ -1948,3 +1948,5 @@ button.it-row:hover { background: var(--chip); }
 .spanbar.live .spanbar-lbl { color: #2B8A3E; }
 .spanbar.soon .spanbar-lbl { color: #E67700; }
 .spanbar.past .spanbar-lbl { color: var(--muted); }
+.hm-sport b { color: #0B7285; }
+.hm-sport.done b { color: #2B8A3E; }

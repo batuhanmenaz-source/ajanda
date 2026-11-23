@@ -12,10 +12,13 @@ export const SLEEP_GOAL = 7 * 60;
 // Kişisel hedefler (Ayarlar'da saklanır, cihazlar arası aynı)
 export const SPORTS = [['yuzme', 'Yüzme', '🏊', ['SWIMMING']], ['kosu', 'Koşu', '🏃', ['RUNNING', 'TREADMILL']], ['agirlik', 'Ağırlık / kuvvet', '🏋️', ['WEIGHTLIFTING', 'STRENGTH_TRAINING']], ['yuruyus', 'Yürüyüş', '🚶', ['WALKING', 'HIKING']], ['bisiklet', 'Bisiklet', '🚴', ['BIKING']], ['karisik', 'Karışık', '💪', null]];
 export const AIMS = [['kondisyon', 'Kondisyon'], ['kilo', 'Kilo vermek'], ['kas', 'Kas / güç'], ['genel', 'Genel sağlık']];
-export const DEFAULT_GOALS = { sport: 'yuzme', perWeek: 3, minutes: 45, aim: 'kondisyon', steps: 8000, sleep: 7.5, targetWeight: null, height: null, age: null, notes: '' };
+export const DEFAULT_GOALS = { sport: 'yuzme', perWeek: 3, minutes: 45, aim: 'kondisyon', steps: 8000, sleep: 7.5, targetWeight: null, height: null, age: null, notes: '', days: [], time: '19:00', gcal: true };
+// Haftanın günü: 1 = Pazartesi … 7 = Pazar
+export const isoDay = (d) => ((d.getDay() + 6) % 7) + 1;
+export const DAY_SHORT = ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pz'];
 export const goalsOf = (g) => ({ ...DEFAULT_GOALS, ...(g || {}) });
-const sportOf = (g) => SPORTS.find((x) => x[0] === g.sport) || SPORTS[SPORTS.length - 1];
-const isSport = (g, e) => { const t = sportOf(g)[3]; return !t || t.includes(e.type); };
+export const sportOf = (g) => SPORTS.find((x) => x[0] === g.sport) || SPORTS[SPORTS.length - 1];
+export const isSport = (g, e) => { const t = sportOf(g)[3]; return !t || t.includes(e.type); };
 
 export const ymdLocal = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const fromKey = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
@@ -271,6 +274,11 @@ export function HealthMini({ state, now, onOpen }) {
         <span aria-hidden="true">👟</span><b>{st != null ? nf(st) : '—'}</b>
         <span className="hm-bar" aria-hidden="true"><span style={{ width: Math.min(100, ((st || 0) / g.steps) * 100) + '%' }} /></span>
       </span>
+      {g.days && g.days.includes(isoDay(t)) ? (
+        (h.exercise || []).some((e) => e.day === T && isSport(g, e))
+          ? <span className="hm-i hm-sport done"><span aria-hidden="true">{sportOf(g)[2]}</span><b>✓</b></span>
+          : <span className="hm-i hm-sport"><span aria-hidden="true">{sportOf(g)[2]}</span><b>{g.time}</b></span>
+      ) : null}
       {azmW != null ? <span className="hm-i"><span aria-hidden="true">⚡</span><b>{nf(azmW)}</b><small>/{AZM_GOAL} dk</small></span> : null}
       <span className="hm-go" aria-hidden="true">›</span>
     </button>
@@ -303,7 +311,7 @@ function GoalsCard({ goals, saved, onSave }) {
     return (
       <button type="button" className="card hp-goals-sum" onClick={() => setOpen(true)}>
         <span aria-hidden="true">🎯</span>
-        <span><b>Hedefim:</b> {sp[1]} · haftada {goals.perWeek} × {goals.minutes} dk · {AIMS.find((a) => a[0] === goals.aim)[1].toLocaleLowerCase('tr-TR')} · {nf(goals.steps)} adım · {String(goals.sleep).replace('.', ',')} sa uyku{goals.targetWeight ? ' · hedef ' + String(goals.targetWeight).replace('.', ',') + ' kg' : ''}</span>
+        <span><b>Hedefim:</b> {sp[1]} · {goals.days && goals.days.length ? goals.days.map((d) => DAY_SHORT[d - 1]).join(' ') + ' ' + goals.time : 'haftada ' + goals.perWeek} × {goals.minutes} dk · {AIMS.find((a) => a[0] === goals.aim)[1].toLocaleLowerCase('tr-TR')} · {nf(goals.steps)} adım · {String(goals.sleep).replace('.', ',')} sa uyku{goals.targetWeight ? ' · hedef ' + String(goals.targetWeight).replace('.', ',') + ' kg' : ''}</span>
         <span className="hp-goals-edit">Düzenle</span>
       </button>
     );
@@ -318,6 +326,18 @@ function GoalsCard({ goals, saved, onSave }) {
       <div className="field"><label>Amacın</label>
         <div className="typechips">{AIMS.map(([k, l]) => <button key={k} type="button" className={'chip' + (f.aim === k ? ' on' : '')} aria-pressed={f.aim === k} onClick={() => set('aim', k)}>{l}</button>)}</div>
       </div>
+      <div className="field"><label>Spor günlerin <small className="muted">(takvimde görünür)</small></label>
+        <div className="typechips" role="group" aria-label="Spor günleri">{DAY_SHORT.map((l, i) => {
+          const on = (f.days || []).includes(i + 1);
+          return <button key={l} type="button" className={'chip' + (on ? ' on' : '')} aria-pressed={on} onClick={() => setF((x) => { const ds = new Set(x.days || []); if (on) ds.delete(i + 1); else ds.add(i + 1); const days = [...ds].sort(); return { ...x, days, perWeek: days.length || x.perWeek }; })}>{l}</button>;
+        })}</div>
+      </div>
+      {(f.days || []).length ? (
+        <div className="hp-goals-grid">
+          <div className="field"><label htmlFor="hg-time">Saat</label><input id="hg-time" type="time" value={f.time || '19:00'} onChange={(e) => set('time', e.target.value)} /></div>
+          <label className="wl-check" style={{ alignSelf: 'end', paddingBottom: 8 }}><input type="checkbox" checked={f.gcal !== false} onChange={(e) => set('gcal', e.target.checked)} /><span>Google Takvim'e ekle (1 saat önce bildirim)</span></label>
+        </div>
+      ) : null}
       <div className="hp-goals-grid">
         <div className="field"><label htmlFor="hg-pw">Haftada kaç gün</label><input id="hg-pw" type="number" inputMode="numeric" min="1" max="7" value={f.perWeek ?? ''} onChange={(e) => numIn('perWeek', e.target.value, 1, 7)} /></div>
         <div className="field"><label htmlFor="hg-min">Seans süresi (dk)</label><input id="hg-min" type="number" inputMode="numeric" min="10" max="240" step="5" value={f.minutes ?? ''} onChange={(e) => numIn('minutes', e.target.value, 10, 240)} /></div>
@@ -357,9 +377,9 @@ export function buildPlan(h, goalsIn, today) {
   const g = goalsOf(goalsIn);
   const [, spName, spIcon] = sportOf(g);
   const T = ymdLocal(today);
-  const done = (h.exercise || []).filter((e) => isSport(g, e));
+  const done = ((h && h.exercise) || []).filter((e) => isSport(g, e));
   const doneDays = new Set(done.map((e) => e.day));
-  const D = g.sport === 'yuzme' ? swimBase(h, g, today) : null;
+  const D = g.sport === 'yuzme' ? swimBase(h || {}, g, today) : null;
   const days = Array.from({ length: 7 }, (_, i) => addD(today, i));
   // Haftalara göre kalan seans: bu hafta (bugüne kadar yapılanlar düşülür) ve gelecek hafta
   const ws = weekStartOf(today);
@@ -380,11 +400,12 @@ export function buildPlan(h, goalsIn, today) {
     if (i === 0 && doneDays.has(k)) { plan.push({ d, week: weekNo, session: true, done: true, title: spIcon + ' ' + spName + ' yapıldı ✓', text: 'Bugünkü seansın kaydedildi. Akşam hafif esneme ve bol su.' }); lastDate = d; idx++; return; }
     // Bugün dinlenirsek kalan günlere aralıklı en fazla ceil((kalan-1)/2) seans sığar; ihtiyaç bundan fazlaysa art arda gün kabul
     const must = need > Math.ceil((daysLeftInWeek - 1) / 2);
-    if (need > 0 && (gap >= 2 || must)) {
+    const fixed = g.days && g.days.length;
+    if (fixed ? g.days.includes(isoDay(d)) : need > 0 && (gap >= 2 || must)) {
       let title, text;
       if (g.sport === 'yuzme') { const [nm, f] = SWIM_SETS[idx % SWIM_SETS.length]; title = spIcon + ' Yüzme · ' + nm + ' · ~' + nf(D) + ' m'; text = f(D); }
       else { const list = OTHER_SETS[g.sport] || OTHER_SETS.karisik; const [nm, f] = list[idx % list.length]; title = spIcon + ' ' + spName + ' · ' + nm; text = f(g.minutes); }
-      plan.push({ d, week: weekNo, session: true, title, text, food: 'Önce (1,5–2 sa): hafif karbonhidrat · Sonra (1–2 sa içinde): protein + karbonhidrat · bol su' });
+      plan.push({ d, week: weekNo, session: true, at: fixed ? g.time : null, title: (fixed ? g.time + ' · ' : '') + title, text, food: 'Önce (1,5–2 sa): hafif karbonhidrat · Sonra (1–2 sa içinde): protein + karbonhidrat · bol su' });
       lastDate = d; idx++;
     } else {
       const restAfter = lastDate && Math.round((d - lastDate) / DAY) === 1;

@@ -16,12 +16,12 @@ import { prettyPhone, normalizePhone } from './whatsapp.js';
 import { MARKETPLACES, DEFAULT_PREPS, YARIM_STARTS } from './constants.js';
 import { addDays, startOfDay, weekStart, fmtLong, rangeLabel, toDateInput, fromDateInput, whenLabel } from './dates.js';
 import { nextOccurrence } from './recur.js';
-import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent } from './google.js';
+import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent, saveTimed } from './google.js';
 import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
 import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
-import { useHealth, connectHealth, disconnectHealth } from './health.jsx';
+import { useHealth, connectHealth, disconnectHealth, buildPlan, goalsOf, sportOf, DAY_SHORT, ymdLocal as hYmd } from './health.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote } from './sync.js';
 
 const TABS = [
@@ -182,8 +182,30 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const [yarimHidden, setYarimHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-yarim-hidden') === '1'; } catch { return false; } });
   const [healthHidden, setHealthHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-health-hidden') === '1'; } catch { return false; } });
   const [healthGoals, setHealthGoals] = useState(null);
-  const saveHealthGoals = async (g) => {
-    try { const s2 = await store.saveSettings({ health_goals: g }); setHealthGoals(s2.health_goals || g); say('Hedeflerin kaydedildi 🎯'); return true; }
+  // Spor günleri Google Takvim'e haftalık tekrarlanan tek etkinlik olarak yazılır (1 saat önce bildirim)
+  const syncSportEvent = async (g0) => {
+    const g = goalsOf(g0);
+    const want = !demo && g.gcal !== false && g.days && g.days.length;
+    if (!want) { if (g.gcal_id) { try { await deleteEvent(g.gcal_id); } catch { /* yok say */ } } return null; }
+    const BY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+    const [h, m] = (g.time || '19:00').split(':').map(Number);
+    let start = new Date(); start.setSeconds(0, 0);
+    for (let i = 0; i < 8; i++) { const d = new Date(start); d.setDate(d.getDate() + i); d.setHours(h, m, 0, 0); if (g.days.includes(((d.getDay() + 6) % 7) + 1) && d > new Date()) { start = d; break; } }
+    const [, spName, spIcon] = sportOf(g);
+    return saveTimed(g.gcal_id || null, {
+      summary: spIcon + ' ' + spName, description: 'Ajanda · spor günü (' + g.days.map((d) => DAY_SHORT[d - 1]).join(', ') + ')',
+      start, minutes: g.minutes || 45, recurrence: 'RRULE:FREQ=WEEKLY;BYDAY=' + g.days.map((d) => BY[d - 1]).join(','), overrides: [60]
+    });
+  };
+  const saveHealthGoals = async (g0) => {
+    let g = { ...g0 };
+    if (g.days && g.days.length && !g.since) g.since = hYmd(new Date());
+    let calMsg = '';
+    if (google === 'ok' || (g.gcal_id && !(g.gcal !== false && g.days && g.days.length))) {
+      try { const id = await syncSportEvent(g); g = { ...g, gcal_id: id }; if (id) calMsg = ' · Google Takvim\'e eklendi'; }
+      catch (e) { console.warn(e); calMsg = ' · Google Takvim\'e eklenemedi'; }
+    }
+    try { const s2 = await store.saveSettings({ health_goals: g }); setHealthGoals(s2.health_goals || g); say('Hedeflerin kaydedildi 🎯' + calMsg); return true; }
     catch (e) { if (/health_goals/.test(String(e && e.message))) say('Kaydedilemedi: Supabase\'de 26 numaralı SQL\'i çalıştırman gerekiyor.'); else fail(e); return false; }
   };
   const toggleHealthHidden = () => {
@@ -802,6 +824,16 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   }, []);
   const mailState = useMail(loading ? null : onMailAnswered);
   const healthState = useHealth(!loading);
+  // Takvim ve Bugün için spor bağlamı: sabit spor günleri, Fitbit antrenmanları ve 7 günlük plan
+  const sportCtx = useMemo(() => {
+    const hh = healthState.health;
+    const ex = (hh && hh.exercise) || [];
+    if (!healthGoals && !ex.length) return null;
+    const plan = {};
+    try { buildPlan(hh || {}, healthGoals, new Date(now.getFullYear(), now.getMonth(), now.getDate())).forEach((x) => { if (x.session && !x.done) plan[hYmd(x.d)] = x.title.replace(/^\d\d:\d\d · /, '').split(' · ').slice(1).join(' · ') + ' — ' + x.text; }); } catch (e) { console.warn(e); }
+    return { goals: healthGoals, exercise: ex, plan, since: healthGoals && healthGoals.since };
+  }, [healthState.health, healthGoals, now.toDateString()]);
+  const viewDataS = useMemo(() => (sportCtx ? { ...viewData, sport: sportCtx } : viewData), [viewData, sportCtx]);
 
   const deleteFollowup = async (f) => {
     if (!window.confirm('"' + f.title + '" silinsin mi?')) return;
@@ -945,7 +977,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openFixed: (f) => setSheet({ kind: 'fixed', item: f }),
     openBudget: () => setSheet({ kind: 'budget' }),
     openCats: () => setSheet({ kind: 'cats' }),
-    payFixed, scanReceipt, exportWallet, exportRevenue, exportHealth,
+    payFixed, scanReceipt, exportWallet, exportRevenue, exportHealth, openHealth: () => goTab('saglik'),
     toggleHabit, addListItems, toggleListItem, deleteListItem, clearListDone, addWeeklySummaryReminder,
     toggleTask, addTask, deleteTask, saveDaily
   };
@@ -1116,8 +1148,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={{ ...healthState, goals: healthGoals }} healthHidden={healthHidden} />}
-              {tab === 'takvim' && <CalendarScreen data={viewData} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
+              {tab === 'bugun' && <TodayScreen data={viewDataS} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={{ ...healthState, goals: healthGoals }} healthHidden={healthHidden} />}
+              {tab === 'takvim' && <CalendarScreen data={viewDataS} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} mail={mailState} />}
               {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} health={{ state: { ...healthState, goals: healthGoals }, hidden: healthHidden, toggle: toggleHealthHidden, goals: healthGoals, saveGoals: saveHealthGoals }}
                 yarim={{ seg: yarimSeg, setSeg: setYarimSeg, love, prefs: yarimPrefs, photoUrl }} />}

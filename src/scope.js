@@ -19,6 +19,7 @@ export function scopeData(data, f) {
     campaigns: data.campaigns.filter((c) => (f === 'ozel' ? c.kind === 'etkinlik' && !c.marketplace : true)),
     campaign_tasks: data.campaign_tasks,
     collabs: f === 'ozel' ? [] : data.collabs,
+    sport: f === 'is' ? null : data.sport,
     special_dates: f === 'is' ? [] : data.special_dates
   };
 }

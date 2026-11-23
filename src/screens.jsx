@@ -17,7 +17,7 @@ import { InfluencerTodayCard, codeStatus } from './codes.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FxStrip } from './fx.jsx';
 import { WalletPulse } from './wallet.jsx';
-import { HealthMini } from './health.jsx';
+import { HealthMini, goalsOf, sportOf, isSport, isoDay, exName } from './health.jsx';
 import { MailSection } from './mail.jsx';
 import { FollowupsMini } from './work.jsx';
 import { adWho, adStart, adEnd, dur } from './ads.jsx';
@@ -151,6 +151,21 @@ export function dayItems(day, { data, events }) {
       out.push({ ...base, key: 'i' + c.id, time: 'Tüm gün', title: '🎬 ' + who + (c.title ? ' — ' + c.title : ''), sub, done: c.status === 'yayinlandi' || c.status === 'odendi' });
     }
   });
+  // Spor: Fitbit'in kaydettiği antrenmanlar + Sağlık hedeflerindeki sabit spor günleri
+  if (data.sport) {
+    const g = goalsOf(data.sport.goals);
+    const [, spName, spIcon] = sportOf(g);
+    const exs = (data.sport.exercise || []).filter((x) => x.day === dk);
+    const base = { src: 'Spor', color: SRC_COLORS.Spor, kind: 'sport', item: { sport: true } };
+    exs.forEach((x, i) => out.push({ ...base, key: 'ex' + dk + i, time: fmtTime(new Date(x.start)), title: '✓ ' + exName(x) + ' yapıldı', sub: [x.min ? x.min + ' dk' : '', x.type === 'SWIMMING' && x.km ? Math.round(x.km * 1000).toLocaleString('tr-TR') + ' m' : x.km ? x.km.toFixed(1).replace('.', ',') + ' km' : '', x.kcal ? x.kcal + ' kcal' : ''].filter(Boolean).join(' · ') }));
+    const since = data.sport.since || '';
+    if (g.days && g.days.includes(isoDay(day)) && !exs.some((x) => isSport(g, x)) && dk >= since) {
+      const plan = data.sport.plan && data.sport.plan[dk];
+      const today0 = startOfDay(new Date());
+      const past = day < today0;
+      out.push({ ...base, key: 'sp' + dk, time: g.time, title: spIcon + ' ' + spName + (past ? ' · yapılmadı' : ''), sub: past ? 'Kayıt yok' : plan ? plan : g.minutes + ' dk', done: false, missed: past });
+    }
+  }
   return out.sort((a, b) => {
     if (a.time === 'Tüm gün' && b.time !== 'Tüm gün') return -1;
     if (b.time === 'Tüm gün' && a.time !== 'Tüm gün') return 1;
@@ -206,6 +221,7 @@ export function openDayItem(e, actions) {
   else if (e.kind === 'collab') actions.openCollab(e.item);
   else if (e.kind === 'note') actions.openNote(e.item);
   else if (e.kind === 'google') actions.openGoogleEvent(e.item);
+  else if (e.kind === 'sport' && actions.openHealth) actions.openHealth();
 }
 
 function CampaignMini({ c, tasks, onOpen, result }) {
@@ -868,7 +884,7 @@ function UpcomingDays({ data, events, google, now, actions, count = 3, onAll }) 
 // ---------- TAKVİM ----------
 const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 // Filtre grupları (not → hatırlatma, Yarim ayrı)
-const CAL_GROUPS = [['Kampanya', 'Kampanya'], ['Etkinlik', 'Etkinlik'], ['Influencer', 'Influencer'], ['Hatırlatma', 'Hatırlatma'], ['Arama', 'Arama'], ['Özel gün', 'Özel gün'], ['Yarim', 'Yarim'], ['Google', 'Google']];
+const CAL_GROUPS = [['Kampanya', 'Kampanya'], ['Etkinlik', 'Etkinlik'], ['Influencer', 'Influencer'], ['Hatırlatma', 'Hatırlatma'], ['Arama', 'Arama'], ['Özel gün', 'Özel gün'], ['Yarim', 'Yarim'], ['Spor', 'Spor'], ['Google', 'Google']];
 const calGroup = (e) => (e.src === 'Not' ? 'Hatırlatma' : e.src);
 const CAL_VIEWS = [['ay', 'Ay'], ['hafta', 'Hafta'], ['liste', 'Liste']];
 const loadHidden = () => { try { return JSON.parse(localStorage.getItem('ajanda-cal-hide') || '[]'); } catch { return []; } };
