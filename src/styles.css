@@ -1906,3 +1906,11 @@ button.it-row:hover { background: var(--chip); }
 .su-row.ok .su-ic { background: #2F9E44; } .su-row.warn .su-ic { background: #F08C00; } .su-row.bad .su-ic { background: #E03131; }
 .su-main { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13.5px; }
 .su-main small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+/* Alt sekmeler: Diğer */
+.subtabs-wrap { display: flex; flex-direction: column; gap: 8px; }
+.subtabs button.more { color: var(--ink-2); border-style: dashed; }
+.subtabs button.more.open:not(.on) { background: var(--chip); border-style: solid; }
+.subtabs-more { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border-radius: 14px; background: var(--chip); }
+.subtabs-more button { border: 1px solid var(--line); background: var(--surface); min-height: 34px; padding: 0 12px; border-radius: 999px; font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+.subtabs-more button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.subtabs button.more.on { color: #fff; border-style: solid; }

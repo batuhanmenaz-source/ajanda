@@ -11,14 +11,14 @@ import { WorkDashboard } from './workdash.jsx';
 import { PersonalDashboard } from './privdash.jsx';
 import { HealthPage } from './health.jsx';
 
-import { WORK_TABS, PRIVATE_TABS, SubTabs } from './tabs.jsx';
+import { WORK_TABS, PRIVATE_TABS, SubTabs, WORK_PRIMARY, PRIVATE_PRIMARY } from './tabs.jsx';
 export { WORK_TABS, PRIVATE_TABS, SubTabs };
 
 
 export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder, mail }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" grid />
+      <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" grid primary={WORK_PRIMARY} />
       {seg === 'ozet' ? <WorkDashboard data={data} now={now} actions={actions} revenue={revenue} revTarget={revTarget} mail={mail} setSeg={setSeg} />
         : seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} campaigns={data.campaigns} />
         : seg === 'mailler' ? <MailView mail={mail} followups={data.followups} actions={actions} now={now} />
@@ -36,7 +36,7 @@ export function PrivateScreen({ seg: seg0, setSeg, data, now, actions, budgets, 
   const seg = yarimHidden && seg0 === 'yarim' ? 'cuzdan' : seg0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <SubTabs tabs={tabs} value={seg} onChange={setSeg} label="Özel bölümler" grid />
+      <SubTabs tabs={tabs} value={seg} onChange={setSeg} label="Özel bölümler" grid primary={PRIVATE_PRIMARY} />
       {seg === 'ozet' ? <PersonalDashboard data={data} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} setSeg={setSeg} health={health && health.state} />
         : seg === 'yarim' ? <YarimPage {...yarim} data={data} now={now} actions={actions} />
         : seg === 'listeler' ? <ListsView data={data} actions={actions} />
