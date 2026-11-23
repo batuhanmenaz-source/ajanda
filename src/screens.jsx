@@ -13,12 +13,13 @@ import {
 import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
 import { StatStrip } from './statstrip.jsx';
+import { InfluencerTodayCard, codeStatus } from './codes.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FxStrip } from './fx.jsx';
 import { WalletPulse } from './wallet.jsx';
 import { MailSection } from './mail.jsx';
 import { FollowupsMini } from './work.jsx';
-import { AdsTodayCard, adWho, adStart, adEnd, dur } from './ads.jsx';
+import { adWho, adStart, adEnd, dur } from './ads.jsx';
 
 const HERO_KIND = { rem: 'Sıradaki hatırlatma', call: 'Sıradaki arama', google: 'Google Takvim', yarim: 'Yarim için' };
 
@@ -551,11 +552,12 @@ function WorkPulse({ data, rawData, now, lateCount, campsAll, goTab }) {
   const ads = (rawData.collabs || []).filter((c) => c.status !== 'iptal' && adStart(c));
   const adsLive = ads.filter((c) => adStart(c) <= now && adEnd(c) >= now).sort((a, b) => adEnd(a) - adEnd(b));
   const adsToday = ads.filter((c) => adStart(c) > now && sameDay(adStart(c), now));
+  const codesLive = (rawData.inf_codes || []).filter((c) => codeStatus(c, now).key === 'live').length;
   const fups = (rawData.followups || []).filter((f) => !f.done);
   const oldest = fups.length ? Math.max(...fups.map((f) => daysBetween(fromDateInput(f.since), startOfDay(now)))) : 0;
   const tiles = [
     { k: 'kampanya', label: 'Kampanyalar', v: live.length, unit: 'aktif', s: firstSoon ? (soon.length + ' yakında · ' + (firstSoon.marketplace || firstSoon.name) + ' ' + dayLabel(fromDateInput(firstSoon.start_date), now).toLocaleLowerCase('tr-TR')) : soon.length ? soon.length + ' yakında' : '30 günde yeni yok', tone: SRC_COLORS.Kampanya },
-    { k: 'influencer', label: 'Influencer', v: adsLive.length, unit: 'yayında', s: adsLive.length ? 'ilk biten: ' + dur(adEnd(adsLive[0]) - now) + ' sonra' : adsToday.length ? adsToday.length + ' reklam bugün başlıyor' : 'yayında reklam yok', tone: '#0C8599' },
+    { k: 'influencer', label: 'Influencer', v: adsLive.length, unit: 'yayında', s: [adsLive.length ? 'ilk biten: ' + dur(adEnd(adsLive[0]) - now) + ' sonra' : adsToday.length ? adsToday.length + ' reklam bugün başlıyor' : 'yayında reklam yok', codesLive ? codesLive + ' aktif kod' : ''].filter(Boolean).join(' · '), tone: '#0C8599' },
     { k: 'bekleyenler', label: 'Bekleyenler', v: fups.length, unit: 'iş', s: fups.length ? 'en eskisi ' + oldest + ' gün' : 'bekleyen yok', tone: '#E67700', warn: oldest >= 14 },
     { k: 'gecikenler', label: 'Gecikenler', v: lateCount, unit: 'iş', s: lateCount ? 'aşağıdan kapat' : 'geciken yok 👏', tone: '#C92A2A', warn: lateCount > 0 }
   ];
@@ -725,7 +727,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
 
         <div className="tslot" style={{ order: 6 }}>
-        {scope !== 'ozel' ? <AdsTodayCard data={rawData} now={now} actions={actions} onAll={() => goTab('influencer')} showEmpty /> : null}
+        {scope !== 'ozel' ? <InfluencerTodayCard data={rawData} now={now} actions={actions} goTab={goTab} /> : null}
         </div>
         <div className="tslot" style={{ order: 7 }}>
         {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}

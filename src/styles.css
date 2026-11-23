@@ -1756,3 +1756,42 @@ button.pulse:hover { border-color: #C9C6BD; }
 .ic-urow .title { min-width: 70px; font-weight: 600; }
 .ic-urow .meta { flex: 1; }
 .ic-dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+
+/* ---------- Bugün: Influencer kartı (reklam + kod) ---------- */
+.it-card { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.it-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 640px) { .it-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .it-stats button:last-child { grid-column: 1 / -1; } }
+.it-stats button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 10px; border: 0; border-radius: 10px; background: #E3FAFC; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.it-stats button:nth-child(3), .it-stats button:nth-child(4) { background: #F3F0FF; }
+.it-stats button:hover { filter: brightness(.97); }
+.it-stats b { font-family: var(--display); font-size: 18px; color: #0B7285; }
+.it-stats button:nth-child(3) b, .it-stats button:nth-child(4) b { color: #5F3DC4; }
+.it-stats span { font-size: 11px; color: var(--ink-2); line-height: 1.25; }
+.it-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 640px) { .it-cols { grid-template-columns: minmax(0, 1fr); } }
+.it-col { display: flex; flex-direction: column; min-width: 0; }
+.it-col-h { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 700; color: var(--ink-2); padding: 0 2px 4px; border-bottom: 1px solid var(--line); }
+.it-col-h .linkbtn { font-size: 12px; }
+.it-row { display: flex; align-items: center; gap: 9px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--line-2); background: transparent; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.it-row:last-child { border-bottom: 0; }
+button.it-row:hover { background: var(--chip); }
+.it-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; border: 0; background: transparent; padding: 0; font: inherit; text-align: left; cursor: pointer; }
+.it-main b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.it-main small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.it-code-n { font-weight: 800 !important; letter-spacing: .04em; color: color-mix(in srgb, var(--mp) 80%, black); }
+.it-bar { height: 4px; border-radius: 999px; background: var(--track); overflow: hidden; margin-top: 2px; }
+.it-bar span { display: block; height: 100%; background: var(--mp); border-radius: 999px; }
+.it-bar span.hot { background: #E03131; }
+.it-r { font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; display: flex; flex-direction: column; align-items: flex-end; }
+.it-r b { font-size: 13px; }
+.it-r em { font-style: normal; font-size: 10.5px; color: var(--danger); font-weight: 700; }
+.it-plus { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-size: 16px; font-weight: 700; color: #5F3DC4; cursor: pointer; }
+.it-plus:hover { border-color: #7048E8; background: #F3F0FF; }
+.it-empty { font-size: 12.5px; color: var(--muted); margin: 8px 2px; }
+.it-wrap { container-type: inline-size; }
+@container (max-width: 600px) {
+  .it-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .it-stats button:last-child { grid-column: 1 / -1; flex-direction: row; align-items: baseline; gap: 8px; }
+  .it-stats span { font-size: 11.5px; }
+  .it-cols { grid-template-columns: minmax(0, 1fr); }
+}

@@ -5,7 +5,7 @@ import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, daysBetween,
 import { Section, Sheet } from './ui.jsx';
 import { tl, tlShort, parseTL } from './revenue.jsx';
 import { StatStrip } from './statstrip.jsx';
-import { AdsView } from './ads.jsx';
+import { AdsView, adStart, adStatus, adWindow, adWho, expandRuns, dur } from './ads.jsx';
 
 export const SCOPES_C = [['tum', 'Tüm ürünler'], ['marka', 'Marka / kategori'], ['urun', 'Belirli ürünler']];
 const scopeLbl = (k) => (SCOPES_C.find((x) => x[0] === k) || SCOPES_C[0])[1];
@@ -397,5 +397,72 @@ export function CodeUsageSheet({ code: c, onClose, onSave }) {
         <button type="submit" className="btn big primary" disabled={busy}>Kaydet</button>
       </form>
     </Sheet>
+  );
+}
+
+// ---- Bugün sayfası: reklamlar + indirim kodları tek kartta
+export function InfluencerTodayCard({ data, now, actions, goTab }) {
+  const ads = (data.collabs || []).filter((c) => c.status !== 'iptal' && adStart(c));
+  const liveAds = ads.filter((c) => adStatus(c, now) === 'live').sort((a, b) => adWindow(a, now).e - adWindow(b, now).e);
+  const todayAds = ads.filter((c) => adStatus(c, now) === 'soon' && adStart(c) < addDays(startOfDay(now), 1)).sort((a, b) => adStart(a) - adStart(b));
+  const soonAds = ads.filter((c) => adStatus(c, now) === 'soon' && adStart(c) >= addDays(startOfDay(now), 1) && adStart(c) < addDays(startOfDay(now), 8));
+  const mk = toDateInput(now).slice(0, 7);
+  const budget = expandRuns(ads, now).filter((c) => toDateInput(adStart(c)).startsWith(mk)).reduce((s, c) => s + (Number(c.fee) || 0), 0);
+  const codes = (data.inf_codes || []).map((c) => ({ c, st: codeStatus(c, now) }));
+  const liveCodes = codes.filter((x) => x.st.key === 'live').sort((a, b) => usedTotal(b.c) - usedTotal(a.c));
+  const soonCodes = codes.filter((x) => x.st.key === 'soon');
+  const T = toDateInput(startOfDay(now));
+  const use7 = (data.inf_codes || []).reduce((a, c) => a + usedIn(c, toDateInput(addDays(startOfDay(now), -6)), T).n, 0);
+  const stale = liveCodes.filter(({ c }) => { const u = usesOf(c); return !u.length || daysBetween(fromDateInput(u[u.length - 1].d), startOfDay(now)) >= 3; });
+  if (!liveAds.length && !todayAds.length && !liveCodes.length && !soonCodes.length && !soonAds.length) return null;
+  const open = (sub) => { try { sessionStorage.setItem('ajanda-inf-sub', sub); } catch { /* yok say */ } goTab('influencer'); };
+  const adList = [...liveAds, ...todayAds].slice(0, 4);
+  return (
+    <Section title="Influencer" tone="#0C8599" onAdd={() => actions.quickNew('ad')} addLabel="Yeni reklam">
+      <div className="it-wrap"><div className="card it-card">
+        <div className="it-stats">
+          <button type="button" onClick={() => open('reklam')}><b>{liveAds.length}</b><span>reklam yayında</span></button>
+          <button type="button" onClick={() => open('reklam')}><b>{todayAds.length + soonAds.length}</b><span>{todayAds.length ? todayAds.length + ' bugün · ' : ''}7 günde başlayan</span></button>
+          <button type="button" onClick={() => open('kod')}><b>{liveCodes.length}</b><span>aktif kod{soonCodes.length ? ' · ' + soonCodes.length + ' yakında' : ''}</span></button>
+          <button type="button" onClick={() => open('kod')}><b>{use7.toLocaleString('tr-TR')}</b><span>son 7 gün kod kullanımı</span></button>
+          <button type="button" onClick={() => open('reklam')}><b>{budget ? tlShort(budget) : '—'}</b><span>bu ay reklam bütçesi</span></button>
+        </div>
+        <div className="it-cols">
+          <div className="it-col">
+            <div className="it-col-h"><span>📣 Reklamlar</span><button type="button" className="linkbtn" onClick={() => open('reklam')}>Tümü →</button></div>
+            {adList.length ? adList.map((c) => {
+              const st = adStatus(c, now); const w = adWindow(c, now);
+              const p = st === 'live' ? Math.min(1, Math.max(0, (now - w.s) / Math.max(1, w.e - w.s))) : 0;
+              return (
+                <button key={c.id} type="button" className="it-row" style={{ '--mp': c.marketplace ? mpColor(c.marketplace) : '#0C8599' }} onClick={() => actions.openCollab(c)}>
+                  <span className={'wd-dot ' + st} />
+                  <span className="it-main"><b>{c.handle || c.title || adWho(c, data.contacts)}</b><small>{[c.platform, c.marketplace, c.brand].filter(Boolean).join(' · ')}</small>
+                    {st === 'live' ? <span className="it-bar"><span style={{ width: p * 100 + '%' }} /></span> : null}
+                  </span>
+                  <span className="it-r">{st === 'live' ? dur(w.e - now) + ' kaldı' : 'bugün ' + hm(w.s)}</span>
+                </button>
+              );
+            }) : <p className="it-empty">{soonAds.length ? 'Bugün yayında reklam yok · ' + soonAds.length + ' reklam bu hafta başlıyor' : 'Yayında reklam yok.'}</p>}
+          </div>
+          <div className="it-col">
+            <div className="it-col-h"><span>🏷️ İndirim kodları</span><button type="button" className="linkbtn" onClick={() => open('kod')}>Tümü →</button></div>
+            {liveCodes.length ? liveCodes.slice(0, 4).map(({ c }) => {
+              const used = usedTotal(c); const lim = Number(c.use_limit) || 0;
+              const isStale = stale.some((x) => x.c.id === c.id);
+              return (
+                <div key={c.id} className="it-row it-code" style={{ '--mp': c.marketplace ? mpColor(c.marketplace) : '#0C8599' }}>
+                  <button type="button" className="it-main" onClick={() => actions.openCode(c)}>
+                    <b className="it-code-n">{c.code}</b><small>{[c.handle, c.marketplace].filter(Boolean).join(' · ')}</small>
+                    {lim ? <span className="it-bar"><span className={used / lim >= 0.9 ? 'hot' : ''} style={{ width: Math.min(100, (used / lim) * 100) + '%' }} /></span> : null}
+                  </button>
+                  <span className="it-r"><b>{used.toLocaleString('tr-TR')}</b>{lim ? ' / ' + lim.toLocaleString('tr-TR') : ''}{isStale ? <em>güncellenmeli</em> : null}</span>
+                  <button type="button" className="it-plus" aria-label={c.code + ' kullanım gir'} title="Kullanım gir" onClick={() => actions.openCodeUsage(c)}>+</button>
+                </div>
+              );
+            }) : <p className="it-empty">{soonCodes.length ? soonCodes.length + ' kod yakında başlıyor.' : 'Aktif indirim kodu yok.'}</p>}
+          </div>
+        </div>
+      </div></div>
+    </Section>
   );
 }
