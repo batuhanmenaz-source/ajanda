@@ -10,6 +10,7 @@ import { FollowupsView, ReportsView } from './work.jsx';
 import { WorkDashboard } from './workdash.jsx';
 import { PersonalDashboard } from './privdash.jsx';
 import { HealthPage } from './health.jsx';
+import { SalesView } from './sales.jsx';
 
 import { WORK_TABS, PRIVATE_TABS, SubTabs, WORK_PRIMARY, PRIVATE_PRIMARY } from './tabs.jsx';
 export { WORK_TABS, PRIVATE_TABS, SubTabs };
@@ -23,6 +24,7 @@ export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded
         : seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} campaigns={data.campaigns} />
         : seg === 'mailler' ? <MailView mail={mail} followups={data.followups} actions={actions} now={now} />
         : seg === 'bekleyenler' ? <FollowupsView data={data} now={now} actions={actions} />
+        : seg === 'satislar' ? <SalesView now={now} actions={actions} />
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
         : seg === 'notlar' ? <MarketplaceNotes data={data} actions={actions} />
           : seg === 'influencer' ? <InfluencerScreen data={data} now={now} actions={actions} />

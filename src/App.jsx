@@ -925,6 +925,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
 
   const actions = {
+    saveRevenue,
     toggleReminder: (r) => toggle('reminders', r),
     toggleCall: (c) => toggle('calls', c),
     openReminder: (r) => setSheet({ kind: 'item', item: { ...r, kind: 'reminder' } }),

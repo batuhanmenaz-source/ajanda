@@ -1962,3 +1962,54 @@ button.it-row:hover { background: var(--chip); }
 .hp-plan-mini-v b { color: #0B7285; margin-right: 4px; }
 .hp-plan-mini-go { grid-column: 2; grid-row: 1 / span 2; color: var(--muted); font-size: 16px; }
 .hp-plan-toggle { width: 100%; border: 0; background: transparent; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+
+/* ---------- İş → Satış raporları ---------- */
+.sl { display: flex; flex-direction: column; gap: 14px; }
+.sl-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.sl-top .hint { display: block; max-width: 560px; }
+.sl-top .btn { flex: none; }
+.sl-h { font-family: var(--display); font-size: 20px; margin: 0 0 2px; }
+.sl-empty { padding: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+.sl-empty b { color: var(--ink); font-size: 15px; }
+.sl-reps { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.sl-reps::-webkit-scrollbar { display: none; }
+.sl-rep { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font: inherit; cursor: pointer; text-align: left; min-width: 128px; }
+.sl-rep.on { border-color: var(--mp); box-shadow: inset 0 0 0 1px var(--mp); }
+.sl-rep-mp { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.sl-rep-mp .dot, .sl-imp-head .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.sl-rep-p { font-size: 13px; font-weight: 600; }
+.sl-rep b { font-family: var(--display); font-size: 15px; }
+.sl-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.sl-kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.sl-kpi > span { font-size: 12px; color: var(--muted); }
+.sl-kpi b { font-family: var(--display); font-size: 20px; font-variant-numeric: tabular-nums; }
+.sl-kpi small { font-size: 12px; color: var(--muted); }
+.sl-d { font-size: 12px; font-weight: 600; }
+.sl-d.up, .sl-mv .up { color: var(--green); }
+.sl-d.down, .sl-mv .down { color: var(--danger); }
+.sl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.sl-card { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.sl-card h3 { margin: 0; font-size: 15px; }
+.sl-card > .hint { margin-top: -6px; }
+.sl-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13px; }
+.sl-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sl-v { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sl-v small { font-weight: 400; color: var(--muted); }
+.sl-v.hot { color: var(--danger); }
+.sl-bar { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.sl-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.sl-mv { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.sl-mv > div, .sl-card, .sl-grid > * { min-width: 0; }
+.sl-mv h4 { margin: 0 0 4px; font-size: 13px; }
+.sl-mvr { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 3px 0; }
+.sl-mvr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sl-mvr b { flex: none; font-variant-numeric: tabular-nums; }
+.sl-stock { border-color: #F3D9A4; background: #FFFBF2; }
+.sl-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.sl-foot .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-imp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sl-imp-sum { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.sl-imp-sum > div { background: var(--chip); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; }
+.sl-imp-sum span { font-size: 12px; color: var(--muted); }
+.sl-imp-sum b { font-family: var(--display); font-size: 17px; }
+@media (max-width: 560px) { .sl-top { flex-direction: column; } .sl-mv { grid-template-columns: minmax(0, 1fr); } .sl-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -1,5 +1,5 @@
 // İş ve Özel alt sekmeleri (App ilk açılışta bunlara ihtiyaç duyar; ekranların kendisi gerektiğinde yüklenir)
-export const WORK_TABS = [['ozet', 'Özet'], ['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['mailler', 'Mailler'], ['bekleyenler', 'Bekleyenler'], ['influencer', 'Influencer'], ['notlar', 'Notlar'], ['raporlar', 'Raporlar']];
+export const WORK_TABS = [['ozet', 'Özet'], ['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['mailler', 'Mailler'], ['bekleyenler', 'Bekleyenler'], ['influencer', 'Influencer'], ['notlar', 'Notlar'], ['satislar', 'Satış raporları'], ['raporlar', 'Raporlar']];
 export const PRIVATE_TABS = [['ozet', 'Özet'], ['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['saglik', 'Sağlık'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
 import { useState } from 'react';
