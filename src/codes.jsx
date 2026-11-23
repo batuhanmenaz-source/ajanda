@@ -197,6 +197,27 @@ export function CodesView({ data, now, actions }) {
   );
 }
 
+// Kodun süresi: başlamadan önce başlangıca kalan (turuncu), başladıktan sonra bitişe kalan (yeşil; son gün kırmızı)
+const LEAD_MS = 14 * 86400000;
+export function codeTime(c, now = new Date()) {
+  const s = c.start_at ? new Date(c.start_at) : null, e = c.end_at ? new Date(c.end_at) : null;
+  if (!s || !e) return null;
+  if (now > e) return { kind: 'past', fill: 1, left: 'Bitti', right: fmtShort(e) + ' ' + hm(e), short: 'bitti' };
+  if (now < s) return { kind: 'soon', fill: Math.min(1, Math.max(0.03, 1 - (s - now) / LEAD_MS)), left: 'Başlangıca ' + dur(s - now), right: fmtShort(s) + ' ' + hm(s), short: dur(s - now) + ' sonra' };
+  const fill = Math.min(1, Math.max(0.02, (now - s) / Math.max(1, e - s)));
+  return { kind: e - now < 86400000 ? 'live end' : 'live', fill, left: 'Bitişe ' + dur(e - now), right: fmtShort(e) + ' ' + hm(e), short: dur(e - now) + ' kaldı', pct: Math.round(fill * 100) };
+}
+function CodeTimeBar({ c, now }) {
+  const t = codeTime(c, now);
+  if (!t) return null;
+  return (
+    <div className={'ctb ic-ctb ' + t.kind}>
+      <div className="ctb-lbl"><span>{t.left}</span><span className="muted">{t.pct != null ? 'süre %' + t.pct + ' · ' : ''}{t.right}</span></div>
+      <div className="ctb-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(t.fill * 100)} aria-label={t.left}><span style={{ width: t.fill * 100 + '%' }} /></div>
+    </div>
+  );
+}
+
 function CodeCard({ c, st, now, actions }) {
   const used = usedTotal(c);
   const lim = Number(c.use_limit) || 0;
@@ -224,6 +245,7 @@ function CodeCard({ c, st, now, actions }) {
         </span>
         <span className="ic-when">{s ? fmtShort(s) + ' ' + hm(s) : '—'} → {e ? fmtShort(e) + ' ' + hm(e) : '—'}</span>
       </button>
+      <CodeTimeBar c={c} now={now} />
       <div className="ic-use">
         <div className="ic-use-top">
           <span><b>{used.toLocaleString('tr-TR')}</b>{lim ? ' / ' + lim.toLocaleString('tr-TR') : ''} kullanım</span>
@@ -453,7 +475,8 @@ export function InfluencerTodayCard({ data, now, actions, goTab }) {
                 <div key={c.id} className="it-row it-code" style={{ '--mp': c.marketplace ? mpColor(c.marketplace) : '#0C8599' }}>
                   <button type="button" className="it-main" onClick={() => actions.openCode(c)}>
                     <b className="it-code-n">{c.code}</b><small>{[c.handle, c.marketplace].filter(Boolean).join(' · ')}</small>
-                    {lim ? <span className="it-bar"><span className={used / lim >= 0.9 ? 'hot' : ''} style={{ width: Math.min(100, (used / lim) * 100) + '%' }} /></span> : null}
+                    {lim ? <span className="it-bar" title="Kullanım"><span className={used / lim >= 0.9 ? 'hot' : ''} style={{ width: Math.min(100, (used / lim) * 100) + '%' }} /></span> : null}
+                    {(() => { const t = codeTime(c, now); return t ? <span className={'it-tbar ' + t.kind} title="Süre"><span style={{ width: 'calc((100% - 78px) * ' + t.fill.toFixed(3) + ')' }} /><em>{t.short}</em></span> : null; })()}
                   </button>
                   <span className="it-r"><b>{used.toLocaleString('tr-TR')}</b>{lim ? ' / ' + lim.toLocaleString('tr-TR') : ''}{isStale ? <em>güncellenmeli</em> : null}</span>
                   <button type="button" className="it-plus" aria-label={c.code + ' kullanım gir'} title="Kullanım gir" onClick={() => actions.openCodeUsage(c)}>+</button>
