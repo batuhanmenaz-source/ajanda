@@ -33,6 +33,10 @@ function demoHealth() {
     const endT = new Date(d.getTime() + (6 * 60 + 50 + r(7) * 40) * 60000);
     const start = new Date(endT.getTime() - (asleep + 35) * 60000);
     out.sleep[k] = { day: k, start: start.toISOString(), end: endT.toISOString(), asleep, inBed: asleep + 35, awake: 35, stages: { deep: Math.round(asleep * 0.17), rem: Math.round(asleep * 0.22), light: Math.round(asleep * 0.61), awake: 35 }, main: true, naps: 0 };
+    if (wk >= 2 && d.getDay() === 6 && i > 0) {
+      const s = new Date(d.getTime() + 10 * 3600000);
+      out.exercise.push({ day: k, start: s.toISOString(), end: new Date(s.getTime() + 35 * 60000).toISOString(), type: 'SWIMMING', name: '', min: 35, kcal: 280, km: 1.1, hr: null, azm: 20, steps: null, laps: 44, pace: 1.62 });
+    }
     if (wk >= 2 && [1, 3, 5].includes(d.getDay()) && i > 0) {
       const s = new Date(d.getTime() + 19 * 3600000);
       out.exercise.push({ day: k, start: s.toISOString(), end: new Date(s.getTime() + 50 * 60000).toISOString(), type: d.getDay() === 3 ? 'RUNNING' : 'WEIGHTLIFTING', name: '', min: d.getDay() === 3 ? 32 : 48, kcal: d.getDay() === 3 ? 340 : 290, km: d.getDay() === 3 ? 4.6 : null, hr: d.getDay() === 3 ? 148 : 121, azm: d.getDay() === 3 ? 30 : 18, steps: null });
@@ -211,6 +215,11 @@ function ConnectBtn() {
 // ---------- Özel → Sağlık ----------
 const EX_TR = { WALKING: 'Yürüyüş', RUNNING: 'Koşu', BIKING: 'Bisiklet', WEIGHTLIFTING: 'Ağırlık', STRENGTH_TRAINING: 'Kuvvet antrenmanı', SWIMMING: 'Yüzme', YOGA: 'Yoga', AEROBIC_WORKOUT: 'Aerobik', HIKING: 'Doğa yürüyüşü', ELLIPTICAL: 'Eliptik', TREADMILL: 'Koşu bandı', HIIT: 'HIIT', OTHER: 'Antrenman' };
 export const exName = (e) => e.name || EX_TR[e.type] || String(e.type || 'Antrenman').toLocaleLowerCase('tr-TR').replace(/_/g, ' ');
+// Yüzme: 100 metre için tempo (dk:sn)
+const pace100 = (spm) => { if (!spm) return ''; const t = Math.round(spm * 100); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0') + ' /100 m'; };
+const exDetail = (e) => (e.type === 'SWIMMING'
+  ? [e.km ? nf(e.km * 1000) + ' m' : '', e.laps ? e.laps + ' boy' : '', pace100(e.pace), e.kcal ? e.kcal + ' kcal' : '', e.azm ? e.azm + ' aktif dk' : '']
+  : [e.kcal ? e.kcal + ' kcal' : '', e.km ? nf(e.km, 1) + ' km' : '', e.hr ? 'ort. ' + e.hr + ' bpm' : '', e.azm ? e.azm + ' aktif dk' : '']).filter(Boolean).join(' · ');
 const EX_ICON = { WALKING: '🚶', RUNNING: '🏃', BIKING: '🚴', WEIGHTLIFTING: '🏋️', STRENGTH_TRAINING: '🏋️', SWIMMING: '🏊', YOGA: '🧘', HIKING: '🥾' };
 const WD = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 const WDS = ['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'];
@@ -340,7 +349,7 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport }) {
               <div key={i} className="row hp-exrow">
                 <span className="hp-exic" aria-hidden="true">{EX_ICON[e.type] || '💪'}</span>
                 <span className="hp-exm"><b>{exName(e)}</b><small>{WD[fromKey(e.day).getDay()]} {clock(e.start)} · {hm(e.min)}</small></span>
-                <span className="hp-exs">{[e.kcal ? e.kcal + ' kcal' : '', e.km ? nf(e.km, 1) + ' km' : '', e.hr ? 'ort. ' + e.hr + ' bpm' : '', e.azm ? e.azm + ' aktif dk' : ''].filter(Boolean).join(' · ')}</span>
+                <span className="hp-exs">{exDetail(e)}</span>
               </div>
             ))}
           </div>

@@ -138,7 +138,9 @@ export function parseExercise(j) {
       km: m.distanceMillimeters != null ? Number(m.distanceMillimeters) / 1e6 : null,
       hr: m.averageHeartRateBeatsPerMinute != null ? Number(m.averageHeartRateBeatsPerMinute) : null,
       azm: m.activeZoneMinutes != null ? Number(m.activeZoneMinutes) : null,
-      steps: m.steps != null ? Number(m.steps) : null
+      steps: m.steps != null ? Number(m.steps) : null,
+      laps: m.totalSwimLengths != null ? Number(m.totalSwimLengths) : null,
+      pace: m.averagePaceSecondsPerMeter != null ? Number(m.averagePaceSecondsPerMeter) : null
     };
   }).filter(Boolean).sort((a, b) => a.start.localeCompare(b.start));
 }

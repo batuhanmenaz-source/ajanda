@@ -254,8 +254,8 @@ export async function exportHealth({ start, wk, c, p, tips, h, label, exName }) 
       num(h.rhr[k], '0'), num(h.weight[k], '0.0'), S(ex.map((e) => exName(e) + ' ' + e.min + ' dk').join(', '))]);
   });
 
-  const exs = [[H('Tarih'), H('Saat'), H('Antrenman'), H('Süre (dk)'), H('Kalori'), H('Mesafe (km)'), H('Ort. nabız'), H('Aktif dk')]];
-  (h.exercise || []).filter((e) => wk.all.includes(e.day)).forEach((e) => exs.push([D(e.day), S(new Date(e.start).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })), S(exName(e)), num(e.min, '0'), num(e.kcal, '0'), num(e.km, '0.0'), num(e.hr, '0'), num(e.azm, '0')]));
+  const exs = [[H('Tarih'), H('Saat'), H('Antrenman'), H('Süre (dk)'), H('Kalori'), H('Mesafe (km)'), H('Ort. nabız'), H('Aktif dk'), H('Yüzme boyu'), H('Tempo /100 m (sn)')]];
+  (h.exercise || []).filter((e) => wk.all.includes(e.day)).forEach((e) => exs.push([D(e.day), S(new Date(e.start).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })), S(exName(e)), num(e.min, '0'), num(e.kcal, '0'), num(e.km, '0.0'), num(e.hr, '0'), num(e.azm, '0'), num(e.laps, '0'), num(e.pace ? e.pace * 100 : null, '0')]));
 
   const tip = [[H('Konu'), H('Tavsiye')]];
   tips.forEach((x) => tip.push([S(x.icon + ' ' + x.title), S(x.text)]));
@@ -264,7 +264,7 @@ export async function exportHealth({ start, wk, c, p, tips, h, label, exName }) 
   await save([
     { name: 'Özet', rows: [[B(S('Sağlık raporu'))], [S(title)], [S('')], ...sum], widths: [28, 18, 24, 11, 44] },
     { name: 'Günlük', rows: days, widths: [12, 11, 9, 11, 9, 9, 10, 8, 8, 10, 9, 14, 8, 34], sticky: 1 },
-    { name: 'Antrenmanlar', rows: exs, widths: [12, 8, 22, 10, 9, 11, 10, 9], sticky: 1 },
+    { name: 'Antrenmanlar', rows: exs, widths: [12, 8, 22, 10, 9, 11, 10, 9, 11, 16], sticky: 1 },
     { name: 'Tavsiyeler', rows: tip, widths: [36, 110] }
   ], 'saglik-raporu-' + toDateInput(start) + '.xlsx');
 }
