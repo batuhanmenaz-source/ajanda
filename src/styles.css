@@ -1628,3 +1628,37 @@ button.pulse:hover { border-color: #C9C6BD; }
   .rg-wv, .rg-wcol.on .rg-wv { font-size: 9px; letter-spacing: -.2px; }
   .rg-name small { display: none; }
 }
+
+/* ---------- Sekme özet şeridi + kampanya takvimi ---------- */
+.wd-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (min-width: 760px) { .wd-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.camp-card { border-left: 4px solid var(--mp); }
+.camp-card.live { background: linear-gradient(160deg, color-mix(in srgb, var(--mp) 7%, white), #fff 45%); }
+.note.note-mp { border-left: 4px solid var(--mp); }
+.chip .mp-count { margin-left: 2px; }
+
+.ctl { overflow: hidden; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.ctl-head { display: flex; align-items: baseline; gap: 8px; }
+.ctl-head b { font-size: 15px; }
+.ctl-head span { font-size: 12px; color: var(--muted); }
+.ctl-body { position: relative; }
+.ctl-axis { position: relative; height: 18px; border-bottom: 1px solid var(--line); }
+.ctl-axis span { position: absolute; top: 0; transform: translateX(-2px); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.ctl-rows { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 8px 0 18px; }
+.ctl-wk { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--line); }
+.ctl-today { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid #E03131; z-index: 2; pointer-events: none; }
+.ctl-today em { position: absolute; bottom: 0; left: 4px; font-style: normal; font-size: 10px; font-weight: 700; color: #E03131; background: #fff; padding: 0 3px; border-radius: 4px; }
+.ctl-row { position: relative; height: 26px; }
+.ctl-lbl { position: absolute; top: 0; height: 26px; display: flex; align-items: center; gap: 5px; padding: 0 7px; border: 0; background: transparent; font: inherit; font-size: 12px; color: var(--ink-2); white-space: nowrap; cursor: pointer; z-index: 1; }
+.ctl-lbl b { color: color-mix(in srgb, var(--mp) 80%, black); }
+.ctl-lbl i { font-style: normal; }
+.ctl-lbl em { font-style: normal; color: var(--muted); font-size: 11px; }
+.ctl-lbl.past b { color: #868E96; }
+.ctl-bar { position: absolute; top: 0; height: 26px; border: 0; border-radius: 7px; padding: 0 8px; display: flex; align-items: center; gap: 6px; cursor: pointer; overflow: hidden; text-align: left; z-index: 1;
+  background: var(--mp); color: #fff; font: inherit; font-size: 12px; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.ctl-bar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctl-bar small { font-size: 10px; font-weight: 600; opacity: .85; white-space: nowrap; }
+.ctl-bar.soon { background: color-mix(in srgb, var(--mp) 18%, white); color: color-mix(in srgb, var(--mp) 75%, black); box-shadow: inset 0 0 0 1.5px var(--mp); }
+.ctl-bar.past { background: #E9ECEF; color: #868E96; box-shadow: none; }
+.ctl-bar:hover { filter: brightness(1.05); outline: 2px solid color-mix(in srgb, var(--mp) 40%, white); }
+@media (max-width: 520px) { .ctl-bar small, .ctl-lbl em, .ctl-lbl i, .ctl-head span { display: none; } }

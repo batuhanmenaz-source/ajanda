@@ -6,22 +6,11 @@ import { tl, tlShort, glanceDefaultDay } from './revenue.jsx';
 import { campaignStatus, campaignWhen } from './screens.jsx';
 import { adStart, adStatus, adWindow, adFee, adRev, adWho, dur } from './ads.jsx';
 import { inScope } from './scope.js';
+import { Tile } from './statstrip.jsx';
 
 const pctTxt = (v) => (v == null ? '' : (v >= 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(v * 100)) + '%');
 const dlt = (a, b) => (b > 0 ? a / b - 1 : null);
 const sumDays = (byDay, from, to) => { let s = 0; for (const [k, v] of Object.entries(byDay)) if (k >= from && k <= to) s += v.total; return s; };
-
-function Tile({ tone, label, value, unit, sub, delta, warn, onClick, children }) {
-  return (
-    <button type="button" className={'wd-tile' + (warn ? ' warn' : '')} style={{ '--tone': tone }} onClick={onClick}>
-      <span className="wd-tile-k"><i aria-hidden="true" />{label}</span>
-      <span className="wd-tile-v">{value}{unit ? <small> {unit}</small> : null}</span>
-      {delta != null ? <span className={'wd-delta ' + (delta >= 0 ? 'up' : 'down')}>{pctTxt(delta)}</span> : null}
-      {sub ? <span className="wd-tile-s">{sub}</span> : null}
-      {children}
-    </button>
-  );
-}
 
 function Card({ title, tone, meta, onAll, children, className }) {
   return (

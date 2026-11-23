@@ -7,6 +7,7 @@ import { tl, tlShort } from './revenue.jsx';
 import { campaignResult } from './life.jsx';
 import { campaignWhen } from './screens.jsx';
 import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, daysBetween, MONTHS } from './dates.js';
+import { StatStrip } from './statstrip.jsx';
 
 // ---------- Bekleyenler ----------
 export const waitDays = (f, now = new Date()) => daysBetween(fromDateInput(f.since), startOfDay(now));
@@ -51,8 +52,23 @@ export function FollowupsView({ data, now, actions, mp }) {
   const done = all.filter((f) => f.done).sort((a, b) => (b.done_at || '').localeCompare(a.done_at || ''));
   const stats = responseStats(data.followups);
   const [showDone, setShowDone] = useState(false);
+  const ages = open.map((f) => waitDays(f, now));
+  const red = ages.filter((n) => n >= 14).length, amber = ages.filter((n) => n >= 7 && n < 14).length;
+  const doneTimes = done.map((f) => Math.max(0, daysBetween(fromDateInput(f.since), fromDateInput(f.done_at || f.since))));
+  const avgBack = doneTimes.length ? doneTimes.reduce((a, b) => a + b, 0) / doneTimes.length : null;
+  const mk = toDateInput(startOfDay(now)).slice(0, 7);
+  const monthDone = done.filter((f) => (f.done_at || '').startsWith(mk)).length;
+  const parties = {};
+  open.forEach((f) => { const k = f.party || f.marketplace || 'Diğer'; parties[k] = (parties[k] || 0) + 1; });
+  const topParty = Object.entries(parties).sort((a, b) => b[1] - a[1])[0];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <StatStrip items={[
+        { label: 'Açık talep', value: open.length, unit: 'iş', tone: '#E67700', sub: topParty && topParty[1] >= 2 ? 'en çok: ' + topParty[0] + ' (' + topParty[1] + ')' : ages.length ? 'en eskisi ' + Math.max(...ages) + ' gün' : 'bekleyen yok' },
+        { label: '14+ gün', value: red, unit: 'iş', tone: '#E03131', warn: red > 0, sub: red ? 'hatırlatma zamanı' : 'uzun bekleyen yok' },
+        { label: '7–13 gün', value: amber, unit: 'iş', tone: '#F08C00', sub: amber ? 'yakında hatırlat' : 'yok' },
+        { label: 'Ortalama dönüş', value: avgBack == null ? '—' : '~' + Math.round(avgBack), unit: avgBack == null ? '' : 'gün', tone: '#2B8A3E', sub: monthDone ? 'bu ay ' + monthDone + ' talep kapandı' : done.length + ' tamamlanan talepten' }
+      ]} />
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <p className="hint" style={{ margin: 0, flex: '1 1 220px' }}>Tarih vermeden takip ettiğin talepler: varyant talebi, onay, düzeltme… Kaç gündür beklediği sayılır; 7 günü geçen turuncu, 14 günü geçen kırmızı görünür.</p>
         <button type="button" className="btn primary" onClick={() => actions.openFollowup({ marketplace: mp || null, party: mp || '' })}>+ Bekleyen ekle</button>

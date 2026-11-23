@@ -12,6 +12,7 @@ import {
 } from './life.jsx';
 import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
+import { StatStrip } from './statstrip.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FxStrip } from './fx.jsx';
 import { WalletPulse } from './wallet.jsx';
@@ -1074,7 +1075,7 @@ function CampaignCard({ c, tasks, actions, revenue, now }) {
     setNewTask('');
   };
   return (
-    <div className="card camp" style={{ padding: 16, gap: 12 }}>
+    <div className={'card camp camp-card ' + st.key} style={{ padding: 16, gap: 12, '--mp': c.marketplace ? mpColor(c.marketplace) : '#868E96' }}>
       <div className="camp-head">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <Mp name={c.marketplace || 'Genel'} />
@@ -1084,6 +1085,7 @@ function CampaignCard({ c, tasks, actions, revenue, now }) {
         </div>
         <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
       </div>
+      <CampTimeBar c={c} st={st} />
       {ts.length ? <Progress done={ts.filter((t) => t.done).length} total={ts.length} /> : null}
       {st.key === 'live' ? <CampaignResult c={c} revenue={revenue} now={now} actions={actions} /> : null}
       <div className="list" style={{ gap: 0 }}>
@@ -1104,20 +1106,83 @@ function CampaignCard({ c, tasks, actions, revenue, now }) {
   );
 }
 
+// Kampanya zaman çizelgesi: 1 hafta geriden 4 hafta ileriye, bugün çizgisiyle
+function CampTimeline({ list, now, onOpen }) {
+  const t0 = addDays(startOfDay(now), -7);
+  const N = 35;
+  const t1 = addDays(t0, N - 1);
+  const rows = list.filter(({ c }) => fromDateInput(c.end_date) >= t0 && fromDateInput(c.start_date) <= t1)
+    .sort((a, b) => a.c.start_date.localeCompare(b.c.start_date));
+  if (!rows.length) return null;
+  const pos = (d) => Math.max(0, Math.min(N, daysBetween(t0, d))) / N * 100;
+  const todayX = pos(startOfDay(now)) + 100 / N / 2;
+  const weeks = Array.from({ length: 6 }, (_, i) => addDays(weekStart(t0), i * 7)).filter((d) => d >= t0 && d <= t1);
+  return (
+    <div className="card ctl">
+      <div className="ctl-head"><b>Kampanya takvimi</b><span>geçen haftadan 4 hafta sonrasına</span></div>
+      <div className="ctl-body">
+        <div className="ctl-axis">
+          {weeks.map((d) => <span key={d.getTime()} style={{ left: pos(d) + '%' }}>{fmtShort(d)}</span>)}
+        </div>
+        <div className="ctl-rows">
+          {weeks.map((d) => <i key={d.getTime()} className="ctl-wk" style={{ left: pos(d) + '%' }} />)}
+          <i className="ctl-today" style={{ left: todayX + '%' }}><em>Bugün</em></i>
+          {rows.map(({ c, st }) => {
+            const s0 = fromDateInput(c.start_date), e0 = addDays(fromDateInput(c.end_date), 1);
+            const l = pos(s0), r = pos(e0);
+            const w = Math.max(2.5, r - l);
+            const inside = w >= 22;
+            const lblStyle = r > 70 ? { right: (100 - l) + '%', textAlign: 'right' } : { left: (l + w) + '%' };
+            return (
+              <div key={c.id} className="ctl-row" style={{ '--mp': c.marketplace ? mpColor(c.marketplace) : '#868E96' }}>
+                <button type="button" className={'ctl-bar ' + st.key} onClick={() => onOpen(c)} title={c.name + ' · ' + campaignWhen(c)} style={{ left: l + '%', width: w + '%' }}>
+                  {inside ? <><span>{c.name}</span>{c.marketplace ? <small>{c.marketplace}</small> : null}</> : null}
+                </button>
+                {!inside ? <button type="button" className={'ctl-lbl ' + st.key} style={lblStyle} onClick={() => onOpen(c)}><b>{c.name}</b>{c.marketplace ? <i>· {c.marketplace}</i> : null}<em>{campaignWhen(c)}</em></button> : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CampaignsScreen({ data, actions, revenue, now = new Date() }) {
   const [showPast, setShowPast] = useState(false);
   const withSt = data.campaigns.filter((c) => c.kind !== 'etkinlik').map((c) => ({ c, st: campaignStatus(c) }));
   const current = withSt.filter((x) => x.st.key !== 'past').sort((a, b) => a.c.start_date.localeCompare(b.c.start_date));
+  const live = current.filter((x) => x.st.key === 'live');
+  const soon = current.filter((x) => x.st.key !== 'live');
   const past = withSt.filter((x) => x.st.key === 'past').sort((a, b) => b.c.end_date.localeCompare(a.c.end_date));
+  const today = startOfDay(now);
+  const tasksFor = (id) => data.campaign_tasks.filter((t) => t.campaign_id === id);
+  const prepAll = current.reduce((a, x) => a + tasksFor(x.c.id).length, 0);
+  const prepDone = current.reduce((a, x) => a + tasksFor(x.c.id).filter((t) => t.done).length, 0);
+  const urgent = soon.filter((x) => daysBetween(today, fromDateInput(x.c.start_date)) <= 3 && tasksFor(x.c.id).some((t) => !t.done));
+  const firstEnd = live.slice().sort((a, b) => a.c.end_date.localeCompare(b.c.end_date))[0];
+  const mk = toDateInput(today).slice(0, 7);
+  const monthDone = past.filter((x) => x.c.end_date.startsWith(mk)).length;
+  const grid = (arr) => <div className="notes-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>{arr.map(({ c }) => <CampaignCard key={c.id} c={c} tasks={data.campaign_tasks} actions={actions} revenue={revenue} now={now} />)}</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <StatStrip items={[
+        { label: 'Aktif', value: live.length, unit: 'kampanya', tone: '#2B8A3E', sub: firstEnd ? 'ilk biten: ' + (firstEnd.c.marketplace || firstEnd.c.name) + ' · ' + fmtShort(fromDateInput(firstEnd.c.end_date)) : 'şu an aktif yok' },
+        { label: 'Yaklaşan', value: soon.length, unit: 'kampanya', tone: '#C2410C', sub: soon[0] ? 'sıradaki: ' + soon[0].c.name + ' · ' + soon[0].st.label.toLocaleLowerCase('tr-TR') : 'planlanan yok' },
+        { label: 'Hazırlık', value: prepAll ? Math.round((prepDone / prepAll) * 100) + '%' : '—', tone: urgent.length ? '#E03131' : '#7048E8', warn: urgent.length > 0, sub: prepAll ? (prepAll - prepDone) + ' adım eksik' + (urgent.length ? ' · ' + urgent.length + ' kampanya 3 gün içinde' : '') : 'hazırlık adımı yok' },
+        { label: 'Bu ay biten', value: monthDone, unit: 'kampanya', tone: '#868E96', sub: past.length ? 'toplam ' + past.length + ' biten' : 'henüz yok', onClick: () => setShowPast(true) }
+      ]} />
+      <CampTimeline list={[...current, ...past.slice(0, 6)]} now={now} onOpen={actions.openCampaign} />
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5, flex: '1 1 260px' }}>Başlangıçtan 3 gün ve 1 gün önce Google Takvim üzerinden hazırlık hatırlatması gelir.</p>
         <button type="button" className="btn primary" onClick={() => actions.openCampaign({})}>+ Yeni kampanya</button>
       </div>
-      <div className="notes-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
-        {current.length ? current.map(({ c }) => <CampaignCard key={c.id} c={c} tasks={data.campaign_tasks} actions={actions} revenue={revenue} now={now} />) : <div className="card"><p className="empty">Yaklaşan kampanya yok.</p></div>}
-      </div>
+      {current.length ? (
+        <>
+          {live.length ? <Section title={'Aktif · ' + live.length} tone="#2B8A3E">{grid(live)}</Section> : null}
+          {soon.length ? <Section title={'Yaklaşan · ' + soon.length} tone="#C2410C">{grid(soon)}</Section> : null}
+        </>
+      ) : <div className="card"><p className="empty">Yaklaşan kampanya yok.</p></div>}
       {past.length ? (
         <Section title="Biten kampanyalar" action={<button type="button" className="linkbtn" onClick={() => setShowPast(!showPast)}>{showPast ? 'Gizle' : 'Göster (' + past.length + ')'}</button>}>
           {showPast ? <div className="notes-grid">{past.map(({ c }) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} result={<CampaignResult c={c} revenue={revenue} now={now} actions={actions} />} />)}</div> : null}
@@ -1210,12 +1275,13 @@ export function MarketplaceNotes({ data, actions }) {
         {used.map((m) => (
           <button key={m} type="button" className={'chip' + (mp === m ? ' on' : '')} onClick={() => setMp(m)} aria-pressed={mp === m}>
             {m !== 'Tümü' ? <span className="dot" style={{ background: mpColor(m === 'Genel' ? '' : m) }} /> : null}{m}
+            <span className="mp-count">{m === 'Tümü' ? data.notes.length : data.notes.filter((n) => (n.marketplace || 'Genel') === m).length}</span>
           </button>
         ))}
       </div>
       <div className="notes-grid">
         {notes.length ? notes.map((n) => (
-          <button type="button" key={n.id} className="note" onClick={() => actions.openNote(n)}>
+          <button type="button" key={n.id} className="note note-mp" style={{ '--mp': n.marketplace ? mpColor(n.marketplace) : '#ADB5BD' }} onClick={() => actions.openNote(n)}>
             <span className="top"><Mp name={n.marketplace || 'Genel'} /><span>{n.brand ? n.brand + ' · ' : ''}{fmtShort(new Date(n.updated_at || n.created_at))}</span></span>
             <span className="h">{n.title}</span>
             {n.body ? <span className="b">{n.body}</span> : null}

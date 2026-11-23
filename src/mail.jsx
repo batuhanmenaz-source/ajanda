@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Section, Sheet } from './ui.jsx';
 import { supabase, DEMO } from './supabase.js';
 import { whenLabel } from './dates.js';
+import { StatStrip } from './statstrip.jsx';
 
 const CACHE = 'ajanda-mail-v2';
 const TTL = 5 * 60 * 1000;
@@ -217,6 +218,12 @@ export function MailView({ mail: st, followups, actions, now }) {
         <input type="search" className="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Konu ya da kişi ara…" aria-label="Maillerde ara" />
         <button type="button" className="btn" onClick={st.reload} disabled={st.busy}>{st.busy ? 'Yenileniyor…' : '↻ Yenile'}</button>
       </div>
+      <StatStrip items={[
+        { label: 'Bayraklı', value: (mail.flagged || []).length, unit: 'mail', tone: '#E03131', sub: (mail.flagged || []).length ? 'Outlook\'ta işaretlediklerin' : 'bayraklı mail yok' },
+        { label: 'Cevap bekleyen', value: (mail.waiting || []).filter((w) => w.days >= WAIT_MIN_DAYS).length, unit: 'mail', tone: '#1971C2', sub: '2+ gündür cevapsız' },
+        { label: '5+ gün', value: (mail.waiting || []).filter((w) => w.days >= 5).length, unit: 'mail', tone: '#F08C00', warn: (mail.waiting || []).some((w) => w.days >= 7), sub: 'tekrar yazma zamanı' },
+        { label: 'Takipte', value: trackedOpen, unit: 'mail', tone: '#E67700', sub: 'Bekleyenler\'de' }
+      ]} />
       <p className="hint" style={{ margin: '-6px 0 0' }}>{mail.account} · son kontrol {new Date(mail.got || mail.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}{trackedOpen ? ' · ' + trackedOpen + ' mail takipte (Bekleyenler)' : ''}</p>
       <Section title={'🚩 Bayrakladıkların · ' + flagged.length}>
         <div className="card list mail-card">
