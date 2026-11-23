@@ -1,3 +1,2 @@
--- 26: Sağlık hedefleri ve haftalık koç yorumu
+-- 26: Sağlık hedefleri (spor, haftalık seans, amaç, adım/uyku hedefi)
 alter table public.app_settings add column if not exists health_goals jsonb;
-alter table public.app_settings add column if not exists health_coach jsonb;

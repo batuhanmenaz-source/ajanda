@@ -335,99 +335,80 @@ function GoalsCard({ goals, saved, onSave }) {
   );
 }
 
-// ---------- Yapay zekâ koç (isteğe bağlı; yalnız düğmeye basınca, haftalık özet sayılarla) ----------
-export function buildCoachPayload(h, goals, today, start) {
-  const g = goalsOf(goals);
-  const r = (x, d = 0) => (x == null ? null : +x.toFixed(d));
-  const weeks = [];
-  for (let i = 0; i < 4; i++) {
-    const st = addD(start, -7 * i);
-    const wk = weekKeys(st, today);
-    if (!wk.cur.length) continue;
-    const c = periodStats(h, wk.cur, g);
-    weeks.push({
-      hafta: ymdLocal(st), gun_sayisi: wk.cur.length,
-      ort_adim: r(c.steps), aktif_dk_toplam: r(c.azm), ort_uyku_dk: r(c.sleep), ort_derin_dk: r(c.deep), ort_rem_dk: r(c.rem),
-      ort_yatis: c.bed != null ? minClock(c.bed) : null, ort_kalkis: c.wake != null ? minClock(c.wake) : null, yatis_sapma_dk: r(c.bedSd),
-      kisa_gece: c.shortNights, dinlenme_nabzi: r(c.rhr, 1), ort_kalori: r(c.kcal), ana_spor_seans: c.sportCount, ana_spor_dk: r(c.sportMin),
-      yuzme_m: c.swimM, yuzme_tempo_sn_100m: c.swimPace ? r(c.swimPace * 100) : null, kilo_son: r(c.weightLast, 1)
-    });
-  }
-  const from = ymdLocal(addD(start, -7));
-  const ex = (h.exercise || []).filter((e) => e.day >= from).map((e) => ({
-    gun: e.day, tur: exName(e), dk: e.min, kcal: e.kcal, m: e.km ? Math.round(e.km * 1000) : null, boy: e.laps || null,
-    tempo_sn_100m: e.pace ? Math.round(e.pace * 100) : null, ort_nabiz: e.hr || null
-  }));
-  return {
-    bugun: ymdLocal(today) + ' ' + WD[today.getDay()],
-    hedefler: { ana_spor: sportOf(g)[1], haftada_seans: g.perWeek, seans_dk: g.minutes, amac: AIMS.find((a) => a[0] === g.aim)[1], gunluk_adim: g.steps, uyku_saat: g.sleep, hedef_kilo: g.targetWeight, boy_cm: g.height, yas: g.age, not: (g.notes || '').slice(0, 300) },
-    haftalar: weeks, antrenmanlar: ex
-  };
+// ---------- Önümüzdeki 7 gün: kurala dayalı antrenman planı (yerel, ücretsiz) ----------
+const r50 = (m) => Math.max(50, Math.round(m / 50) * 50);
+// Bir seansın yüzme mesafesi: geçen haftanın seans ortalaması +%8 (en fazla +200 m); veri yoksa süreden
+function swimBase(h, goals, today) {
+  const from = ymdLocal(addD(today, -14));
+  const sw = (h.exercise || []).filter((e) => e.type === 'SWIMMING' && e.day >= from && e.km);
+  if (sw.length) { const a = sw.reduce((t, e) => t + e.km * 1000, 0) / sw.length; return Math.min(3000, r50(Math.min(a * 1.08, a + 200))); }
+  return Math.min(1600, r50(goals.minutes * 18)); // yeni başlayan: dakikada ~18 m (dinlenmeler dahil)
 }
-export async function requestCoach(week, payload, force) {
-  if (DEMO) {
-    await new Promise((r) => setTimeout(r, 900));
-    return { week, at: new Date().toISOString(), model: 'örnek', data: {
-      ozet: 'Bu hafta 2 yüzme seansı yaptın ve uykun hedefe yakın. Dinlenme nabzının düşmesi kondisyonunun geliştiğini gösteriyor.',
-      iyi: ['Seanslar arasında bir gün dinlenme bırakmışsın.', '100 m temposu geçen haftaya göre 4 saniye hızlanmış.'],
-      gelistir: ['Pazar akşamları yatış saatin 1 saatten fazla kayıyor; pazartesi enerjini düşürüyor.', 'Seans süren hedefin altında kaldı; ısınma ve soğumayı da sayarak 45 dakikaya tamamla.'],
-      plan: [['Pazartesi', 'Dinlenme · 30 dk yürüyüş'], ['Salı', 'Yüzme · 45 dk: 200 m ısınma, 6×100 m orta tempo (30 sn ara), 200 m yavaş'], ['Çarşamba', 'Dinlenme · omuz esneme 10 dk'], ['Perşembe', 'Yüzme · 45 dk teknik: kol çekişi ve nefes çalışması'], ['Cuma', 'Hafif yürüyüş'], ['Cumartesi', 'Yüzme · 50 dk: 1.200–1.400 m sakin tempo'], ['Pazar', 'Tam dinlenme']].map(([gun, oneri]) => ({ gun, oneri })),
-      beslenme: ['Yüzme günlerinde kahvaltıda yulaf + yoğurt + meyve; enerji verir ve hafif tutar.', 'Yüzmeden sonra 1–2 saat içinde yumurtalı tost ya da ayran + simit gibi protein + karbonhidrat.', 'Havuza giderken yanına su al; havuzdan çıkınca 1–2 bardak iç.'],
-      uyari: ''
-    } };
-  }
-  const { data } = await supabase.auth.getSession();
-  const token = data && data.session && data.session.access_token;
-  const r = await fetch('/api/health?action=coach', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: JSON.stringify({ week, payload, force: !!force }) });
-  const j = await r.json().catch(() => ({ error: 'Beklenmeyen yanıt (' + r.status + ')' }));
-  if (!r.ok && !j.error) j.error = 'Hata ' + r.status;
-  return j;
+const SWIM_SETS = [
+  ['Teknik', (D) => 'Isınma 200 m serbest · 6×50 m teknik (kol çekişi, nefes) 20 sn ara · ' + r50(Math.max(100, D - 600)) + ' m sakin · soğuma 100 m'],
+  ['Aralık', (D) => 'Isınma 200 m · ' + Math.max(4, Math.round((D - 400) / 100)) + '×100 m orta-hızlı, 30 sn ara · soğuma 200 m'],
+  ['Uzun sakin', (D) => 'Isınma 100 m · ' + r50(Math.max(200, D - 200)) + ' m sakin tempo (yorulunca 25 m\'de kısa mola) · soğuma 100 m']
+];
+const OTHER_SETS = {
+  kosu: [['Kolay', (m) => m + ' dk konuşabileceğin tempoda koşu']], agirlik: [['Tüm vücut A', (m) => m + ' dk: squat, şınav, kürek çekiş, plank (3 set)'], ['Tüm vücut B', (m) => m + ' dk: deadlift, omuz pres, lunge, mekik (3 set)']],
+  yuruyus: [['Tempolu', (m) => m + ' dk tempolu yürüyüş']], bisiklet: [['Sakin', (m) => m + ' dk sakin pedal']], karisik: [['Antrenman', (m) => m + ' dk tercih ettiğin spor']]
+};
+export function buildPlan(h, goalsIn, today) {
+  const g = goalsOf(goalsIn);
+  const [, spName, spIcon] = sportOf(g);
+  const T = ymdLocal(today);
+  const done = (h.exercise || []).filter((e) => isSport(g, e));
+  const doneDays = new Set(done.map((e) => e.day));
+  const D = g.sport === 'yuzme' ? swimBase(h, g, today) : null;
+  const days = Array.from({ length: 7 }, (_, i) => addD(today, i));
+  // Haftalara göre kalan seans: bu hafta (bugüne kadar yapılanlar düşülür) ve gelecek hafta
+  const ws = weekStartOf(today);
+  const doneThisWeek = done.filter((e) => e.day >= ymdLocal(ws) && e.day < T).length;
+  let last = [...doneDays].filter((d) => d < T).sort().pop();
+  let lastDate = last ? fromKey(last) : null;
+  const plan = [];
+  let idx = doneThisWeek;
+  days.forEach((d, i) => {
+    const k = ymdLocal(d);
+    const weekNo = d < addD(ws, 7) ? 0 : 1;
+    const target = g.perWeek;
+    const countThisWeek = plan.filter((x) => x.session && x.week === weekNo).length + (weekNo === 0 ? doneThisWeek : 0);
+    const dayIdx = (d.getDay() + 6) % 7;
+    const daysLeftInWeek = 7 - dayIdx;
+    const need = target - countThisWeek;
+    const gap = lastDate ? Math.round((d - lastDate) / DAY) : 9;
+    if (i === 0 && doneDays.has(k)) { plan.push({ d, week: weekNo, session: true, done: true, title: spIcon + ' ' + spName + ' yapıldı ✓', text: 'Bugünkü seansın kaydedildi. Akşam hafif esneme ve bol su.' }); lastDate = d; idx++; return; }
+    // Bugün dinlenirsek kalan günlere aralıklı en fazla ceil((kalan-1)/2) seans sığar; ihtiyaç bundan fazlaysa art arda gün kabul
+    const must = need > Math.ceil((daysLeftInWeek - 1) / 2);
+    if (need > 0 && (gap >= 2 || must)) {
+      let title, text;
+      if (g.sport === 'yuzme') { const [nm, f] = SWIM_SETS[idx % SWIM_SETS.length]; title = spIcon + ' Yüzme · ' + nm + ' · ~' + nf(D) + ' m'; text = f(D); }
+      else { const list = OTHER_SETS[g.sport] || OTHER_SETS.karisik; const [nm, f] = list[idx % list.length]; title = spIcon + ' ' + spName + ' · ' + nm; text = f(g.minutes); }
+      plan.push({ d, week: weekNo, session: true, title, text, food: 'Önce (1,5–2 sa): hafif karbonhidrat · Sonra (1–2 sa içinde): protein + karbonhidrat · bol su' });
+      lastDate = d; idx++;
+    } else {
+      const restAfter = lastDate && Math.round((d - lastDate) / DAY) === 1;
+      plan.push({ d, week: weekNo, session: false, title: restAfter ? '🧘 Toparlanma' : '🚶 Aktif dinlenme', text: restAfter ? '10 dk omuz ve sırt esnemesi, 20 dk sakin yürüyüş' : '20–30 dk yürüyüş; günlük adım hedefine katkı' });
+    }
+  });
+  return plan;
 }
 
-function CoachCard({ coach, onCoach, payload, weekId }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const run = async (force) => {
-    setBusy(true); setErr('');
-    const r = await onCoach(weekId, payload(), force);
-    setBusy(false);
-    if (r && r.error) setErr(r.error);
-  };
-  const d = coach && coach.data;
-  const age = coach ? Date.now() - new Date(coach.at).getTime() : 0;
+function PlanCard({ h, goals, today }) {
+  const plan = useMemo(() => buildPlan(h, goals, today), [h, JSON.stringify(goals), ymdLocal(today)]);
+  const T = ymdLocal(today);
   return (
-    <section className="card hp-coach" aria-label="Yapay zekâ koç">
-      <div className="hp-coach-hd">
-        <b>🤖 Koçun haftalık yorumu</b>
-        {d ? <span className="hint">{new Date(coach.at).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> : null}
+    <section className="card hp-coach" aria-label="Önümüzdeki 7 gün">
+      <div className="hp-coach-hd"><b>📋 Önümüzdeki 7 gün</b><span className="hint">hedeflerine ve son haftalarına göre</span></div>
+      <div className="hp-plan">
+        {plan.map((x) => (
+          <div key={ymdLocal(x.d)} className={'hp-plan-r' + (x.session ? ' on' : '') + (x.done ? ' done' : '') + (ymdLocal(x.d) === T ? ' today' : '')}>
+            <b>{ymdLocal(x.d) === T ? 'Bugün' : WD[x.d.getDay()]}</b>
+            <span><span className="hp-plan-t">{x.title}</span><br />{x.text}{x.food ? <small className="hp-plan-f">🍽 {x.food}</small> : null}</span>
+          </div>
+        ))}
       </div>
-      {d ? (
-        <>
-          {d.ozet ? <p className="hp-coach-sum">{d.ozet}</p> : null}
-          {d.uyari ? <div className="hp-tip warn"><span className="hp-tip-ic" aria-hidden="true">⚠️</span><span>{d.uyari}</span></div> : null}
-          <div className="hp-coach-cols">
-            {d.iyi && d.iyi.length ? <div><h4>İyi gidenler</h4><ul>{d.iyi.map((x, i) => <li key={i}>{x}</li>)}</ul></div> : null}
-            {d.gelistir && d.gelistir.length ? <div><h4>Geliştirilecekler</h4><ul>{d.gelistir.map((x, i) => <li key={i}>{x}</li>)}</ul></div> : null}
-          </div>
-          {d.plan && d.plan.length ? (
-            <div><h4>Önümüzdeki 7 gün</h4>
-              <div className="hp-plan">{d.plan.map((x, i) => <div key={i} className="hp-plan-r"><b>{x.gun}</b><span>{x.oneri}</span></div>)}</div>
-            </div>
-          ) : null}
-          {d.beslenme && d.beslenme.length ? <div><h4>🥗 Beslenme</h4><ul>{d.beslenme.map((x, i) => <li key={i}>{x}</li>)}</ul></div> : null}
-          {typeof d === 'string' ? <p style={{ whiteSpace: 'pre-wrap' }}>{d}</p> : null}
-          <div className="hp-coach-ft">
-            <span className="hint">Genel öneridir; tıbbi tavsiye değildir.</span>
-            {age > 6 * 3600000 ? <button type="button" className="linkbtn" onClick={() => run(true)} disabled={busy}>{busy ? 'Hazırlanıyor…' : 'Güncelle'}</button> : null}
-          </div>
-        </>
-      ) : (
-        <div className="hp-coach-empty">
-          <p>Hedeflerine ve bu haftanın verilerine bakıp antrenman planı, toparlanma ve beslenme önerisi hazırlar. Yalnızca haftalık özet sayılar gönderilir; adın ya da e-postan gönderilmez.</p>
-          <button type="button" className="btn primary" onClick={() => run(false)} disabled={busy}>{busy ? 'Koç değerlendiriyor… (10–20 sn)' : 'Koçtan yorum al'}</button>
-        </div>
-      )}
-      {err ? <p className="hint" style={{ color: 'var(--danger)', margin: 0 }}>{err}</p> : null}
+      <span className="hint">Seanslar arasına bir gün dinlenme koyar; yüzme mesafesini geçen haftana göre en fazla %8 artırır. Kendini yorgun hissedersen seansı kısalt.</span>
     </section>
   );
 }
@@ -455,7 +436,7 @@ function Trend({ c, p, better = 'up', fmt }) {
   return <span className={'hp-d ' + (good == null ? '' : good ? 'good' : 'bad')}>{up ? '▲' : '▼'} %{Math.abs(Math.round(ch * 100))}{fmt ? <small> ({fmt(p)})</small> : null}</span>;
 }
 
-export function HealthPage({ state, now, hidden, onToggleHidden, onExport, goals: goalsRaw, onSaveGoals, coach, onCoach }) {
+export function HealthPage({ state, now, hidden, onToggleHidden, onExport, goals: goalsRaw, onSaveGoals }) {
   const goals = goalsOf(goalsRaw);
   const { health: h, busy, reload } = state || {};
   const today = new Date(now); today.setHours(0, 0, 0, 0);
@@ -478,7 +459,6 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport, goals
   }, [h, ok, wk.prev.join(), gk]);
   const weekIndex = Math.round(start.getTime() / (7 * DAY));
   const tips = useMemo(() => (c && p ? healthTips(c, p, { partial: wk.partial, onlyToday, goals, today, weekIndex }) : []), [c, p, wk.partial, onlyToday, gk, weekIndex]);
-  const weekId = ymdLocal(start);
 
   if (!h) return <div className="card"><p className="empty">{busy ? 'Sağlık verisi yükleniyor…' : 'Yükleniyor…'}</p></div>;
   if (h.connected === false) {
@@ -583,7 +563,7 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport, goals
         </section>
       ) : null}
 
-      <CoachCard coach={coach && coach.week === weekId ? coach : null} onCoach={onCoach} payload={() => buildCoachPayload(h, goals, today, start)} weekId={weekId} />
+      {off === 0 ? <PlanCard h={h} goals={goals} today={today} /> : null}
 
       <section className="section">
         <div className="section-head"><h2>Tavsiyeler</h2><span className="meta">{spName.toLocaleLowerCase('tr-TR')} · haftada {goals.perWeek} · {AIMS.find((a) => a[0] === goals.aim)[1].toLocaleLowerCase('tr-TR')}</span></div>

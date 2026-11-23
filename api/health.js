@@ -215,47 +215,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 4) Yapay zekâ koç: haftalık özet sayılardan yorum (Claude API). Haftada bir kez saklanır, istenirse 6 saatte bir yenilenir.
-  if (q.action === 'coach') {
-    let body = req.body;
-    if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
-    const week = String((body && body.week) || '').slice(0, 10);
-    const payload = body && body.payload;
-    const raw = JSON.stringify(payload || {});
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(week) || raw.length > 20000) { res.status(400).json({ error: 'Geçersiz istek.' }); return; }
-    const { data: st } = await sb.from('app_settings').select('health_coach').eq('user_id', user.id).maybeSingle();
-    const prev = st && st.health_coach;
-    if (prev && prev.week === week && (!body.force || Date.now() - Date.parse(prev.at) < 6 * 3600000)) { res.status(200).json(prev); return; }
-    if (!process.env.ANTHROPIC_API_KEY) { res.status(200).json({ error: 'Koç için Vercel\'de ANTHROPIC_API_KEY tanımlı değil.' }); return; }
-    const system = [
-      'Sen deneyimli bir antrenör ve spor beslenmesi konusunda bilgili bir koçsun. Kullanıcı Türkiye\'de yaşıyor ve spora yeni başladı.',
-      'Sana Fitbit verisinden çıkarılmış haftalık özet sayılar ve hedefleri JSON olarak verilecek. Bunlara dayanarak kişiye özel, uygulanabilir öneriler yaz.',
-      'Kurallar: Türkçe, samimi ve kısa yaz. Veride olmayan bir şeyi varsayma; veri eksikse bunu belirt. Teşhis koyma, ilaç ya da takviye dozu önerme.',
-      'Göğüs ağrısı, baş dönmesi gibi belirtiler ya da nabızda belirgin anormallik varsa "uyari" alanında doktora danışmasını öner.',
-      'Aşırı kalori kısıtlaması önerme; kilo hedefi varsa haftada en fazla 0,5–1 kg değişimi hedefle. Beslenmede gram/kalori hesabı yerine porsiyon ve Türk mutfağından örnek yemekler ver.',
-      'Ana spor yüzmeyse antrenman planında ısınma, ana set (ör. 6×100 m) ve soğuma gibi somut içerik ver; seanslar arasına dinlenme günü koy, yükü kademeli artır.',
-      'Yanıtın SADECE şu JSON olsun, başka metin ekleme: {"ozet":"2-3 cümle","iyi":["en fazla 3 madde"],"gelistir":["en fazla 3 madde"],"plan":[{"gun":"Pazartesi","oneri":"..."} — önümüzdeki 7 gün, bugünden başlayarak],"beslenme":["en fazla 4 madde"],"uyari":"gerekmiyorsa boş"}'
-    ].join('\n');
-    try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model: process.env.COACH_MODEL || 'claude-sonnet-5-5', max_tokens: 1800, system, messages: [{ role: 'user', content: 'Verilerim:\n' + raw }] })
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { res.status(502).json({ error: 'Koç yanıt vermedi: ' + ((j.error && j.error.message) || r.status) }); return; }
-      const text = (j.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('');
-      let data;
-      try { data = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)); } catch { data = text.trim(); }
-      const out = { week, at: new Date().toISOString(), model: j.model || '', data };
-      await sb.from('app_settings').upsert({ user_id: user.id, health_coach: out, updated_at: new Date().toISOString() });
-      res.status(200).json(out);
-    } catch (e) {
-      res.status(502).json({ error: 'Koça ulaşılamadı: ' + String(e && e.message).slice(0, 120) });
-    }
-    return;
-  }
-
   // 3) Veri
   const { data: row, error: rerr } = await sb.from('health_tokens').select('refresh_token').eq('user_id', user.id).maybeSingle();
   if (rerr) { res.status(200).json({ connected: false, error: /health_tokens/.test(rerr.message) ? 'Supabase\'de 25 numaralı SQL çalıştırılmamış.' : rerr.message }); return; }
