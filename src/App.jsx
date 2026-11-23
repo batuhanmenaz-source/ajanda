@@ -19,6 +19,7 @@ import { nextOccurrence } from './recur.js';
 import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleReason, DriveScopeError, deleteEvent } from './google.js';
 import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
 import { AdSheet } from './ads.jsx';
+import { CodeSheet, CodeUsageSheet } from './codes.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote } from './sync.js';
 
@@ -30,7 +31,7 @@ const TABS = [
   { id: 'aramalar', label: 'Aramalar', icon: Icon.Phone }
 ];
 
-const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [], yarim_items: [], memories: [], followups: [] };
+const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [], yarim_items: [], memories: [], followups: [], inf_codes: [] };
 
 export default function App({ store, demo, email, onSignOut, onReconnect, googleSave }) {
   const [data, setData] = useState(EMPTY);
@@ -332,6 +333,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     else if (/collabs/.test(msg) && /ad_revenue/.test(msg)) say('Kaydedilemedi: Reklam cirosu için Supabase\'de 20 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /commission/.test(msg)) say('Kaydedilemedi: Komisyon oranı için Supabase\'de 18 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /start_at|end_at|platform|handle/.test(msg)) say('Kaydedilemedi: Influencer reklamları için Supabase\'de 17 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/inf_codes/.test(msg)) say('Kaydedilemedi: İndirim kodları için Supabase\'de 24 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/followups|nudge_/.test(msg)) say('Kaydedilemedi: Bekleyenler için Supabase\'de 16 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/yarim_items|memories|yarim_prefs|anilar/.test(msg)) say('Kaydedilemedi: Yarim bölümü için Supabase\'de 15 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/alerts|remind_at|aux_event_id|alert_defaults/.test(msg)) say('Kaydedilemedi: Hatırlatma seçimleri için Supabase\'de 14 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -777,6 +779,13 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     try { if (f.nudge_reminder_id) await removeReminderQuiet(f.nudge_reminder_id); } catch (e) { console.error(e); }
     await deleteRow('followups', f);
   };
+  const saveCode = async (c) => { await saveRow('inf_codes', c, 'İndirim kodu kaydedildi'); };
+  const deleteCode = async (c) => { await deleteRow('inf_codes', c, '"' + c.code + '" kodu silinsin mi?'); };
+  const saveCodeUsage = async (c, uses) => { await saveRow('inf_codes', { id: c.id, uses }, 'Kullanım kaydedildi'); };
+  const exportCodes = async (opts) => {
+    try { const { exportCodes: ex } = await import('./excel.js'); await ex(opts); say('Excel dosyası indirildi'); }
+    catch (e) { console.error(e); say('Excel oluşturulamadı.'); }
+  };
   const exportAds = async (opts) => {
     try { const { exportAds: ex } = await import('./excel.js'); await ex(opts); say('Excel dosyası indirildi'); }
     catch (e) { console.error(e); say('Excel oluşturulamadı.'); }
@@ -845,7 +854,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     mailToFollowup: (m) => setSheet({ kind: 'followup', item: { title: m.subject, party: m.fromName, since: toDateInput(new Date()), note: 'Mail: ' + m.from } }),
     mailTrack: (m) => saveFollowup({ title: m.subject, party: m.toName, since: toDateInput(new Date(m.date)), note: 'Mail: ' + m.to + ' (cevap gelince kendiliğinden kapanır)', mail_id: m.id }),
     openMailSetup: () => setSheet({ kind: 'mailSetup' }),
-    doneFollowup, exportReport, exportAds, goTab,
+    doneFollowup, exportReport, exportAds, exportCodes, goTab,
     openYarimItem: (x) => setSheet({ kind: 'yitem', item: x }),
     toggleYarimItem, planToCalendar, saveSurprise,
     hideYarim: () => { setYarimHidden(true); setSheet(null); say('Yarim alanı bu cihazda gizlendi. Geri açmak için: sağ üstteki etiket › Hesap'); },
@@ -898,6 +907,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openNote: (n) => setSheet({ kind: 'note', item: n }),
     openSpecial: (x) => setSheet({ kind: 'special', item: x }),
     openCollab: (x) => setSheet({ kind: 'collab', item: x }),
+    openCode: (x) => setSheet({ kind: 'infcode', item: x }),
+    openCodeUsage: (x) => setSheet({ kind: 'infcodeuse', item: x }),
     openContact: (x) => setSheet({ kind: 'contact', item: x }),
     openHabit: (x) => setSheet({ kind: 'habit', item: x.id ? x : { ...x, sort: data.habits.length } }),
     openList: (x) => setSheet({ kind: 'list', item: x }),
@@ -1100,6 +1111,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} contacts={data.contacts} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'special' && <SpecialDateSheet initial={sheet.item} yarimHidden={yarimHidden} YarimToggle={YarimToggle} alertDefaults={alertDefs} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('special_dates', f, 'Özel gün kaydedildi')} onDelete={(x) => deleteRow('special_dates', x, '"' + x.title + '" silinsin mi?')} />}
+      {sheet && sheet.kind === 'infcode' && <CodeSheet initial={sheet.item} codes={data.inf_codes} collabs={data.collabs} onClose={() => setSheet(null)} onSave={saveCode} onDelete={deleteCode} />}
+      {sheet && sheet.kind === 'infcodeuse' && <CodeUsageSheet code={sheet.item} onClose={() => setSheet(null)} onSave={saveCodeUsage} />}
       {sheet && sheet.kind === 'collab' && <AdSheet initial={sheet.item} collabs={data.collabs} contacts={data.contacts} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('collabs', f, 'Reklam kaydedildi')} onDelete={(x) => deleteRow('collabs', x, 'Bu reklam silinsin mi?')} />}
       {sheet && sheet.kind === 'contact' && <ContactSheet initial={sheet.item} onClose={() => setSheet(null)}

@@ -201,3 +201,21 @@ function adRows(list, contacts) {
 export async function exportAds({ ads, contacts, label }) {
   await save([{ name: 'Reklamlar', rows: adRows(ads, contacts), widths: [22, 28, 11, 12, 13, 8, 17, 17, 11, 11, 18, 24, 13, 11], sticky: 1 }], 'influencer-reklamlari-' + slug(label || 'tum') + '.xlsx');
 }
+
+// Influencer indirim kodları: kod listesi + dönem kullanımı
+export async function exportCodes({ codes, from, to, label }) {
+  const { usedTotal, revTotal, usedIn, codeStatus } = await import('./codes.jsx');
+  const head = ['Kod', 'Influencer', 'Pazaryeri', 'Marka', 'İndirim', 'Min. sepet', 'Kullanım limiti', 'Başlangıç', 'Bitiş', 'Durum', 'Toplam kullanım', 'Limit doluluğu', 'Dönem kullanımı (' + label + ')', 'Toplam kodlu satış', 'Dönem kodlu satış'].map(H);
+  const rows = [head];
+  let tU = 0, tP = 0, tR = 0, tPR = 0;
+  codes.forEach((c) => {
+    const u = usedTotal(c), r = revTotal(c), p = usedIn(c, from, to);
+    tU += u; tP += p.n; tR += r; tPR += p.rv;
+    const sd = c.start_at ? toDateInput(new Date(c.start_at)) : null, ed = c.end_at ? toDateInput(new Date(c.end_at)) : null;
+    rows.push([B(S(c.code)), S(c.handle), S(c.marketplace), S(c.brand), S(c.disc_value ? (c.disc_type === 'tl' ? c.disc_value + ' ₺' : '%' + c.disc_value) : ''),
+      c.min_basket ? N(c.min_basket, TL) : S(''), c.use_limit ? N(c.use_limit) : S(''), sd ? D(sd) : S(''), ed ? D(ed) : S(''), S(codeStatus(c).label),
+      N(u), c.use_limit ? N(u / c.use_limit, PCT) : S(''), N(p.n), r ? N(r, TL) : S(''), p.rv ? N(p.rv, TL) : S('')]);
+  });
+  rows.push([B(S('Toplam')), B(S(codes.length + ' kod')), S(''), S(''), S(''), S(''), S(''), S(''), S(''), S(''), B(N(tU)), S(''), B(N(tP)), B(N(tR, TL)), B(N(tPR, TL))]);
+  await save([{ name: 'İndirim kodları', rows, widths: [14, 20, 13, 12, 12, 12, 12, 12, 12, 14, 14, 12, 18, 16, 16], sticky: 1 }], 'influencer-kodlari-' + slug(label || 'tum') + '.xlsx');
+}

@@ -1,6 +1,6 @@
 // İş ve Özel sekmeleri: alt sekmelerle ilgili ekranları bir araya toplar
 import { HabitsCard, ListsView, SpecialDatesSection, HabitHistory } from './life.jsx';
-import { AdsView } from './ads.jsx';
+import { InfluencerScreen } from './codes.jsx';
 import { MailView } from './mail.jsx';
 import { CampaignsScreen, MarketplaceNotes, DailyNotes } from './screens.jsx';
 import { RevenueScreen } from './revenue.jsx';
@@ -33,7 +33,7 @@ export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded
         : seg === 'bekleyenler' ? <FollowupsView data={data} now={now} actions={actions} />
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
         : seg === 'notlar' ? <MarketplaceNotes data={data} actions={actions} />
-          : seg === 'influencer' ? <AdsView data={data} now={now} actions={actions} />
+          : seg === 'influencer' ? <InfluencerScreen data={data} now={now} actions={actions} />
             : <CampaignsScreen data={data} actions={actions} revenue={revenue} now={now} />}
     </div>
   );

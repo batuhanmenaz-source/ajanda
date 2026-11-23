@@ -2,7 +2,7 @@
 import { supabase } from './supabase.js';
 import { addDays, startOfDay, toDateInput } from './dates.js';
 
-export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories', 'followups'];
+export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories', 'followups', 'inf_codes'];
 export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls', ...NEW_TABLES];
 // SQL'i henüz çalıştırılmamış olabilecek tablolar: hata verirse boş sayılır
 const OPTIONAL = new Set(['missed_calls', ...NEW_TABLES]);
@@ -26,7 +26,8 @@ const ORDER = {
   money_fixed: ['day_of_month', true],
   yarim_items: ['sort', true],
   memories: ['day', false],
-  followups: ['since', true]
+  followups: ['since', true],
+  inf_codes: ['start_at', false]
 };
 // Açılışta yalnız son ~14 ayın harcamaları yüklenir (hepsi yedekte durur)
 const SINCE = { money: ['day', 430] };
@@ -381,6 +382,17 @@ export function createDemoStore() {
   if (!db.missed_calls) db.missed_calls = [];
   if (!db.contacts) Object.assign(db, seedLife());
   if (!db.yarim_items) Object.assign(db, seedYarim());
+  if (!db.inf_codes) {
+    const t = startOfDay(new Date());
+    const at = (n, h) => { const x = addDays(t, n); x.setHours(h, 0, 0, 0); return x.toISOString(); };
+    const d = (n) => toDateInput(addDays(t, n));
+    db.inf_codes = [
+      { id: uid(), code: 'ELIF15', handle: '@elifguzellik', marketplace: 'Trendyol', brand: 'Missha', disc_type: 'yuzde', disc_value: 15, min_basket: 500, use_limit: 300, scope: 'marka', scope_note: 'Missha', start_at: at(-10, 10), end_at: at(20, 23), uses: [{ d: d(-7), n: 42, rev: 31500 }, { d: d(-3), n: 118, rev: 89400 }, { d: d(-1), n: 171, rev: 128300 }], created_at: at(-10, 10) },
+      { id: uid(), code: 'CILT100', handle: '@ciltbakimgunlugu', marketplace: 'Hepsiburada', brand: 'DERMA:B', disc_type: 'tl', disc_value: 100, min_basket: 750, use_limit: 200, scope: 'tum', start_at: at(-5, 14), end_at: at(9, 23), uses: [{ d: d(-2), n: 37, rev: 41200 }, { d: d(-1), n: 58, rev: 63900 }], created_at: at(-5, 14) },
+      { id: uid(), code: 'MAKYAJ20', handle: '@makyajkutusu', marketplace: 'Trendyol', brand: 'ZEROID', disc_type: 'yuzde', disc_value: 20, min_basket: 400, use_limit: 150, scope: 'urun', scope_note: '5 ürün', start_at: at(-40, 10), end_at: at(-12, 23), uses: [{ d: d(-30), n: 64, rev: 38100 }, { d: d(-12), n: 150, rev: 92600 }], created_at: at(-40, 10) },
+      { id: uid(), code: 'GUZEL10', handle: '@guzelliksirlari', marketplace: 'Amazon', brand: 'Missha', disc_type: 'yuzde', disc_value: 10, min_basket: 300, use_limit: 500, scope: 'tum', start_at: at(3, 13), end_at: at(17, 23), uses: [], created_at: at(-1, 10) }
+    ];
+  }
   if (!db.followups) {
     const t = startOfDay(new Date());
     const d = (n) => toDateInput(addDays(t, n));
