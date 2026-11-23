@@ -7,8 +7,9 @@ import { RevenueScreen } from './revenue.jsx';
 import { WalletView } from './wallet.jsx';
 import { YarimPage } from './yarim.jsx';
 import { FollowupsView, ReportsView } from './work.jsx';
+import { WorkDashboard } from './workdash.jsx';
 
-export const WORK_TABS = [['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['mailler', 'Mailler'], ['bekleyenler', 'Bekleyenler'], ['influencer', 'Influencer'], ['notlar', 'Notlar'], ['raporlar', 'Raporlar']];
+export const WORK_TABS = [['ozet', 'Özet'], ['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['mailler', 'Mailler'], ['bekleyenler', 'Bekleyenler'], ['influencer', 'Influencer'], ['notlar', 'Notlar'], ['raporlar', 'Raporlar']];
 export const PRIVATE_TABS = [['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
 export function SubTabs({ tabs, value, onChange, label, grid }) {
@@ -25,7 +26,8 @@ export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" grid />
-      {seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} campaigns={data.campaigns} />
+      {seg === 'ozet' ? <WorkDashboard data={data} now={now} actions={actions} revenue={revenue} revTarget={revTarget} mail={mail} setSeg={setSeg} />
+        : seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} campaigns={data.campaigns} />
         : seg === 'mailler' ? <MailView mail={mail} followups={data.followups} actions={actions} now={now} />
         : seg === 'bekleyenler' ? <FollowupsView data={data} now={now} actions={actions} />
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
