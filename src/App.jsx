@@ -374,6 +374,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     console.error(e);
     const msg = (e && e.message) || '';
     if (/mail_id/.test(msg)) say('Kaydedilemedi: Mail takibi için Supabase\'de 21 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/campaigns/.test(msg) && /repeat_rule/.test(msg)) say('Kaydedilemedi: Tekrarlı etkinlik için Supabase\'de 27 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /commission2|'runs'|'renew'|\bruns\b|\brenew\b/.test(msg)) say('Kaydedilemedi: Dolaylı komisyon ve tekrarlı reklam için Supabase\'de 23 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /ad_revenue/.test(msg)) say('Kaydedilemedi: Reklam cirosu için Supabase\'de 20 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /commission/.test(msg)) say('Kaydedilemedi: Komisyon oranı için Supabase\'de 18 numaralı SQL\'i çalıştırman gerekiyor.');

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { RULES, ruleLabel } from './recur.js';
+import { RULES, ruleLabel, parseRule, makeRule } from './recur.js';
 import { Sheet } from './ui.jsx';
 import { parseQuick } from './parse.js';
 import { parseMoney, catOf } from './money.js';
@@ -318,6 +318,46 @@ export function LocationField({ id, value, onChange }) {
   );
 }
 
+// ---------- Tekrar seçimi (hatırlatma ve etkinlik ortak) ----------
+const RP_DAYS = ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pz'];
+export function RepeatPicker({ id, value, onChange, anchor }) {
+  const o = parseRule(value);
+  const aDay = anchor ? ((anchor.getDay() + 6) % 7) + 1 : 1;
+  const days = o.days || [aDay];
+  const set = (patch) => {
+    const n = { ...o, ...patch };
+    if (n.base !== 'weekly') { n.days = null; n.every = 1; }
+    if (n.base === 'weekly' && n.days && n.days.length === 1 && n.days[0] === aDay) n.days = null;
+    onChange(makeRule(n));
+  };
+  return (
+    <div className="rp">
+      <select id={id} value={o.base} onChange={(e) => set({ base: e.target.value })}>
+        {RULES.map(([v, l]) => <option key={v} value={v}>{v === 'weekly' ? 'Haftalık (gün seç)' : v === 'monthly' && anchor ? ruleLabel(v, anchor) : l}</option>)}
+      </select>
+      {o.base === 'weekly' ? (
+        <>
+          <div className="typechips" role="group" aria-label="Tekrar günleri">
+            {RP_DAYS.map((l, i) => {
+              const on = days.includes(i + 1);
+              return <button key={l} type="button" className={'chip' + (on ? ' on' : '')} aria-pressed={on} onClick={() => { const s2 = new Set(days); if (on) s2.delete(i + 1); else s2.add(i + 1); if (!s2.size) return; set({ days: [...s2].sort() }); }}>{l}</button>;
+            })}
+          </div>
+          <label className="wl-check"><input type="checkbox" checked={o.every === 2} onChange={(e) => set({ every: e.target.checked ? 2 : 1 })} /><span>2 haftada bir</span></label>
+        </>
+      ) : null}
+      {o.base ? (
+        <div className="rp-until">
+          <label htmlFor={id + '-u'}>Bitiş tarihi <small className="muted">(isteğe bağlı)</small></label>
+          <input id={id + '-u'} type="date" value={o.until || ''} min={anchor ? toDateInput(anchor) : undefined} onChange={(e) => set({ until: e.target.value || null })} />
+          {o.until ? <button type="button" className="linkbtn" onClick={() => set({ until: null })}>Kaldır</button> : null}
+        </div>
+      ) : null}
+      {o.base ? <span className="rp-sum">↻ {ruleLabel(value, anchor)}</span> : null}
+    </div>
+  );
+}
+
 // ---------- Hatırlatma / Arama ----------
 export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, contacts = [], alertDefaults = DEFAULT_ALERTS }) {
   const isEdit = !!(initial && initial.id);
@@ -442,9 +482,7 @@ export function ItemSheet({ initial, onClose, onSave, onDelete, yarimHidden, con
         {kind === 'reminder' && date ? (
           <div className="field">
             <label htmlFor="f-rep">Tekrar</label>
-            <select id="f-rep" value={repeat} onChange={(e) => setRepeat(e.target.value)}>
-              {RULES.map(([v, l]) => <option key={v} value={v}>{v ? ruleLabel(v, combine(date, time)) : l}</option>)}
-            </select>
+            <RepeatPicker id="f-rep" value={repeat} onChange={setRepeat} anchor={combine(date, time)} />
             {repeat ? <span className="hint">Tamamladığında bir sonraki tarihe kayar; Google Takvim'de her tekrarda bildirim gelir.</span> : null}
           </div>
         ) : null}
@@ -553,6 +591,7 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
   const [kind, setKind] = useState(initial.kind === 'etkinlik' ? 'etkinlik' : 'kampanya');
   const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const isEvent = kind === 'etkinlik';
+  const [repeat, setRepeat] = useState(initial.repeat_rule || '');
   const [busy, setBusy] = useState(false);
   // İsteğe bağlı saatler (boşsa tüm gün)
   const [timed, setTimed] = useState(!!(initial.start_time || initial.end_time));
@@ -578,6 +617,8 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
         { id: initial.id, name: name.trim(), marketplace: mp || null, start_date: start, end_date: end, notes: notes.trim() || null, kind,
           // Sütunlar henüz yoksa (13 numaralı SQL) bozmamak için yalnız gerektiğinde gönder
           ...(timed || initial.start_time || initial.end_time ? { start_time: timed ? sTime : null, end_time: timed ? eTime : null } : {}),
+          // Tekrar yalnız tek günlük etkinlikte (sütun yoksa bozmamak için gerektiğinde gönder: 27 numaralı SQL)
+          ...(repeat || initial.repeat_rule ? { repeat_rule: isEvent && start === end ? (repeat || null) : null } : {}),
           alerts, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
         isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
       );
@@ -637,6 +678,12 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
             </div>
             {badTime ? <span className="hint" style={{ color: 'var(--danger)', marginTop: -6 }}>Aynı gün bitiyorsa bitiş saati başlangıçtan sonra olmalı.</span> : null}
           </>
+        ) : null}
+        {isEvent && start === end ? (
+          <div className="field">
+            <label htmlFor="c-rep">Tekrar</label>
+            <RepeatPicker id="c-rep" value={repeat} onChange={setRepeat} anchor={timed ? combine(start, sTime) : fromDateInput(start)} />
+          </div>
         ) : null}
         {!isEdit && !isEvent && (
           <div className="field">

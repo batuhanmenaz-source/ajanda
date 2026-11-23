@@ -53,12 +53,14 @@ export async function syncCampaign(c) {
   const timed = !!(c.start_time || c.end_time);
   const st = timed ? combine(c.start_date, c.start_time || '00:00') : start;
   const plan = c.alerts ? toOverrides(c.alerts, { start: st, allDay: !timed }) : null;
+  // Tekrarlanan tek günlük etkinlik
+  const rec = isEvent && c.repeat_rule && c.start_date === c.end_date ? rrule(c.repeat_rule, st) || undefined : undefined;
   let mainId;
   if (timed) {
     const en = combine(c.end_date, c.end_time || '23:59');
-    mainId = await saveTimed(c.google_event_id, { summary, description, start: st, minutes: Math.max(15, Math.round((en - st) / 60000)), location: c.location || undefined, overrides: plan ? plan.overrides : [0] });
+    mainId = await saveTimed(c.google_event_id, { summary, description, start: st, minutes: Math.max(15, Math.round((en - st) / 60000)), location: c.location || undefined, overrides: plan ? plan.overrides : [0], recurrence: rec });
   } else {
-    mainId = await saveAllDay(c.google_event_id, { summary, description, startDate: start, endDate: end, location: c.location || undefined, overrides: plan ? plan.overrides : [] });
+    mainId = await saveAllDay(c.google_event_id, { summary, description, startDate: start, endDate: end, location: c.location || undefined, overrides: plan ? plan.overrides : [], recurrence: rec });
   }
 
   for (const id of c.prep_event_ids || []) await deleteEvent(id);

@@ -119,6 +119,11 @@ export function dayItems(day, { data, events }) {
     const multi = !sameDay(s, e);
     const total = daysBetween(s, e) + 1;
     const nth = daysBetween(s, day) + 1;
+    // Tekrarlanan tek günlük etkinlik: ilk günden sonraki tekrarlar
+    if (isEvent && !multi && c.repeat_rule && day > s && occursOn(atTime(s, c.start_time || '00:00'), c.repeat_rule, day)) out.push({
+      key: 'kr' + c.id + toDateInput(day), time: c.start_time || 'Tüm gün', title: c.name, src: 'Etkinlik', color: SRC_COLORS.Etkinlik,
+      sub: ['↻ ' + ruleLabel(c.repeat_rule, atTime(s, c.start_time || '00:00')), c.marketplace].filter(Boolean).join(' · '), loc: c.location, geo: c.location_geo, item: c, kind: 'campaign'
+    });
     if (day >= s && day <= e) out.push({
       key: 'k' + c.id, time: sameDay(day, s) && c.start_time && c.start_time !== '00:00' ? c.start_time : !multi && c.start_time ? c.start_time : sameDay(day, e) && c.end_time && multi ? '–' + c.end_time : 'Tüm gün',
       title: c.name + (!multi ? '' : sameDay(day, s) ? ' başlıyor' : sameDay(day, e) ? ' son gün' : isEvent ? ' (' + nth + '/' + total + '. gün)' : ' aktif'),
