@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+const SetupSheet = lazy(() => import('./setup.jsx').then((m) => ({ default: m.SetupSheet })));
 import { Icon } from './Icons.jsx';
 import { TodayScreen, CalendarScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
 import { WorkScreen, PrivateScreen, WORK_TABS, PRIVATE_TABS } from './areas.jsx';
@@ -1227,8 +1228,15 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'yarimSettings' && (
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
       )}
+      {sheet && sheet.kind === 'setup' && (
+        <Suspense fallback={null}>
+          <SetupSheet onClose={() => setSheet({ kind: 'account' })} google={google} backup={backup} mail={mailState} health={healthState} phoneToken={love.token}
+            onBackupNow={() => runDriveBackup(false)} onConnectHealth={async () => { const r = await connectHealth(); if (r && r.error) say(r.error); }}
+            onMailSetup={() => setSheet({ kind: 'mailSetup' })} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onReconnect={reconnect} />
+        </Suspense>
+      )}
       {sheet && sheet.kind === 'account' && (
-        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })}
+        <AccountSheet email={email} onSetup={() => setSheet({ kind: 'setup' })} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })}
           healthConnected={!!(healthState.health && healthState.health.connected)} onHealthConnect={async () => { const r = await connectHealth(); if (r && r.error) say(r.error); }}
           onHealthDisconnect={async () => { await disconnectHealth(); healthState.reload(); say('Google Health bağlantısı kaldırıldı'); }}
           healthHidden={healthHidden} onToggleHealth={toggleHealthHidden} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}

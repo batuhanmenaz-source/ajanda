@@ -1956,3 +1956,12 @@ button.it-row:hover { background: var(--chip); }
 .rp-until label { color: var(--ink-2); }
 .rp-until input { max-width: 170px; }
 .rp-sum { font-size: 12.5px; font-weight: 600; color: var(--accent); }
+/* Kurulum durumu */
+.su-sec { display: flex; flex-direction: column; gap: 8px; }
+.su-sec h3 { margin: 4px 0 2px; font-size: 14px; color: var(--ink-2); }
+.su-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+.su-row.ok { border-color: #B2F2BB; } .su-row.warn { border-color: #FFE066; background: #FFFBEA; } .su-row.bad { border-color: #FFC9C9; background: #FFF5F5; }
+.su-ic { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #fff; flex: 0 0 auto; }
+.su-row.ok .su-ic { background: #2F9E44; } .su-row.warn .su-ic { background: #F08C00; } .su-row.bad .su-ic { background: #E03131; }
+.su-main { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13.5px; }
+.su-main small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
