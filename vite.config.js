@@ -45,5 +45,13 @@ export default defineConfig({
         runtimeCaching: []
       }
     })
-  ]
+  ],
+  build: {
+    rollupOptions: {
+      output: {
+        // Kütüphaneler ayrı dosyada: uygulama her güncellendiğinde telefon yalnız değişen kısmı indirir
+        manualChunks: { react: ['react', 'react-dom', 'react-dom/client'], supabase: ['@supabase/supabase-js'] }
+      }
+    }
+  }
 });

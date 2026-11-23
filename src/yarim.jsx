@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Sheet, Section, Check } from './ui.jsx';
-import { SubTabs } from './areas.jsx';
+import { SubTabs } from './tabs.jsx';
 import { YarimPanel } from './screens.jsx';
 import { LocationField } from './sheets.jsx';
 import { tl, parseTL } from './revenue.jsx';

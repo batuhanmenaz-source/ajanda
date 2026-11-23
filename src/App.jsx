@@ -2,7 +2,10 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 const SetupSheet = lazy(() => import('./setup.jsx').then((m) => ({ default: m.SetupSheet })));
 import { Icon } from './Icons.jsx';
 import { TodayScreen, CalendarScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
-import { WorkScreen, PrivateScreen, WORK_TABS, PRIVATE_TABS } from './areas.jsx';
+import { WORK_TABS, PRIVATE_TABS } from './tabs.jsx';
+// İş ve Özel ekranları yalnız açılınca yüklenir (ilk açılış hızlansın)
+const WorkScreen = lazy(() => import('./areas.jsx').then((m) => ({ default: m.WorkScreen })));
+const PrivateScreen = lazy(() => import('./areas.jsx').then((m) => ({ default: m.PrivateScreen })));
 import { MoneySheet, FixedSheet, BudgetSheet, ReceiptScanSheet, CatsSheet } from './wallet.jsx';
 import { nextFixedDue, setCustomCats } from './money.js';
 import { Sheet } from './ui.jsx';
@@ -22,7 +25,7 @@ import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, su
 import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
-import { useHealth, connectHealth, disconnectHealth, buildPlan, goalsOf, sportOf, DAY_SHORT, ymdLocal as hYmd } from './health.jsx';
+import { useHealth, connectHealth, disconnectHealth, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote } from './sync.js';
 
 const TABS = [
@@ -689,7 +692,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
   const exportHealth = async (args) => {
     say('Rapor hazırlanıyor…');
-    try { const [{ exportHealth: ex }, { exName }] = await Promise.all([import('./excel.js'), import('./health.jsx')]); await ex({ ...args, exName }); say('Sağlık raporu indirildi'); }
+    try { const { exportHealth: ex } = await import('./excel.js'); await ex({ ...args, exName }); say('Sağlık raporu indirildi'); }
     catch (e) { console.error(e); say('Rapor oluşturulamadı.'); }
   };
   const exportRevenue = async (month, mode) => {
@@ -1152,9 +1155,11 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
             <>
               {tab === 'bugun' && <TodayScreen data={viewDataS} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={{ ...healthState, goals: healthGoals }} healthHidden={healthHidden} />}
               {tab === 'takvim' && <CalendarScreen data={viewDataS} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
+              <Suspense fallback={<div className="spinner">Yükleniyor…</div>}>
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} mail={mailState} />}
               {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} health={{ state: { ...healthState, goals: healthGoals }, hidden: healthHidden, toggle: toggleHealthHidden, goals: healthGoals, saveGoals: saveHealthGoals }}
                 yarim={{ seg: yarimSeg, setSeg: setYarimSeg, love, prefs: yarimPrefs, photoUrl }} />}
+              </Suspense>
               {tab === 'aramalar' && <CallsScreen data={viewData} now={now} actions={actions} missedConfigured={!!love.token} />}
             </>
           )}

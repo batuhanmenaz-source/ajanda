@@ -234,49 +234,6 @@ export function AdsView({ data, now, actions }) {
   );
 }
 
-// Bugün sayfası: yayındakiler ve bugün başlayanlar
-export function AdsTodayCard({ data, now, actions, onAll, showEmpty }) {
-  const all = (data.collabs || []).filter((c) => adStart(c));
-  const live = all.filter((c) => adStatus(c, now) === 'live').sort((a, b) => adWindow(a, now).e - adWindow(b, now).e);
-  const today = all.filter((c) => adStatus(c, now) === 'soon' && adStart(c) < addDays(startOfDay(now), 1)).sort((a, b) => adStart(a) - adStart(b));
-  if (!live.length && !today.length) return null; // boşken yer kaplamasın (yeni reklam Influencer sekmesinden ya da + ile)
-  const meta = [live.length ? live.length + ' yayında' : '', today.length ? today.length + ' bugün başlıyor' : ''].filter(Boolean).join(' · ');
-  const list = [...live, ...today];
-  return (
-    <Section title="Influencer reklamları" meta={meta} tone="#0C8599" action={<button type="button" className="linkbtn" onClick={onAll}>Tümü</button>} onAdd={() => actions.quickNew('ad')} addLabel="Yeni reklam">
-      <div className={'adt-grid' + (list.length === 1 ? ' one' : '')}>
-        {list.slice(0, 4).map((c) => {
-          const st = adStatus(c, now);
-          const w = adWindow(c, now);
-          const s = w.s, e = w.e;
-          const p = st === 'live' ? Math.min(1, Math.max(0, (now - s) / Math.max(1, e - s))) : 0;
-          const name = c.handle || c.title || adWho(c, data.contacts);
-          const sub = c.handle ? c.title : null;
-          const soonEnd = st === 'live' && e - now < 6 * 3600000;
-          return (
-            <button key={c.id} type="button" className={'adt-tile' + (st === 'live' ? ' live' : ' soon') + (soonEnd ? ' ending' : '')} style={c.marketplace ? { '--mp': mpColor(c.marketplace) } : undefined} onClick={() => actions.openCollab(c)}>
-              <span className="adt-state">{st === 'live' ? <><i aria-hidden="true" />Yayında</> : 'Bugün ' + fmtTime(s)}</span>
-              <span className="adt-name"><span className="adt-pi" aria-hidden="true">{PICON[c.platform] || '🎬'}</span>{name}</span>
-              {sub ? <span className="adt-sub">{sub}</span> : null}
-              <span className="adt-tags">
-                {c.marketplace ? <span className="adt-mp">{c.marketplace}</span> : null}
-                {hasPct(c) ? <span className="adt-pct">{commText(commKey(c))}</span> : null}
-                {w.run ? <span className="adt-rep">🔁 {w.run}. dönem</span> : null}
-                {c.brand ? <span className="adt-brand">{c.brand}</span> : null}
-              </span>
-              <span className="adt-foot">
-                <span className="adt-left">{st === 'live' ? dur(e - now) : dur(s - now)}</span>
-                <span className="adt-when">{st === 'live' ? 'kaldı · ' + when(e, now) : 'sonra başlıyor'}</span>
-              </span>
-              <span className="adt-bar" aria-hidden="true"><span style={{ width: Math.round(p * 100) + '%' }} /></span>
-            </button>
-          );
-        })}
-      </div>
-      {list.length > 4 ? <button type="button" className="linkbtn adt-more" onClick={onAll}>+{list.length - 4} reklam daha</button> : null}
-    </Section>
-  );
-}
 
 // "19 Kas – 25 Kas": gece yarısında biten dönemde bir önceki gün yazılır
 const MON = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
