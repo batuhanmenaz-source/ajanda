@@ -15,7 +15,7 @@ const ITEMS = [
   { k: 'TAM', label: 'Tam altın', ic: 'T', fmt: tl0 }
 ];
 
-export function FxStrip({ keys, title = 'Piyasa' }) {
+export function FxStrip({ keys, title = 'Piyasa', compact }) {
   const [fx, setFx] = useState(read);
   const [err, setErr] = useState(false);
   const load = useCallback(async (force) => {
@@ -43,6 +43,28 @@ export function FxStrip({ keys, title = 'Piyasa' }) {
   if (!fx) return err ? <div className="card fx fx-empty"><span className="hint">Kurlar alınamadı.</span><button type="button" className="linkbtn" onClick={() => load(true)}>Tekrar dene</button></div> : <div className="card fx fx-empty"><span className="hint">Kurlar yükleniyor…</span></div>;
   const t = new Date(fx.got);
   const list = ITEMS.filter((it) => fx.rates[it.k] && (!keys || keys.includes(it.k)));
+  if (compact) {
+    // Bugün sayfası: tek satır, kaydırılabilir şerit
+    return (
+      <section className="card fx fxc" aria-label="Döviz ve altın">
+        <div className="fxc-row">
+          {list.map((it) => {
+            const r = fx.rates[it.k];
+            const ch = r.ch;
+            const gold = ['GRA', 'CEY', 'TAM'].includes(it.k);
+            return (
+              <div key={it.k} className={'fxc-i' + (gold ? ' gold' : '')}>
+                <span className="fxc-k">{it.label.replace(' altın', '')}{gold ? ' altın' : ''}</span>
+                <span className="fxc-v">{r.approx ? '≈' : ''}{it.fmt(r.v)}</span>
+                {ch != null ? <span className={'fxc-ch ' + (ch > 0 ? 'up' : ch < 0 ? 'down' : '')}>{ch > 0 ? '▲' : ch < 0 ? '▼' : '•'} %{Math.abs(ch).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span> : null}
+              </div>
+            );
+          })}
+          <button type="button" className="fxc-at" onClick={() => load(true)} aria-label="Kurları yenile">↻<small>{t.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</small></button>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="card fx" aria-label="Döviz ve altın">
       <div className="fx-head">

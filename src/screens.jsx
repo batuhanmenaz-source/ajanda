@@ -11,14 +11,12 @@ import {
   findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, ContactsView
 } from './life.jsx';
 import { SCOPES, scopeData } from './scope.js';
-import { RevenueMini } from './revenue.jsx';
 import { StatStrip } from './statstrip.jsx';
-import { InfluencerTodayCard, codeStatus } from './codes.jsx';
+import { codeStatus } from './codes.jsx';
+import { TodayTiles } from './todaytiles.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FxStrip } from './fx.jsx';
-import { WalletPulse } from './wallet.jsx';
-import { HealthMini, goalsOf, sportOf, isSport, isoDay, exName } from './health.jsx';
-import { MailSection } from './mail.jsx';
+import { goalsOf, sportOf, isSport, isoDay, exName } from './health.jsx';
 import { FollowupsMini } from './work.jsx';
 import { adWho, adStart, adEnd, dur } from './ads.jsx';
 
@@ -588,41 +586,6 @@ function DoneFold({ items, render }) {
   );
 }
 
-// Bugün (İş): işin kısa nabzı — kampanya, reklam, bekleyen, geciken ve kur
-function WorkPulse({ data, rawData, now, lateCount, campsAll, goTab }) {
-  const live = campsAll.filter((c) => campaignStatus(c, now).key === 'live');
-  const soon = campsAll.filter((c) => campaignStatus(c, now).key === 'soon');
-  const firstSoon = soon[0];
-  const ads = (rawData.collabs || []).filter((c) => c.status !== 'iptal' && adStart(c));
-  const adsLive = ads.filter((c) => adStart(c) <= now && adEnd(c) >= now).sort((a, b) => adEnd(a) - adEnd(b));
-  const adsToday = ads.filter((c) => adStart(c) > now && sameDay(adStart(c), now));
-  const codesLive = (rawData.inf_codes || []).filter((c) => codeStatus(c, now).key === 'live').length;
-  const fups = (rawData.followups || []).filter((f) => !f.done);
-  const oldest = fups.length ? Math.max(...fups.map((f) => daysBetween(fromDateInput(f.since), startOfDay(now)))) : 0;
-  const tiles = [
-    { k: 'kampanya', label: 'Kampanyalar', v: live.length, unit: 'aktif', s: firstSoon ? (soon.length + ' yakında · ' + (firstSoon.marketplace || firstSoon.name) + ' ' + dayLabel(fromDateInput(firstSoon.start_date), now).toLocaleLowerCase('tr-TR')) : soon.length ? soon.length + ' yakında' : '30 günde yeni yok', tone: SRC_COLORS.Kampanya },
-    { k: 'influencer', label: 'Influencer', v: adsLive.length, unit: 'yayında', s: [adsLive.length ? 'ilk biten: ' + dur(adEnd(adsLive[0]) - now) + ' sonra' : adsToday.length ? adsToday.length + ' reklam bugün başlıyor' : 'yayında reklam yok', codesLive ? codesLive + ' aktif kod' : ''].filter(Boolean).join(' · '), tone: '#0C8599' },
-    { k: 'bekleyenler', label: 'Bekleyenler', v: fups.length, unit: 'iş', s: fups.length ? 'en eskisi ' + oldest + ' gün' : 'bekleyen yok', tone: '#E67700', warn: oldest >= 14 },
-    { k: 'gecikenler', label: 'Gecikenler', v: lateCount, unit: 'iş', s: lateCount ? 'aşağıdan kapat' : 'geciken yok 👏', tone: '#C92A2A', warn: lateCount > 0 }
-  ];
-  return (
-    <div className="work-top">
-      <div className="card pulse work-pulse">
-        <span className="pl-head"><span className="pl-title">İş özeti</span></span>
-        <span className="pl-grid">
-          {tiles.map((t) => (
-            <button key={t.k} type="button" className={'pl-i pl-btn' + (t.warn ? ' warn' : '')} style={{ '--tone': t.tone }} onClick={() => (t.k === 'gecikenler' ? document.querySelector('.late-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : goTab(t.k))}>
-              <span className="pl-k"><i aria-hidden="true" />{t.label}</span>
-              <span className="pl-v">{t.v}<small> {t.unit}</small></span>
-              <span className="pl-s">{t.s}</span>
-            </button>
-          ))}
-        </span>
-      </div>
-      <FxStrip keys={['USD', 'EUR']} title="Kur" />
-    </div>
-  );
-}
 
 // ---------- BUGÜN ----------
 export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health, healthHidden, hide = new Set(), onEditToday }) {
@@ -692,14 +655,12 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         {SCOPES.map(([v, l]) => <button key={v} type="button" className={scope === v ? 'on' : ''} aria-pressed={scope === v} onClick={() => setScope(v)}>{l}</button>)}
       </div>
     ) : null}
-    {scope === 'is' ? (
-      <WorkPulse data={allData} rawData={rawData} now={now} lateCount={lateCount} campsAll={campsAll} goTab={goTab} />
-    ) : (
-      H('hava') || H('piyasa') ? <div className={'tstrip' + (H('hava') && H('piyasa') ? '' : ' one')}>
+    {H('hava') || H('piyasa') ? (
+      <div className={'tstrip tk' + (H('hava') && H('piyasa') ? '' : ' one')}>
         {H('hava') ? <WeatherCard now={now} /> : null}
-        {H('piyasa') ? (scope === 'ozel' ? <FxStrip keys={['GRA', 'CEY', 'TAM', 'USD']} title="Altın ve döviz" /> : <FxStrip />) : null}
-      </div> : null
-    )}
+        {H('piyasa') ? <FxStrip compact keys={scope === 'is' ? ['USD', 'EUR'] : scope === 'ozel' ? ['USD', 'GRA', 'CEY', 'TAM'] : null} /> : null}
+      </div>
+    ) : null}
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
         <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : later ? (LATER_KIND[later.e.src] || 'free') : 'free') + (next || lateCount || later ? ' clickable' : '')}
           role={next || lateCount || later ? 'button' : undefined} tabIndex={next || lateCount || later ? 0 : undefined}
@@ -746,9 +707,9 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </section>
         {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
-    {scope === 'ozel' && H('cuzdan') ? <WalletPulse money={rawData.money} fixed={rawData.money_fixed} budgets={budgets} now={now} onOpen={() => goTab('cuzdan')} /> : null}
-    {scope !== 'is' && !healthHidden && H('saglik') ? <HealthMini state={health} now={now} onOpen={() => goTab('saglik')} /> : null}
-    {revReady && scope !== 'ozel' && H('ciro') ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} target={revTarget} /> : null}
+    <TodayTiles scope={scope} data={rawData} now={now} revenue={revenue} revReady={revReady} mail={mail} health={health} budgets={budgets}
+      campLive={liveCamps} campSoon={campsAll.filter((c) => campaignStatus(c, now).key === 'soon')} lateCount={lateCount}
+      hide={healthHidden ? new Set([...hide, 'saglik']) : hide} goTab={goTab} actions={actions} />
     {showSummary && H('ozet') ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2 today-grid">
       <div className="today-col">
@@ -772,16 +733,16 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </Section>
         </div>
 
-        <div className="tslot" style={{ order: 6 }}>
-        {scope !== 'ozel' && H('influencer') ? <InfluencerTodayCard data={rawData} now={now} actions={actions} goTab={goTab} /> : null}
-        </div>
-        <div className="tslot" style={{ order: 7 }}>
-        {scope !== 'ozel' && H('bekleyen') ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
-        </div>
-        <div className="tslot" style={{ order: 9 }}>
+        <div className="tslot" style={{ order: 4 }}>
+        <Section title="Aranacaklar" meta={open(calls).length ? open(calls).length + ' açık' : calls.length ? 'hepsi tamam' : ''} tone={SRC_COLORS.Arama} onAdd={() => actions.quickNew('call', scope)} addLabel="Yeni arama">
+          <div className="card list">
+            {calls.length ? <DoneFold items={calls} render={(c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />} /> : <p className="empty">Bugün aranacak kimse yok.</p>}
+          </div>
+        </Section>
         </div>
 
-        <div className="tslot" style={{ order: 10 }}>
+
+        <div className="tslot" style={{ order: 7 }}>
         {undated.length ? (
           <Section title="Tarihsiz işler" meta={undated.length + ' iş'} tone="#868E96">
             <div className="card list">
@@ -796,11 +757,19 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         <div className="tslot" style={{ order: 2 }}>
         {missedEl}
         </div>
-        <div className="tslot" style={{ order: 2 }}>
-        {scope !== 'ozel' && mail && H('mail') ? <MailSection mail={mail.mail} busy={mail.busy} reload={mail.reload} followups={rawData.followups} actions={actions} now={now} onAll={() => goTab('mailler')} /> : null}
+
+
+        <div className="tslot" style={{ order: 5 }}>
+        {scope !== 'ozel' && H('kampanya') ? (
+          <Section title={'Kampanyalar' + (campsAll.length ? ' · ' + (liveCamps ? liveCamps + ' aktif' : '') + (liveCamps && campsAll.length > liveCamps ? ', ' : '') + (campsAll.length > liveCamps ? (campsAll.length - liveCamps) + ' yakında' : '') : '')} tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>} onAdd={() => actions.quickNew('campaign', scope)} addLabel="Yeni kampanya">
+            {camps.length ? <div className="camp-grid">{camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)}</div> : <div className="card"><p className="empty">Önümüzdeki 30 günde kampanya yok.</p></div>}
+            {campsAll.length > camps.length ? <button type="button" className="linkbtn" style={{ alignSelf: 'center', padding: '4px 0' }} onClick={() => goTab('kampanya')}>+{campsAll.length - camps.length} kampanya daha</button> : null}
+          </Section>
+        ) : null}
         </div>
-        <div className="tslot" style={{ order: 8 }}>
-        {H('takvim') ? <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
+
+        <div className="tslot" style={{ order: 6 }}>
+        {H('takvim') && (gToday.length || (google !== 'ok' && google !== 'off' && google !== 'checking')) ? <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
           <div className="card list">
             {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
               : gToday.length ? gToday.map((e) => (
@@ -815,23 +784,6 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
           </div>
         </Section> : null}
         </div>
-
-        <div className="tslot" style={{ order: 4 }}>
-        <Section title="Aranacaklar" meta={open(calls).length ? open(calls).length + ' açık' : calls.length ? 'hepsi tamam' : ''} tone={SRC_COLORS.Arama} onAdd={() => actions.quickNew('call', scope)} addLabel="Yeni arama">
-          <div className="card list">
-            {calls.length ? <DoneFold items={calls} render={(c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />} /> : <p className="empty">Bugün aranacak kimse yok.</p>}
-          </div>
-        </Section>
-        </div>
-
-        <div className="tslot" style={{ order: 5 }}>
-        {scope !== 'ozel' && H('kampanya') ? (
-          <Section title={'Kampanyalar' + (campsAll.length ? ' · ' + (liveCamps ? liveCamps + ' aktif' : '') + (liveCamps && campsAll.length > liveCamps ? ', ' : '') + (campsAll.length > liveCamps ? (campsAll.length - liveCamps) + ' yakında' : '') : '')} tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>} onAdd={() => actions.quickNew('campaign', scope)} addLabel="Yeni kampanya">
-            {camps.length ? <div className="camp-grid">{camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)}</div> : <div className="card"><p className="empty">Önümüzdeki 30 günde kampanya yok.</p></div>}
-            {campsAll.length > camps.length ? <button type="button" className="linkbtn" style={{ alignSelf: 'center', padding: '4px 0' }} onClick={() => goTab('kampanya')}>+{campsAll.length - camps.length} kampanya daha</button> : null}
-          </Section>
-        ) : null}
-        </div>
       </div>
     </div>
     {H('yaklasan') ? <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} /> : null}
@@ -843,9 +795,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
 
 // Bugün'ü düzenle: hangi kartlar görünsün (bu cihazda saklanır)
 export const TODAY_CARDS = [
-  ['hava', '🌤️ Hava durumu'], ['piyasa', '💱 Döviz ve altın'], ['saglik', '❤️ Sağlık şeridi'], ['ciro', '📈 Dünkü ciro'], ['cuzdan', '👛 Cüzdan özeti (Özel)'],
-  ['ozet', '🗓️ Haftalık özet'], ['mail', '📧 Mailler'], ['influencer', '🎬 Influencer'], ['bekleyen', '⏳ Bekleyenler'], ['kampanya', '📣 Kampanyalar'],
-  ['takvim', '📅 Google Takvim'], ['yaklasan', '🔜 Yaklaşan günler'], ['pazaryeri', '🏪 Pazaryerleri şeridi']
+  ['hava', '🌤️ Hava durumu'], ['piyasa', '💱 Döviz ve altın'],
+  ['ciro', '📈 Kutu: Dünkü ciro'], ['saglik', '❤️ Kutu: Sağlık'], ['mail', '📧 Kutu: Mailler'], ['influencer', '🎬 Kutu: Influencer'],
+  ['bekleyen', '⏳ Kutu: Bekleyenler'], ['cuzdan', '👛 Kutu: Cüzdan'], ['aliskanlik', '✅ Kutu: Alışkanlıklar (Özel)'], ['ozelgun', '🎂 Kutu: Özel gün (Özel)'],
+  ['ozet', '🗓️ Haftalık özet'], ['kampanya', '📣 Kampanyalar'], ['takvim', '📅 Google Takvim'], ['yaklasan', '🔜 Yaklaşan günler'], ['pazaryeri', '🏪 Pazaryerleri şeridi']
 ];
 export function TodayEditSheet({ hide, onToggle, onReset, onClose }) {
   return (
@@ -865,7 +818,7 @@ export function TodayEditSheet({ hide, onToggle, onReset, onClose }) {
 }
 
 // Takvimdeki tek satır (Takvim ekranı ve Yaklaşan günler ortak kullanır)
-function DayItemRow({ e, actions, compact }) {
+function DayItemRow({ e, actions, compact, noSpan }) {
   return (
     <div className={'ditem' + (compact ? ' compact' : '')}>
       <button type="button" className={'rowbtn row timeline' + (compact ? ' compact' : '')}
@@ -874,7 +827,7 @@ function DayItemRow({ e, actions, compact }) {
         <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
           <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.src}{e.sub ? ' · ' + e.sub : ''}</span>
-          {e.span ? <SpanBar span={e.span} color={e.color} /> : null}
+          {e.span && !noSpan ? <SpanBar span={e.span} color={e.color} /> : null}
         </span>
       </button>
       {/* Konuma dokununca doğrudan Haritalar açılır */}
@@ -891,7 +844,8 @@ function UpcomingDays({ data, events, google, now, actions, count = 3, onAll }) 
     <Section title={'Yaklaşan ' + count + ' gün'} action={onAll ? <button type="button" className="linkbtn" onClick={onAll}>Takvimi aç</button> : null}>
       <div className="upcoming">
         {days.map((d) => {
-          const items = dayItems(d, { data, events });
+          // Çok günlü kampanyanın ara günleri ("aktif") her gün tekrar etmesin; yalnız başlangıç/bitiş ve saatli işler
+          const items = dayItems(d, { data, events }).filter((e) => !(e.span && e.kind === 'campaign' && !sameDay(e.span.s, d) && !sameDay(e.span.e, d)));
           return (
             <div key={d.toISOString()} className="card upday">
               <div className="upday-head">
@@ -900,7 +854,7 @@ function UpcomingDays({ data, events, google, now, actions, count = 3, onAll }) 
                 <button type="button" className="iconbtn upday-add" aria-label={fmtLong(d) + ' gününe ekle'} onClick={() => actions.newItemOn(d)}><Icon.Plus width="18" height="18" /></button>
               </div>
               <div className="list">
-                {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact />)
+                {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact noSpan />)
                   : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Boş gün'}</p>}
               </div>
             </div>
