@@ -11,7 +11,8 @@ import crypto from 'crypto';
 const API = 'https://health.googleapis.com/v4/users/me/dataTypes';
 export const HEALTH_SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
-  'https://www.googleapis.com/auth/googlehealth.sleep.readonly'
+  'https://www.googleapis.com/auth/googlehealth.sleep.readonly',
+  'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly'
 ];
 const DAY = 86400000;
 
@@ -85,6 +86,73 @@ export function parseSleep(j) {
   return nights;
 }
 
+// Günlük toplam değerler: alan adları türe göre değişir (countSum, ...Sum); sayıları güvenle çek
+const numLeaves = (o, pre = '') => {
+  const out = [];
+  Object.entries(o || {}).forEach(([k, v]) => {
+    if (v && typeof v === 'object') out.push(...numLeaves(v, pre + k + '.'));
+    else if (v !== '' && v != null && Number.isFinite(Number(v))) out.push([pre + k, Number(v)]);
+  });
+  return out;
+};
+export function rollValue(type, v) {
+  const xs = numLeaves(v);
+  if (!xs.length) return null;
+  const find = (re) => xs.find(([k]) => re.test(k));
+  if (type === 'weight') {
+    const x = find(/avg|mean/i) || find(/last|latest/i) || xs[0];
+    return x[1] > 500 ? x[1] / 1000 : x[1]; // gram → kg
+  }
+  if (type === 'distance') { const x = find(/sum/i) || xs[0]; return /milli/i.test(x[0]) ? x[1] / 1e6 : /meter/i.test(x[0]) ? x[1] / 1000 : x[1]; }
+  const tot = find(/(total|all).*sum|sum.*(total|all)/i);
+  if (tot) return tot[1];
+  const sums = xs.filter(([k]) => /sum/i.test(k));
+  if (sums.length) return sums.reduce((a, [, n]) => a + n, 0);
+  return xs[0][1];
+}
+const ROLL_KEY = { steps: 'steps', distance: 'distance', 'active-zone-minutes': 'activeZoneMinutes', 'total-calories': 'totalCalories', weight: 'weight' };
+export function parseRollup(type, j, out, keys) {
+  (j.rollupDataPoints || []).forEach((p) => {
+    const k = civilKey(p.civilStartTime);
+    const v = p[ROLL_KEY[type]];
+    if (keys && v && !keys[type]) keys[type] = Object.keys(v).join(',');
+    if (!k || !v) return;
+    const n = rollValue(type, v);
+    if (n != null) out[k] = n;
+  });
+  return out;
+}
+const secs = (d) => (d ? parseFloat(String(d)) || 0 : 0);
+export function parseExercise(j) {
+  return (j.dataPoints || []).map((p) => {
+    const e = p.exercise;
+    if (!e || !e.interval) return null;
+    const m = e.metricsSummary || {};
+    const s = new Date(e.interval.startTime), en = new Date(e.interval.endTime);
+    const off = parseInt(e.interval.startUtcOffset || '10800', 10) || 0;
+    return {
+      day: ymd(new Date(s.getTime() + off * 1000)), start: e.interval.startTime, end: e.interval.endTime,
+      type: e.exerciseType || 'OTHER', name: e.displayName || '',
+      min: Math.round((secs(e.activeDuration) || (en - s) / 1000) / 60),
+      kcal: m.caloriesKcal != null ? Math.round(Number(m.caloriesKcal)) : null,
+      km: m.distanceMillimeters != null ? Number(m.distanceMillimeters) / 1e6 : null,
+      hr: m.averageHeartRateBeatsPerMinute != null ? Number(m.averageHeartRateBeatsPerMinute) : null,
+      azm: m.activeZoneMinutes != null ? Number(m.activeZoneMinutes) : null,
+      steps: m.steps != null ? Number(m.steps) : null
+    };
+  }).filter(Boolean).sort((a, b) => a.start.localeCompare(b.start));
+}
+export function parseRhr(j, from) {
+  const out = {};
+  (j.dataPoints || []).forEach((p) => {
+    const r = p.dailyRestingHeartRate;
+    if (!r || !r.date) return;
+    const k = r.date.year + '-' + String(r.date.month).padStart(2, '0') + '-' + String(r.date.day).padStart(2, '0');
+    if (k >= from) out[k] = Number(r.beatsPerMinute) || null;
+  });
+  return out;
+}
+
 async function accessToken(refresh) {
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -155,16 +223,49 @@ export default async function handler(req, res) {
     if (e.code === 'invalid_grant') { res.status(200).json({ connected: true, expired: true, error: 'Google Health izninin süresi doldu, yeniden bağlan.' }); return; }
     res.status(502).json({ connected: true, error: 'Google anahtarı yenilenemedi: ' + e.message }); return;
   }
-  const days = Math.min(30, Math.max(1, Number(q.days) || 7));
+  const days = Math.min(42, Math.max(1, Number(q.days) || 28));
   const T = trToday();
   const from = ymd(new Date(Date.parse(T) - (days - 1) * DAY));
   const end = ymd(new Date(Date.parse(T) + DAY));
-  const out = { connected: true, at: new Date().toISOString(), today: T, from, steps: {}, sleep: {}, errors: {} };
-  const [st, sl] = await Promise.allSettled([
-    gh(token, '/steps/dataPoints:dailyRollUp', { method: 'POST', body: JSON.stringify({ range: { start: civil(from), end: civil(end) }, windowSizeDays: 1 }) }),
-    gh(token, '/sleep/dataPoints:reconcile?' + new URLSearchParams({ filter: 'sleep.interval.civil_end_time >= "' + from + '" AND sleep.interval.civil_end_time < "' + end + '"', pageSize: '25' }))
-  ]);
-  if (st.status === 'fulfilled') out.steps = parseSteps(st.value); else out.errors.steps = String(st.reason && st.reason.message).slice(0, 200);
-  if (sl.status === 'fulfilled') out.sleep = parseSleep(sl.value); else out.errors.sleep = String(sl.reason && sl.reason.message).slice(0, 200);
+  const out = { connected: true, at: new Date().toISOString(), today: T, from, steps: {}, sleep: {}, distance: {}, azm: {}, kcal: {}, weight: {}, rhr: {}, exercise: [], errors: {}, keys: {} };
+  // Günlük toplamlar 14 günlük parçalarla (bazı türlerde üst sınır 14 gün)
+  const chunks = [];
+  for (let s0 = Date.parse(from); s0 < Date.parse(end); s0 += 14 * DAY) chunks.push([ymd(new Date(s0)), ymd(new Date(Math.min(s0 + 14 * DAY, Date.parse(end))))]);
+  const rollup = async (type) => {
+    const acc = {};
+    for (const [a, b] of chunks) {
+      const j = await gh(token, '/' + type + '/dataPoints:dailyRollUp', { method: 'POST', body: JSON.stringify({ range: { start: civil(a), end: civil(b) }, windowSizeDays: 1, pageSize: 14 }) });
+      parseRollup(type, j, acc, out.keys);
+    }
+    return acc;
+  };
+  const sleepAll = async () => {
+    const all = { dataPoints: [] };
+    let token2 = '';
+    for (let i = 0; i < 4; i++) {
+      const p = new URLSearchParams({ filter: 'sleep.interval.civil_end_time >= "' + from + '" AND sleep.interval.civil_end_time < "' + end + '"', pageSize: '25' });
+      if (token2) p.set('pageToken', token2);
+      const j = await gh(token, '/sleep/dataPoints:reconcile?' + p);
+      all.dataPoints.push(...(j.dataPoints || []));
+      token2 = j.nextPageToken;
+      if (!token2) break;
+    }
+    return parseSleep(all);
+  };
+  const exercises = async () => {
+    try { return parseExercise(await gh(token, '/exercise/dataPoints?' + new URLSearchParams({ filter: 'exercise.interval.civil_start_time >= "' + from + '"', pageSize: '50' }))); }
+    catch (e) { return parseExercise(await gh(token, '/exercise/dataPoints?pageSize=50')).filter((x) => x.day >= from); }
+  };
+  const jobs = {
+    steps: () => rollup('steps'), distance: () => rollup('distance'), azm: () => rollup('active-zone-minutes'), kcal: () => rollup('total-calories'),
+    weight: () => rollup('weight'), sleep: sleepAll, exercise: exercises,
+    rhr: async () => parseRhr(await gh(token, '/daily-resting-heart-rate/dataPoints?pageSize=60'), from)
+  };
+  const names = Object.keys(jobs);
+  const res2 = await Promise.allSettled(names.map((k) => jobs[k]()));
+  res2.forEach((r, i) => {
+    if (r.status === 'fulfilled') out[names[i]] = r.value;
+    else out.errors[names[i]] = (r.reason && r.reason.status ? r.reason.status + ' ' : '') + String(r.reason && r.reason.message).slice(0, 160);
+  });
   res.status(200).json(out);
 }

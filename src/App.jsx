@@ -57,7 +57,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const goTab = (t) => {
     if (t === 'ozet' || t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer' || t === 'bekleyenler' || t === 'raporlar' || t === 'mailler') { setSheet(null); setIsSeg(t); setTab('is'); }
     else if (t === 'yarim') { setOzelSeg('yarim'); setTab('ozel'); }
-    else if (t === 'cuzdan' || t === 'listeler' || t === 'aliskanlik' || t === 'ozelgun' || t === 'gunluk') { setOzelSeg(t); setTab('ozel'); }
+    else if (t === 'cuzdan' || t === 'saglik' || t === 'listeler' || t === 'aliskanlik' || t === 'ozelgun' || t === 'gunluk') { setOzelSeg(t); setTab('ozel'); }
     else setTab(t);
   };
   // Bugün sayfası filtresi: Tümü / İş / Özel (bu cihazda hatırlanır)
@@ -180,6 +180,13 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
   // Yarim alanı bu cihazda gizli mi? (cihaza özel; telefonda açık, iş bilgisayarında kapalı olabilir)
   const [yarimHidden, setYarimHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-yarim-hidden') === '1'; } catch { return false; } });
+  const [healthHidden, setHealthHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-health-hidden') === '1'; } catch { return false; } });
+  const toggleHealthHidden = () => {
+    const v = !healthHidden;
+    setHealthHiddenState(v);
+    try { if (v) localStorage.setItem('ajanda-health-hidden', '1'); else localStorage.removeItem('ajanda-health-hidden'); } catch { /* yok say */ }
+    say(v ? 'Sağlık şeridi Bugün sayfasında gizlendi' : 'Sağlık şeridi Bugün sayfasında gösteriliyor');
+  };
   const setYarimHidden = (v) => {
     setYarimHiddenState(v);
     try { if (v) localStorage.setItem('ajanda-yarim-hidden', '1'); else localStorage.removeItem('ajanda-yarim-hidden'); } catch { /* yok say */ }
@@ -651,6 +658,11 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     try { const { exportWallet: ex } = await import('./excel.js'); await ex({ ...opts, money: data.money, fixed: data.money_fixed, budgets }); say('Excel dosyası indirildi'); }
     catch (e) { console.error(e); say('Excel dosyası oluşturulamadı.'); }
   };
+  const exportHealth = async (args) => {
+    say('Rapor hazırlanıyor…');
+    try { const [{ exportHealth: ex }, { exName }] = await Promise.all([import('./excel.js'), import('./health.jsx')]); await ex({ ...args, exName }); say('Sağlık raporu indirildi'); }
+    catch (e) { console.error(e); say('Rapor oluşturulamadı.'); }
+  };
   const exportRevenue = async (month, mode) => {
     say('Excel hazırlanıyor…');
     try { const { exportRevenue: ex } = await import('./excel.js'); await ex({ revenue, month, mode }); say('Excel dosyası indirildi'); }
@@ -928,7 +940,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openFixed: (f) => setSheet({ kind: 'fixed', item: f }),
     openBudget: () => setSheet({ kind: 'budget' }),
     openCats: () => setSheet({ kind: 'cats' }),
-    payFixed, scanReceipt, exportWallet, exportRevenue,
+    payFixed, scanReceipt, exportWallet, exportRevenue, exportHealth,
     toggleHabit, addListItems, toggleListItem, deleteListItem, clearListDone, addWeeklySummaryReminder,
     toggleTask, addTask, deleteTask, saveDaily
   };
@@ -1099,10 +1111,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={healthState} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={healthState} healthHidden={healthHidden} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} mail={mailState} />}
-              {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden}
+              {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} health={{ state: healthState, hidden: healthHidden, toggle: toggleHealthHidden }}
                 yarim={{ seg: yarimSeg, setSeg: setYarimSeg, love, prefs: yarimPrefs, photoUrl }} />}
               {tab === 'aramalar' && <CallsScreen data={viewData} now={now} actions={actions} missedConfigured={!!love.token} />}
             </>
@@ -1180,7 +1192,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'account' && (
         <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })}
           healthConnected={!!(healthState.health && healthState.health.connected)} onHealthConnect={async () => { const r = await connectHealth(); if (r && r.error) say(r.error); }}
-          onHealthDisconnect={async () => { await disconnectHealth(); healthState.reload(); say('Google Health bağlantısı kaldırıldı'); }} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
+          onHealthDisconnect={async () => { await disconnectHealth(); healthState.reload(); say('Google Health bağlantısı kaldırıldı'); }}
+          healthHidden={healthHidden} onToggleHealth={toggleHealthHidden} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
           backup={backup} onBackupNow={() => runDriveBackup(false)} onDownload={downloadBackup} onRestore={restoreBackup}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}

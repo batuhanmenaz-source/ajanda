@@ -9,9 +9,10 @@ import { YarimPage } from './yarim.jsx';
 import { FollowupsView, ReportsView } from './work.jsx';
 import { WorkDashboard } from './workdash.jsx';
 import { PersonalDashboard } from './privdash.jsx';
+import { HealthPage } from './health.jsx';
 
 export const WORK_TABS = [['ozet', 'Özet'], ['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['mailler', 'Mailler'], ['bekleyenler', 'Bekleyenler'], ['influencer', 'Influencer'], ['notlar', 'Notlar'], ['raporlar', 'Raporlar']];
-export const PRIVATE_TABS = [['ozet', 'Özet'], ['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
+export const PRIVATE_TABS = [['ozet', 'Özet'], ['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['saglik', 'Sağlık'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
 export function SubTabs({ tabs, value, onChange, label, grid }) {
   return (
@@ -39,7 +40,7 @@ export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded
   );
 }
 
-export function PrivateScreen({ seg: seg0, setSeg, data, now, actions, budgets, walletError, yarimHidden, yarim }) {
+export function PrivateScreen({ seg: seg0, setSeg, data, now, actions, budgets, walletError, yarimHidden, yarim, health }) {
   const tabs = yarimHidden ? PRIVATE_TABS.filter(([k]) => k !== 'yarim') : PRIVATE_TABS;
   const seg = yarimHidden && seg0 === 'yarim' ? 'cuzdan' : seg0;
   return (
@@ -48,6 +49,7 @@ export function PrivateScreen({ seg: seg0, setSeg, data, now, actions, budgets, 
       {seg === 'ozet' ? <PersonalDashboard data={data} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} setSeg={setSeg} />
         : seg === 'yarim' ? <YarimPage {...yarim} data={data} now={now} actions={actions} />
         : seg === 'listeler' ? <ListsView data={data} actions={actions} />
+        : seg === 'saglik' && health ? <HealthPage state={health.state} now={now} hidden={health.hidden} onToggleHidden={health.toggle} onExport={actions.exportHealth} />
         : seg === 'aliskanlik' ? <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 760 }}><HabitsCard data={data} now={now} actions={actions} /><HabitHistory data={data} now={now} /></div>
           : seg === 'ozelgun' ? <div style={{ maxWidth: 760 }}><SpecialDatesSection data={data} now={now} actions={actions} /></div>
             : seg === 'gunluk' ? <DailyNotes data={data} now={now} actions={actions} />

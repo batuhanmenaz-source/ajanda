@@ -219,3 +219,52 @@ export async function exportCodes({ codes, from, to, label }) {
   rows.push([B(S('Toplam')), B(S(codes.length + ' kod')), S(''), S(''), S(''), S(''), S(''), S(''), S(''), S(''), B(N(tU)), S(''), B(N(tP)), B(N(tR, TL)), B(N(tPR, TL))]);
   await save([{ name: 'İndirim kodları', rows, widths: [14, 20, 13, 12, 12, 12, 12, 12, 12, 14, 14, 12, 18, 16, 16], sticky: 1 }], 'influencer-kodlari-' + slug(label || 'tum') + '.xlsx');
 }
+
+// ---------- Sağlık: haftalık rapor ----------
+export async function exportHealth({ start, wk, c, p, tips, h, label, exName }) {
+  const hmx = (m) => (m == null ? '' : Math.floor(m / 60) + ' sa ' + Math.round(m % 60) + ' dk');
+  const clk = (m) => { if (m == null) return ''; const x = Math.round(m + 18 * 60) % 1440; return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); };
+  const ch = (a, b) => (a != null && b ? N((a - b) / b, PCT) : S(''));
+  const num = (v, f) => (v == null ? S('') : N(v, f));
+  const end = addDays(start, 6);
+  const title = label + ' · ' + toDateInput(start).split('-').reverse().join('.') + ' – ' + toDateInput(end).split('-').reverse().join('.');
+  const sum = [[H('Ölçü'), H(label), H(wk.partial ? 'Geçen hafta (aynı günler)' : 'Önceki hafta'), H('Değişim'), H('Not')]];
+  const row = (k, a, b, f, note, isTime) => sum.push([S(k), isTime ? S(a) : num(a, f), isTime ? S(b) : num(b, f), isTime ? S('') : ch(a, b), S(note || '')]);
+  row('Ortalama adım / gün', c.steps, p.steps, '#,##0', c.stepsGoalDays + ' gün 10.000 adım üstü');
+  row('Aktif dakika (toplam)', c.azm, p.azm, '#,##0', 'Haftalık öneri en az 150 dk');
+  row('Ortalama uyku (dk)', c.sleep, p.sleep, '#,##0', hmx(c.sleep));
+  row('Ortalama derin uyku (dk)', c.deep, p.deep, '#,##0');
+  row('Ortalama REM (dk)', c.rem, p.rem, '#,##0');
+  row('Ortalama yatış saati', clk(c.bed), clk(p.bed), null, '', true);
+  row('Ortalama kalkış saati', clk(c.wake), clk(p.wake), null, '', true);
+  row('Dinlenme nabzı (bpm)', c.rhr, p.rhr, '0.0', 'Düşmesi genelde kondisyonun arttığını gösterir');
+  row('Antrenman sayısı', c.exCount, p.exCount, '0');
+  row('Antrenman süresi (dk)', c.exMin, p.exMin, '#,##0');
+  row('Kalori / gün', c.kcal, p.kcal, '#,##0');
+  row('Mesafe (km)', c.km, p.km, '0.0');
+  if (c.weightLast != null || p.weightLast != null) row('Kilo (kg, son ölçüm)', c.weightLast, p.weightLast, '0.0');
+
+  const days = [[H('Tarih'), H('Gün'), H('Adım'), H('Mesafe (km)'), H('Aktif dk'), H('Kalori'), H('Uyku (dk)'), H('Yatış'), H('Kalkış'), H('Derin (dk)'), H('REM (dk)'), H('Dinlenme nabzı'), H('Kilo'), H('Antrenman')]];
+  wk.all.forEach((k) => {
+    const s = h.sleep[k];
+    const ex = (h.exercise || []).filter((e) => e.day === k);
+    const t = (iso) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    days.push([D(k), S(WEEKDAYS[new Date(k + 'T12:00').getDay()]), num(h.steps[k], '#,##0'), num(h.distance[k], '0.0'), num(h.azm[k], '0'), num(h.kcal[k], '#,##0'),
+      num(s && s.asleep, '0'), S(s ? t(s.start) : ''), S(s ? t(s.end) : ''), num(s && s.stages && s.stages.deep, '0'), num(s && s.stages && s.stages.rem, '0'),
+      num(h.rhr[k], '0'), num(h.weight[k], '0.0'), S(ex.map((e) => exName(e) + ' ' + e.min + ' dk').join(', '))]);
+  });
+
+  const exs = [[H('Tarih'), H('Saat'), H('Antrenman'), H('Süre (dk)'), H('Kalori'), H('Mesafe (km)'), H('Ort. nabız'), H('Aktif dk')]];
+  (h.exercise || []).filter((e) => wk.all.includes(e.day)).forEach((e) => exs.push([D(e.day), S(new Date(e.start).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })), S(exName(e)), num(e.min, '0'), num(e.kcal, '0'), num(e.km, '0.0'), num(e.hr, '0'), num(e.azm, '0')]));
+
+  const tip = [[H('Konu'), H('Tavsiye')]];
+  tips.forEach((x) => tip.push([S(x.icon + ' ' + x.title), S(x.text)]));
+  tip.push([S(''), S('Genel bilgilendirmedir, tıbbi tavsiye değildir.')]);
+
+  await save([
+    { name: 'Özet', rows: [[B(S('Sağlık raporu'))], [S(title)], [S('')], ...sum], widths: [28, 18, 24, 11, 44] },
+    { name: 'Günlük', rows: days, widths: [12, 11, 9, 11, 9, 9, 10, 8, 8, 10, 9, 14, 8, 34], sticky: 1 },
+    { name: 'Antrenmanlar', rows: exs, widths: [12, 8, 22, 10, 9, 11, 10, 9], sticky: 1 },
+    { name: 'Tavsiyeler', rows: tip, widths: [36, 110] }
+  ], 'saglik-raporu-' + toDateInput(start) + '.xlsx');
+}

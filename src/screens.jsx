@@ -17,7 +17,7 @@ import { InfluencerTodayCard, codeStatus } from './codes.jsx';
 import { WeatherCard } from './weather.jsx';
 import { FxStrip } from './fx.jsx';
 import { WalletPulse } from './wallet.jsx';
-import { HealthCard } from './health.jsx';
+import { HealthMini } from './health.jsx';
 import { MailSection } from './mail.jsx';
 import { FollowupsMini } from './work.jsx';
 import { adWho, adStart, adEnd, dur } from './ads.jsx';
@@ -582,7 +582,7 @@ function WorkPulse({ data, rawData, now, lateCount, campsAll, goTab }) {
 }
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health }) {
+export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health, healthHidden }) {
   const allData = scopeData(rawData, scope);
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} contacts={allData.contacts} />;
   const [sumHidden, setSumHidden] = useState(false);
@@ -703,7 +703,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
     {scope === 'ozel' ? <WalletPulse money={rawData.money} fixed={rawData.money_fixed} budgets={budgets} now={now} onOpen={() => goTab('cuzdan')} /> : null}
-    {scope !== 'is' ? <HealthCard state={health} now={now} /> : null}
+    {scope !== 'is' && !healthHidden ? <HealthMini state={health} now={now} onOpen={() => goTab('saglik')} /> : null}
     {revReady && scope !== 'ozel' ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} target={revTarget} /> : null}
     {showSummary ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2 today-grid">

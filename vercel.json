@@ -8,6 +8,9 @@
   "functions": {
     "api/mail.js": {
       "maxDuration": 30
+    },
+    "api/health.js": {
+      "maxDuration": 30
     }
   }
 }
