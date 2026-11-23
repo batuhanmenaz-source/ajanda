@@ -365,9 +365,9 @@ function swimBase(h, goals, today) {
   return Math.min(1600, r50(goals.minutes * 18)); // yeni başlayan: dakikada ~18 m (dinlenmeler dahil)
 }
 const SWIM_SETS = [
-  ['Teknik', (D) => 'Isınma 200 m serbest · 6×50 m teknik (kol çekişi, nefes) 20 sn ara · ' + r50(Math.max(100, D - 600)) + ' m sakin · soğuma 100 m'],
-  ['Aralık', (D) => 'Isınma 200 m · ' + Math.max(4, Math.round((D - 400) / 100)) + '×100 m orta-hızlı, 30 sn ara · soğuma 200 m'],
-  ['Uzun sakin', (D) => 'Isınma 100 m · ' + r50(Math.max(200, D - 200)) + ' m sakin tempo (yorulunca 25 m\'de kısa mola) · soğuma 100 m']
+  ['Teknik', (D) => 'Isınma 200 m serbest · 6×50 m teknik (kol çekişi, nefes) 20 sn ara · ' + r50(Math.max(100, D - 600)) + ' m sakin · Soğuma 100 m'],
+  ['Aralık', (D) => 'Isınma 200 m · ' + Math.max(4, Math.round((D - 400) / 100)) + '×100 m orta-hızlı, 30 sn ara · Soğuma 200 m'],
+  ['Uzun sakin', (D) => 'Isınma 100 m · ' + r50(Math.max(200, D - 200)) + ' m sakin tempo (yorulunca 25 m\'de kısa mola) · Soğuma 100 m']
 ];
 const OTHER_SETS = {
   kosu: [['Kolay', (m) => m + ' dk konuşabileceğin tempoda koşu']], agirlik: [['Tüm vücut A', (m) => m + ' dk: squat, şınav, kürek çekiş, plank (3 set)'], ['Tüm vücut B', (m) => m + ' dk: deadlift, omuz pres, lunge, mekik (3 set)']],
@@ -425,12 +425,39 @@ function PlanCard({ h, goals, today }) {
         {plan.map((x) => (
           <div key={ymdLocal(x.d)} className={'hp-plan-r' + (x.session ? ' on' : '') + (x.done ? ' done' : '') + (ymdLocal(x.d) === T ? ' today' : '')}>
             <b>{ymdLocal(x.d) === T ? 'Bugün' : WD[x.d.getDay()]}</b>
-            <span><span className="hp-plan-t">{x.title}</span><br />{x.text}{x.food ? <small className="hp-plan-f">🍽 {x.food}</small> : null}</span>
+            <span><span className="hp-plan-t">{x.title}</span>{x.session ? <span className="hp-plan-steps">{String(x.text).split(' · ').map((t, i) => <span key={i}>{t}</span>)}</span> : <><br />{x.text}</>}{x.food ? <small className="hp-plan-f">🍽 {x.food}</small> : null}</span>
           </div>
         ))}
       </div>
       <span className="hint">Seanslar arasına bir gün dinlenme koyar; yüzme mesafesini geçen haftana göre en fazla %8 artırır. Kendini yorgun hissedersen seansı kısalt.</span>
     </section>
+  );
+}
+
+// Takvimdeki spor kaydına dokununca: o günün seansı adım adım
+export function SportSheet({ item, onClose, onOpenHealth }) {
+  const p = item.plan || {};
+  const steps = String(p.text || '').split(' · ').filter(Boolean);
+  const food = String(p.food || '').split(' · ').filter(Boolean);
+  const d = fromKey(item.day);
+  const label = (x) => (/^ısınma/i.test(x) ? '🔥' : /^soğuma/i.test(x) ? '🧊' : /teknik/i.test(x) ? '🎯' : '🏊');
+  return (
+    <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Antrenman planı">
+        <div className="sheet-head"><h2>{p.title || 'Antrenman'}</h2><button type="button" className="iconbtn" aria-label="Kapat" onClick={onClose}>✕</button></div>
+        <p className="hint" style={{ margin: 0 }}>{WD[d.getDay()]} {d.getDate()} {MON[d.getMonth()]}{item.time ? ' · ' + item.time : ''}{item.goals ? ' · hedef ' + item.goals.minutes + ' dk' : ''}</p>
+        {steps.length ? (
+          <ol className="sp-steps">
+            {steps.map((x, i) => <li key={i}><span aria-hidden="true">{label(x)}</span><span>{x}</span></li>)}
+          </ol>
+        ) : <p>Bu gün için plan yok.</p>}
+        {food.length ? (
+          <div className="sp-food"><b>🍽 Beslenme</b>{food.map((x, i) => <span key={i}>{x}</span>)}</div>
+        ) : null}
+        <p className="hint" style={{ margin: 0 }}>Plan, Fitbit'in kaydettiği son yüzmelerine göre her hafta kendini ayarlar. Yorgunsan seansı kısalt; ağrı olursa dur.</p>
+        <button type="button" className="btn big" onClick={onOpenHealth}>Sağlık sayfasını aç</button>
+      </div>
+    </div>
   );
 }
 
@@ -526,6 +553,7 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport, goals
   return (
     <div className="hp">
       <GoalsCard goals={goals} saved={!!goalsRaw} onSave={onSaveGoals} />
+      <PlanCard h={h} goals={goals} today={today} />
       <div className="hp-top">
         <div className="week-nav hp-nav">
           <button type="button" className="iconbtn" aria-label="Önceki hafta" onClick={() => setOff(off + 1)} disabled={!canBack}>‹</button>
@@ -584,7 +612,6 @@ export function HealthPage({ state, now, hidden, onToggleHidden, onExport, goals
         </section>
       ) : null}
 
-      {off === 0 ? <PlanCard h={h} goals={goals} today={today} /> : null}
 
       <section className="section">
         <div className="section-head"><h2>Tavsiyeler</h2><span className="meta">{spName.toLocaleLowerCase('tr-TR')} · haftada {goals.perWeek} · {AIMS.find((a) => a[0] === goals.aim)[1].toLocaleLowerCase('tr-TR')}</span></div>

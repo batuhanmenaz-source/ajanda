@@ -174,7 +174,7 @@ export function dayItems(day, { data, events }) {
       const plan = data.sport.plan && data.sport.plan[dk];
       const today0 = startOfDay(new Date());
       const past = day < today0;
-      out.push({ ...base, key: 'sp' + dk, time: g.time, title: spIcon + ' ' + spName + (past ? ' · yapılmadı' : ''), sub: past ? 'Kayıt yok' : plan ? plan : g.minutes + ' dk', done: false, missed: past });
+      out.push({ ...base, key: 'sp' + dk, time: g.time, title: spIcon + ' ' + spName + (past ? ' · yapılmadı' : ''), sub: past ? 'Kayıt yok' : plan ? plan.name + ' · dokun, planı gör' : g.minutes + ' dk', done: false, missed: past, item: { sport: true, day: dk, time: g.time, plan: past ? null : plan, goals: g } });
     }
   }
   return out.sort((a, b) => {
@@ -232,6 +232,7 @@ export function openDayItem(e, actions) {
   else if (e.kind === 'collab') actions.openCollab(e.item);
   else if (e.kind === 'note') actions.openNote(e.item);
   else if (e.kind === 'google') actions.openGoogleEvent(e.item);
+  else if (e.kind === 'sport' && e.item.plan && actions.openSport) actions.openSport(e.item);
   else if (e.kind === 'sport' && actions.openHealth) actions.openHealth();
   else if (e.kind === 'code' && actions.openCode) actions.openCode(e.item);
 }

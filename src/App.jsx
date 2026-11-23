@@ -25,7 +25,7 @@ import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, su
 import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
-import { useHealth, connectHealth, disconnectHealth, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
+import { useHealth, connectHealth, disconnectHealth, SportSheet, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote, syncCode } from './sync.js';
 
 const TABS = [
@@ -854,7 +854,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     const ex = (hh && hh.exercise) || [];
     if (!healthGoals && !ex.length) return null;
     const plan = {};
-    try { buildPlan(hh || {}, healthGoals, new Date(now.getFullYear(), now.getMonth(), now.getDate())).forEach((x) => { if (x.session && !x.done) plan[hYmd(x.d)] = x.title.replace(/^\d\d:\d\d · /, '').split(' · ').slice(1).join(' · ') + ' — ' + x.text; }); } catch (e) { console.warn(e); }
+    try { buildPlan(hh || {}, healthGoals, new Date(now.getFullYear(), now.getMonth(), now.getDate())).forEach((x) => { if (x.session && !x.done) plan[hYmd(x.d)] = { name: x.title.replace(/^\d\d:\d\d · /, '').split(' · ').slice(1).join(' · '), title: x.title.replace(/^\d\d:\d\d · /, ''), text: x.text, food: x.food }; }); } catch (e) { console.warn(e); }
     return { goals: healthGoals, exercise: ex, plan, since: healthGoals && healthGoals.since };
   }, [healthState.health, healthGoals, now.toDateString()]);
   const viewDataS = useMemo(() => (sportCtx ? { ...viewData, sport: sportCtx } : viewData), [viewData, sportCtx]);
@@ -1001,7 +1001,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openFixed: (f) => setSheet({ kind: 'fixed', item: f }),
     openBudget: () => setSheet({ kind: 'budget' }),
     openCats: () => setSheet({ kind: 'cats' }),
-    payFixed, scanReceipt, exportWallet, exportRevenue, exportHealth, openHealth: () => goTab('saglik'),
+    payFixed, scanReceipt, exportWallet, exportRevenue, exportHealth, openHealth: () => goTab('saglik'), openSport: (x) => setSheet({ kind: 'sport', item: x }),
     toggleHabit, addListItems, toggleListItem, deleteListItem, clearListDone, addWeeklySummaryReminder,
     toggleTask, addTask, deleteTask, saveDaily
   };
@@ -1252,6 +1252,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'yarimSettings' && (
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
       )}
+      {sheet && sheet.kind === 'sport' && <SportSheet item={sheet.item} onClose={() => setSheet(null)} onOpenHealth={() => { setSheet(null); goTab('saglik'); }} />}
       {sheet && sheet.kind === 'todayEdit' && (
         <TodayEditSheet hide={healthHidden ? new Set([...todayHide, 'saglik']) : todayHide} onClose={() => setSheet(null)}
           onReset={() => { saveTodayHide([]); if (healthHidden) toggleHealthHidden(); }}
