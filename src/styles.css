@@ -1937,3 +1937,14 @@ button.it-row:hover { background: var(--chip); }
 .hp-plan-r.today b { color: var(--accent); }
 .hp-plan-t { font-weight: 700; }
 .hp-plan-f { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+/* Takvim: çok günlü kampanya / reklam ilerleme çubuğu */
+.spanbar { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; max-width: 320px; }
+.spanbar-track { position: relative; height: 6px; border-radius: 999px; background: var(--track); overflow: visible; }
+.spanbar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: #2F9E44; }
+.spanbar.past .spanbar-fill { background: #ADB5BD; }
+.spanbar-mark { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; border-radius: 1px; background: var(--ink); }
+.spanbar-lbl { font-size: 11.5px; color: var(--ink-2); }
+.spanbar-lbl b { font-weight: 700; }
+.spanbar.live .spanbar-lbl { color: #2B8A3E; }
+.spanbar.soon .spanbar-lbl { color: #E67700; }
+.spanbar.past .spanbar-lbl { color: var(--muted); }

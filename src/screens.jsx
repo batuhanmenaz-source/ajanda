@@ -74,6 +74,26 @@ function isLate(it, now) {
 }
 
 // Bir gün için tüm kayıtlar (Google, hatırlatma, arama, kampanya)
+const atTime = (d, hm) => { const [h, m] = String(hm || '00:00').split(':').map(Number); const x = new Date(d); x.setHours(h || 0, m || 0, 0, 0); return x; };
+
+// Birden çok gün süren kampanya / reklam: başladı mı, sürüyor mu, bitti mi? Çubuk şimdiye göre dolar, çizgi o günü gösterir.
+function SpanBar({ span, color }) {
+  const now = new Date();
+  const { s, e, day } = span;
+  const total = Math.max(1, daysBetween(startOfDay(s), startOfDay(e)) + 1);
+  const nth = Math.min(total, Math.max(1, daysBetween(startOfDay(s), startOfDay(day)) + 1));
+  const st = now < s ? 'soon' : now > e ? 'past' : 'live';
+  const p = st === 'soon' ? 0 : st === 'past' ? 1 : Math.min(1, Math.max(0, (now - s) / Math.max(1, e - s)));
+  const mark = Math.min(1, Math.max(0, (startOfDay(day).getTime() + 12 * 3600000 - s) / Math.max(1, e - s)));
+  const label = st === 'soon' ? 'Başlamadı · ' + dur(s - now) + ' sonra' : st === 'past' ? 'Bitti' : 'Devam ediyor · ' + dur(e - now) + ' kaldı';
+  return (
+    <span className={'spanbar ' + st} style={{ '--c': color }}>
+      <span className="spanbar-track" aria-hidden="true"><span className="spanbar-fill" style={{ width: p * 100 + '%' }} /><span className="spanbar-mark" style={{ left: mark * 100 + '%' }} /></span>
+      <span className="spanbar-lbl"><b>{nth}/{total}. gün</b> · {label}</span>
+    </span>
+  );
+}
+
 export function dayItems(day, { data, events }) {
   const out = [];
   (events || []).filter((e) => (e.allDay ? day >= startOfDay(e.start) && day <= startOfDay(e.end) : sameDay(e.start, day))).forEach((e) =>
@@ -102,7 +122,8 @@ export function dayItems(day, { data, events }) {
     if (day >= s && day <= e) out.push({
       key: 'k' + c.id, time: sameDay(day, s) && c.start_time && c.start_time !== '00:00' ? c.start_time : !multi && c.start_time ? c.start_time : sameDay(day, e) && c.end_time && multi ? '–' + c.end_time : 'Tüm gün',
       title: c.name + (!multi ? '' : sameDay(day, s) ? ' başlıyor' : sameDay(day, e) ? ' son gün' : isEvent ? ' (' + nth + '/' + total + '. gün)' : ' aktif'),
-      src: isEvent ? 'Etkinlik' : 'Kampanya', color: isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, sub: [c.marketplace, multi ? rangeLabel(s, e) : ''].filter(Boolean).join(' · '), loc: c.location, geo: c.location_geo, item: c, kind: 'campaign'
+      src: isEvent ? 'Etkinlik' : 'Kampanya', color: isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, sub: [c.marketplace, multi ? rangeLabel(s, e) : ''].filter(Boolean).join(' · '), loc: c.location, geo: c.location_geo, item: c, kind: 'campaign',
+      span: multi ? { s: atTime(s, c.start_time || '00:00'), e: atTime(e, c.end_time || '23:59'), day } : null
     });
     // Hatırlatma günleri (seçilen ya da eski sabit 3 ve 1 gün önce)
     const pd = c.alerts ? prepDays(c.alerts) : isEvent ? [] : [1, 3];
@@ -123,6 +144,7 @@ export function dayItems(day, { data, events }) {
     const base = { src: 'Influencer', color: SRC_COLORS.Influencer, item: c, kind: 'collab' };
     if (c.start_at) {
       const s = adStart(c), e = adEnd(c);
+      base.span = !sameDay(s, e) ? { s, e, day } : null;
       if (sameDay(s, day)) out.push({ ...base, key: 'i' + c.id, time: fmtTime(s), title: '🎬 ' + who + (c.title ? ' — ' + c.title : '') + ' · yayına giriyor', sub: sub + (sub ? ' · ' : '') + 'bitiş ' + whenLabel(e, s), done: e < new Date() });
       if (sameDay(e, day) && !sameDay(s, day)) out.push({ ...base, key: 'ie' + c.id, time: fmtTime(e), title: '🏁 ' + who + (c.title ? ' — ' + c.title : '') + ' · bitiyor', sub, done: e < new Date() });
     } else if (c.publish_date === dk) {
@@ -806,6 +828,7 @@ function DayItemRow({ e, actions, compact }) {
         <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span className="ditem-title" style={{ textDecoration: e.done ? 'line-through' : 'none', color: e.done ? 'var(--muted)' : 'inherit' }}>{e.title}</span>
           <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.src}{e.sub ? ' · ' + e.sub : ''}</span>
+          {e.span ? <SpanBar span={e.span} color={e.color} /> : null}
         </span>
       </button>
       {/* Konuma dokununca doğrudan Haritalar açılır */}
