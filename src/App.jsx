@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 const SetupSheet = lazy(() => import('./setup.jsx').then((m) => ({ default: m.SetupSheet })));
 import { Icon } from './Icons.jsx';
-import { TodayScreen, CalendarScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
+import { TodayScreen, TodayEditSheet, CalendarScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
 import { WORK_TABS, PRIVATE_TABS } from './tabs.jsx';
 // İş ve Özel ekranları yalnız açılınca yüklenir (ilk açılış hızlansın)
 const WorkScreen = lazy(() => import('./areas.jsx').then((m) => ({ default: m.WorkScreen })));
@@ -185,6 +185,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   // Yarim alanı bu cihazda gizli mi? (cihaza özel; telefonda açık, iş bilgisayarında kapalı olabilir)
   const [yarimHidden, setYarimHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-yarim-hidden') === '1'; } catch { return false; } });
   const [healthHidden, setHealthHiddenState] = useState(() => { try { return localStorage.getItem('ajanda-health-hidden') === '1'; } catch { return false; } });
+  // Bugün'ü düzenle: gizlenen kartlar (bu cihazda)
+  const [todayHide, setTodayHide] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('ajanda-today-hide') || '[]')); } catch { return new Set(); } });
+  const saveTodayHide = (set) => { setTodayHide(new Set(set)); try { localStorage.setItem('ajanda-today-hide', JSON.stringify([...set])); } catch { /* yok say */ } };
   const [healthGoals, setHealthGoals] = useState(null);
   // Spor günleri Google Takvim'e haftalık tekrarlanan tek etkinlik olarak yazılır (1 saat önce bildirim)
   const syncSportEvent = async (g0) => {
@@ -1153,7 +1156,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewDataS} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={{ ...healthState, goals: healthGoals }} healthHidden={healthHidden} />}
+              {tab === 'bugun' && <TodayScreen data={viewDataS} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={{ ...healthState, goals: healthGoals }} healthHidden={healthHidden} hide={todayHide} onEditToday={() => setSheet({ kind: 'todayEdit' })} />}
               {tab === 'takvim' && <CalendarScreen data={viewDataS} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               <Suspense fallback={<div className="spinner">Yükleniyor…</div>}>
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} mail={mailState} />}
@@ -1232,6 +1235,14 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       )}
       {sheet && sheet.kind === 'yarimSettings' && (
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
+      )}
+      {sheet && sheet.kind === 'todayEdit' && (
+        <TodayEditSheet hide={healthHidden ? new Set([...todayHide, 'saglik']) : todayHide} onClose={() => setSheet(null)}
+          onReset={() => { saveTodayHide([]); if (healthHidden) toggleHealthHidden(); }}
+          onToggle={(k) => {
+            if (k === 'saglik' && healthHidden) { toggleHealthHidden(); const n = new Set(todayHide); n.delete('saglik'); saveTodayHide(n); return; }
+            const n = new Set(todayHide); if (n.has(k)) n.delete(k); else n.add(k); saveTodayHide(n);
+          }} />
       )}
       {sheet && sheet.kind === 'setup' && (
         <Suspense fallback={null}>

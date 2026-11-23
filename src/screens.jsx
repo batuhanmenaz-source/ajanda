@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
-import { Mp, Check, Section, Progress } from './ui.jsx';
+import { Mp, Check, Section, Progress, Sheet } from './ui.jsx';
 import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START, YARIM_STARTS } from './constants.js';
 import { whatsappLink, DEFAULT_LOVE_MESSAGE, prettyPhone, normalizePhone } from './whatsapp.js';
 import { mapsLink, mapsTarget } from './location.js';
@@ -625,7 +625,8 @@ function WorkPulse({ data, rawData, now, lateCount, campsAll, goTab }) {
 }
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health, healthHidden }) {
+export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health, healthHidden, hide = new Set(), onEditToday }) {
+  const H = (k) => !hide.has(k);
   const allData = scopeData(rawData, scope);
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} contacts={allData.contacts} />;
   const [sumHidden, setSumHidden] = useState(false);
@@ -694,10 +695,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
     {scope === 'is' ? (
       <WorkPulse data={allData} rawData={rawData} now={now} lateCount={lateCount} campsAll={campsAll} goTab={goTab} />
     ) : (
-      <div className="tstrip">
-        <WeatherCard now={now} />
-        {scope === 'ozel' ? <FxStrip keys={['GRA', 'CEY', 'TAM', 'USD']} title="Altın ve döviz" /> : <FxStrip />}
-      </div>
+      H('hava') || H('piyasa') ? <div className={'tstrip' + (H('hava') && H('piyasa') ? '' : ' one')}>
+        {H('hava') ? <WeatherCard now={now} /> : null}
+        {H('piyasa') ? (scope === 'ozel' ? <FxStrip keys={['GRA', 'CEY', 'TAM', 'USD']} title="Altın ve döviz" /> : <FxStrip />) : null}
+      </div> : null
     )}
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
         <section className={'hero hero-' + (next ? next.kind : lateCount ? 'late' : later ? (LATER_KIND[later.e.src] || 'free') : 'free') + (next || lateCount || later ? ' clickable' : '')}
@@ -745,10 +746,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </section>
         {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
-    {scope === 'ozel' ? <WalletPulse money={rawData.money} fixed={rawData.money_fixed} budgets={budgets} now={now} onOpen={() => goTab('cuzdan')} /> : null}
-    {scope !== 'is' && !healthHidden ? <HealthMini state={health} now={now} onOpen={() => goTab('saglik')} /> : null}
-    {revReady && scope !== 'ozel' ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} target={revTarget} /> : null}
-    {showSummary ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
+    {scope === 'ozel' && H('cuzdan') ? <WalletPulse money={rawData.money} fixed={rawData.money_fixed} budgets={budgets} now={now} onOpen={() => goTab('cuzdan')} /> : null}
+    {scope !== 'is' && !healthHidden && H('saglik') ? <HealthMini state={health} now={now} onOpen={() => goTab('saglik')} /> : null}
+    {revReady && scope !== 'ozel' && H('ciro') ? <RevenueMini revenue={revenue} now={now} actions={actions} onOpen={() => goTab('ciro')} target={revTarget} /> : null}
+    {showSummary && H('ozet') ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2 today-grid">
       <div className="today-col">
 
@@ -772,10 +773,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
 
         <div className="tslot" style={{ order: 6 }}>
-        {scope !== 'ozel' ? <InfluencerTodayCard data={rawData} now={now} actions={actions} goTab={goTab} /> : null}
+        {scope !== 'ozel' && H('influencer') ? <InfluencerTodayCard data={rawData} now={now} actions={actions} goTab={goTab} /> : null}
         </div>
         <div className="tslot" style={{ order: 7 }}>
-        {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
+        {scope !== 'ozel' && H('bekleyen') ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
         </div>
         <div className="tslot" style={{ order: 9 }}>
         </div>
@@ -796,10 +797,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         {missedEl}
         </div>
         <div className="tslot" style={{ order: 2 }}>
-        {scope !== 'ozel' && mail ? <MailSection mail={mail.mail} busy={mail.busy} reload={mail.reload} followups={rawData.followups} actions={actions} now={now} onAll={() => goTab('mailler')} /> : null}
+        {scope !== 'ozel' && mail && H('mail') ? <MailSection mail={mail.mail} busy={mail.busy} reload={mail.reload} followups={rawData.followups} actions={actions} now={now} onAll={() => goTab('mailler')} /> : null}
         </div>
         <div className="tslot" style={{ order: 8 }}>
-        <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
+        {H('takvim') ? <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
           <div className="card list">
             {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
               : gToday.length ? gToday.map((e) => (
@@ -812,7 +813,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
                 </button>
               )) : <p className="empty">{google === 'off' ? 'Örnek modda Google Takvim kapalı.' : 'Bugün takviminde etkinlik yok.'}</p>}
           </div>
-        </Section>
+        </Section> : null}
         </div>
 
         <div className="tslot" style={{ order: 4 }}>
@@ -824,7 +825,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
 
         <div className="tslot" style={{ order: 5 }}>
-        {scope !== 'ozel' ? (
+        {scope !== 'ozel' && H('kampanya') ? (
           <Section title={'Kampanyalar' + (campsAll.length ? ' · ' + (liveCamps ? liveCamps + ' aktif' : '') + (liveCamps && campsAll.length > liveCamps ? ', ' : '') + (campsAll.length > liveCamps ? (campsAll.length - liveCamps) + ' yakında' : '') : '')} tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>} onAdd={() => actions.quickNew('campaign', scope)} addLabel="Yeni kampanya">
             {camps.length ? <div className="camp-grid">{camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)}</div> : <div className="card"><p className="empty">Önümüzdeki 30 günde kampanya yok.</p></div>}
             {campsAll.length > camps.length ? <button type="button" className="linkbtn" style={{ alignSelf: 'center', padding: '4px 0' }} onClick={() => goTab('kampanya')}>+{campsAll.length - camps.length} kampanya daha</button> : null}
@@ -833,9 +834,33 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
       </div>
     </div>
-    <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} />
-    {scope !== 'ozel' ? <MarketplaceStrip data={allData} now={now} actions={actions} /> : null}
+    {H('yaklasan') ? <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} /> : null}
+    {scope !== 'ozel' && H('pazaryeri') ? <MarketplaceStrip data={allData} now={now} actions={actions} /> : null}
+    {onEditToday ? <button type="button" className="today-edit" onClick={onEditToday}>⚙︎ Bugün'ü düzenle{hide.size ? ' · ' + hide.size + ' kart gizli' : ''}</button> : null}
     </div>
+  );
+}
+
+// Bugün'ü düzenle: hangi kartlar görünsün (bu cihazda saklanır)
+export const TODAY_CARDS = [
+  ['hava', '🌤️ Hava durumu'], ['piyasa', '💱 Döviz ve altın'], ['saglik', '❤️ Sağlık şeridi'], ['ciro', '📈 Dünkü ciro'], ['cuzdan', '👛 Cüzdan özeti (Özel)'],
+  ['ozet', '🗓️ Haftalık özet'], ['mail', '📧 Mailler'], ['influencer', '🎬 Influencer'], ['bekleyen', '⏳ Bekleyenler'], ['kampanya', '📣 Kampanyalar'],
+  ['takvim', '📅 Google Takvim'], ['yaklasan', '🔜 Yaklaşan günler'], ['pazaryeri', '🏪 Pazaryerleri şeridi']
+];
+export function TodayEditSheet({ hide, onToggle, onReset, onClose }) {
+  return (
+    <Sheet title="Bugün'ü düzenle" onClose={onClose}>
+      <p className="hint" style={{ margin: 0 }}>Kapattığın kartlar Bugün sayfasında görünmez; verileri silinmez. Sıradaki iş, gecikenler, hatırlatmalar ve aramalar her zaman görünür.</p>
+      <div className="card list te-list">
+        {TODAY_CARDS.map(([k, l]) => (
+          <label key={k} className="te-row">
+            <span>{l}</span>
+            <input type="checkbox" role="switch" checked={!hide.has(k)} onChange={() => onToggle(k)} />
+          </label>
+        ))}
+      </div>
+      {hide.size ? <button type="button" className="btn" onClick={onReset}>Hepsini göster</button> : null}
+    </Sheet>
   );
 }
 
