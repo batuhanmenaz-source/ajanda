@@ -26,7 +26,7 @@ import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
 import { useHealth, connectHealth, disconnectHealth, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
-import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote } from './sync.js';
+import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote, syncCode } from './sync.js';
 
 const TABS = [
   { id: 'bugun', label: 'Bugün', icon: Icon.Today },
@@ -344,6 +344,20 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         const id = await gsync(() => syncNote(n));
         if (id) { await store.update('notes', n.id, { google_event_id: id }); patchLocal('notes', n.id, { google_event_id: id }); }
       }
+      // İndirim kodlarının bitiş bildirimleri (28 numaralı SQL çalıştıysa)
+      for (const x of (data.inf_codes || []).filter((y) => 'google_event_id' in y && !y.google_event_id && y.end_at && new Date(y.end_at) > t)) {
+        await applySync('inf_codes', x, await gsync(() => syncCode(x)));
+      }
+      // Bir kez: süren ve yaklaşan kampanyalara "bitiyor" bildirimi eklensin (önceden kaydedilenler için)
+      let endDone = false;
+      try { endDone = localStorage.getItem('ajanda-end-alerts-v1') === '1'; } catch { /* yok say */ }
+      if (!endDone) {
+        for (const c of data.campaigns.filter((x) => x.kind !== 'etkinlik' && x.google_event_id && x.end_date >= toDateInput(t))) {
+          const ids = await gsync(() => syncCampaign(c));
+          if (ids) { await store.update('campaigns', c.id, ids); patchLocal('campaigns', c.id, ids); }
+        }
+        try { localStorage.setItem('ajanda-end-alerts-v1', '1'); } catch { /* yok say */ }
+      }
     })().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [google, loading]);
@@ -557,6 +571,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       else { const { id: _drop, ...rest } = fields; row = await store.insert(table, rest); addLocal(table, [row]); }
       if (table === 'special_dates') await applySync(table, row, await gsync(() => syncSpecialDate(row)));
       if (table === 'collabs') await applySync(table, row, await gsync(() => syncCollab(row, contactName(row.contact_id))));
+      // Kod bitiş bildirimi (sütun yoksa — 28 numaralı SQL — takvime yazma, yoksa her kayıtta kopya oluşur)
+      if (table === 'inf_codes' && 'google_event_id' in row) await applySync(table, row, await gsync(() => syncCode(row)));
       setSheet(null);
       if (okMsg) say(okMsg);
       return row;

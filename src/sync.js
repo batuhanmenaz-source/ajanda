@@ -66,6 +66,16 @@ export async function syncCampaign(c) {
   for (const id of c.prep_event_ids || []) await deleteEvent(id);
   const prepIds = [];
   const now = new Date();
+  // Kampanya bitişi: son gün 10:00'da ve bitiş anında bildirim (kapatılmadıysa)
+  if (!isEvent && !(c.alerts && c.alerts.end === false)) {
+    const en = combine(c.end_date, c.end_time || '23:59');
+    if (en > now) {
+      const ov = [0];
+      const lead = Math.round((en - atTime(end, '10:00')) / 60000);
+      if (lead > 0) ov.unshift(lead);
+      prepIds.push(await saveTimed(null, { summary: '🏁 Kampanya bitiyor: ' + (c.marketplace ? c.marketplace + ' · ' : '') + c.name, description: 'Kampanya ' + (c.end_time || '23:59') + '\'da bitiyor. Sonuçlarını ve cirosunu kaydetmeyi unutma.', start: en, overrides: ov }));
+    }
+  }
   if (plan) {
     // Tüm gün kayıtta "başladığı gün" bildirimi: o gün seçilen saatte kısa bir etkinlik
     if (plan.sameDayAt) {
@@ -120,7 +130,7 @@ export async function syncCollab(c, who) {
     const id = await saveTimed(c.google_event_id, { summary: '🎬 ' + name + tail, description, start: s, minutes: Math.max(15, Math.round((e - s) / 60000)), overrides: timedOverrides(c, s) });
     let aux = c.aux_event_id || null;
     const wantEnd = !c.alerts || c.alerts.end !== false;
-    if (wantEnd && e > new Date()) aux = await saveTimed(aux, { summary: '🏁 Reklam bitiyor: ' + name + tail, description, start: e, overrides: [60, 0] });
+    if (wantEnd && e > new Date()) aux = await saveTimed(aux, { summary: '🏁 Reklam bitiyor: ' + name + tail, description: description + '\nBitince reklam cirosunu Ajanda\'ya gir.', start: e, overrides: [60, 0] });
     else if (aux) { await deleteEvent(aux); aux = null; }
     return { google_event_id: id, aux_event_id: aux };
   }
@@ -134,6 +144,22 @@ export async function syncCollab(c, who) {
   if (plan.sameDayAt && when > new Date()) aux = await saveTimed(aux, { summary: '🎬 Bugün yayında: ' + (who || 'Influencer') + (c.brand ? ' · ' + c.brand : ''), description, start: when, overrides: [0] });
   else if (aux) { await deleteEvent(aux); aux = null; }
   return { google_event_id: id, aux_event_id: aux };
+}
+
+// İndirim kodu: bitişinden 1 gün önce, 1 saat önce ve bitişte bildirim. Döner: { google_event_id }
+export async function syncCode(c) {
+  const e = c.end_at ? new Date(c.end_at) : null;
+  if (!e || e <= new Date()) {
+    if (c.google_event_id) await deleteEvent(c.google_event_id);
+    return { google_event_id: null };
+  }
+  const who = [c.handle ? '@' + String(c.handle).replace(/^@/, '') : '', c.marketplace].filter(Boolean).join(' · ');
+  const id = await saveTimed(c.google_event_id || null, {
+    summary: '🏷️ Kod bitiyor: ' + c.code + (who ? ' · ' + who : ''),
+    description: 'İndirim kodu bitiyor. Kullanım sayısını Ajanda\'ya girmeyi unutma.',
+    start: e, overrides: [1440, 60, 0]
+  });
+  return { google_event_id: id };
 }
 
 // Not: "Hatırlat" tarihi verildiyse takvime saatli kayıt

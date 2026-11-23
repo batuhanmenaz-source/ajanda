@@ -154,6 +154,14 @@ export function dayItems(day, { data, events }) {
       out.push({ ...base, key: 'i' + c.id, time: 'Tüm gün', title: '🎬 ' + who + (c.title ? ' — ' + c.title : ''), sub, done: c.status === 'yayinlandi' || c.status === 'odendi' });
     }
   });
+  // İndirim kodları: başlangıç ve bitiş günü
+  (data.inf_codes || []).forEach((c) => {
+    const s0 = c.start_at ? new Date(c.start_at) : null, e0 = c.end_at ? new Date(c.end_at) : null;
+    const sub = [c.handle ? '@' + String(c.handle).replace(/^@/, '') : '', c.marketplace].filter(Boolean).join(' · ');
+    const base = { src: 'Influencer', color: SRC_COLORS.Influencer, item: c, kind: 'code' };
+    if (s0 && sameDay(s0, day) && !(e0 && sameDay(e0, day))) out.push({ ...base, key: 'cs' + c.id, time: fmtTime(s0), title: '🏷️ ' + c.code + ' kodu · başlıyor', sub });
+    if (e0 && sameDay(e0, day)) out.push({ ...base, key: 'ce' + c.id, time: fmtTime(e0), title: '🏷️ ' + c.code + ' kodu · bitiyor', sub, done: e0 < new Date() });
+  });
   // Spor: Fitbit'in kaydettiği antrenmanlar + Sağlık hedeflerindeki sabit spor günleri
   if (data.sport) {
     const g = goalsOf(data.sport.goals);
@@ -225,6 +233,7 @@ export function openDayItem(e, actions) {
   else if (e.kind === 'note') actions.openNote(e.item);
   else if (e.kind === 'google') actions.openGoogleEvent(e.item);
   else if (e.kind === 'sport' && actions.openHealth) actions.openHealth();
+  else if (e.kind === 'code' && actions.openCode) actions.openCode(e.item);
 }
 
 function CampaignMini({ c, tasks, onOpen, result }) {

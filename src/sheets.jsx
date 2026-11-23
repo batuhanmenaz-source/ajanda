@@ -592,6 +592,7 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
   const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const isEvent = kind === 'etkinlik';
   const [repeat, setRepeat] = useState(initial.repeat_rule || '');
+  const [endAlert, setEndAlert] = useState(!(initial.alerts && initial.alerts.end === false));
   const [busy, setBusy] = useState(false);
   // İsteğe bağlı saatler (boşsa tüm gün)
   const [timed, setTimed] = useState(!!(initial.start_time || initial.end_time));
@@ -619,7 +620,7 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
           ...(timed || initial.start_time || initial.end_time ? { start_time: timed ? sTime : null, end_time: timed ? eTime : null } : {}),
           // Tekrar yalnız tek günlük etkinlikte (sütun yoksa bozmamak için gerektiğinde gönder: 27 numaralı SQL)
           ...(repeat || initial.repeat_rule ? { repeat_rule: isEvent && start === end ? (repeat || null) : null } : {}),
-          alerts, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
+          alerts: isEvent ? alerts : { ...alerts, end: endAlert }, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
         isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
       );
     } finally { setBusy(false); }
@@ -692,6 +693,12 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
           </div>
         )}
         <AlertPicker id="c-al" value={alerts} onChange={changeAlerts} mode={timed ? 'timed' : 'allday'} allowDaily />
+        {!isEvent ? (
+          <label className="wl-check" style={{ marginTop: -6 }}>
+            <input type="checkbox" checked={endAlert} onChange={(e) => setEndAlert(e.target.checked)} />
+            <span>🏁 Bitişi de hatırlat <small className="muted">(son gün 10:00'da ve bittiği an)</small></span>
+          </label>
+        ) : null}
         <LocationField id="c-loc" value={loc} onChange={setLoc} />
         <div className="field">
           <label htmlFor="c-notes">Not (isteğe bağlı)</label>
