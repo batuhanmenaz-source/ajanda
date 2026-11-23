@@ -271,6 +271,46 @@ export function HabitsCard({ data, now, actions }) {
   );
 }
 
+// Bugün sayfası üst şeridi: alışkanlıklar küçük kutucuklar halinde, dokununca işaretlenir
+export function HabitStrip({ data, now, actions, onAll }) {
+  const habits = [...(data.habits || [])].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  const today = startOfDay(now);
+  const T = toDateInput(today);
+  if (!habits.length) {
+    return (
+      <section className="card hs">
+        <div className="hs-head"><span className="hs-title">Alışkanlıklar</span></div>
+        <button type="button" className="hs-empty" onClick={() => actions.openHabit({})}>+ Her gün yapmak istediğin bir şey ekle</button>
+      </section>
+    );
+  }
+  const states = habits.map((h) => ({ h, ...streak(data.habit_logs || [], h.id, today) }));
+  const done = states.filter((x) => x.set.has(T)).length;
+  const all = done === habits.length;
+  return (
+    <section className={'card hs' + (all ? ' all' : '')} aria-label="Alışkanlıklar">
+      <div className="hs-head">
+        <button type="button" className="hs-title" onClick={onAll}>Alışkanlıklar</button>
+        <span className="hs-count">{all ? 'hepsi tamam 🎉' : done + '/' + habits.length + ' bugün'}</span>
+      </div>
+      <span className="hs-bar" aria-hidden="true"><span style={{ width: (done / habits.length) * 100 + '%' }} /></span>
+      <div className="hs-list">
+        {states.map(({ h, n, set }) => {
+          const on = set.has(T);
+          return (
+            <button key={h.id} type="button" className={'hs-i' + (on ? ' on' : '')} aria-pressed={on} onClick={() => actions.toggleHabit(h, T)}
+              aria-label={h.name + (on ? ': bugün yapıldı, geri al' : ': bugün yapıldı olarak işaretle')}>
+              <span className="hs-ck" aria-hidden="true">{on ? '✓' : ''}</span>
+              <span className="hs-n">{h.emoji ? h.emoji + ' ' : ''}{h.name}</span>
+              {n ? <span className="hs-st">🔥{n}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // Son 30 gün: her alışkanlık için günlük kareler ve tamamlanma oranı
 export function HabitHistory({ data, now }) {
   const habits = [...(data.habits || [])].sort((a, b) => (a.sort || 0) - (b.sort || 0));

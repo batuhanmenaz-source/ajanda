@@ -8,7 +8,7 @@ import { occursOn, ruleLabel } from './recur.js';
 import { prepDays } from './alerts.js';
 import { specialOn, specialLabel, specialUpcoming, SPECIAL_ICON } from './special.js';
 import {
-  findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, ContactsView
+  findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, HabitStrip, ContactsView
 } from './life.jsx';
 import { SCOPES, scopeData } from './scope.js';
 import { RevenueMini } from './revenue.jsx';
@@ -653,6 +653,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
       <div className="tstrip">
         <WeatherCard now={now} />
         {scope === 'ozel' ? <FxStrip keys={['GRA', 'CEY', 'TAM', 'USD']} title="Altın ve döviz" /> : <FxStrip />}
+        <HabitStrip data={allData} now={now} actions={actions} onAll={() => goTab('aliskanlik')} />
       </div>
     )}
     <div className={'today-top' + (yarimHidden || scope === 'is' ? ' solo' : '')}>
@@ -733,7 +734,6 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         {scope !== 'ozel' ? <FollowupsMini data={rawData} now={now} actions={actions} onAll={() => goTab('bekleyenler')} /> : null}
         </div>
         <div className="tslot" style={{ order: 9 }}>
-        {scope !== 'is' ? <HabitsCard data={allData} now={now} actions={actions} /> : null}
         </div>
 
         <div className="tslot" style={{ order: 10 }}>
