@@ -133,6 +133,23 @@ export function rrule(rule, due) {
 export function parseRepeat(s) {
   const out = { rule: '', removals: [], monthDay: null };
   let m;
+  const DN = 'pazartesi|salı|çarşamba|perşembe|cumartesi|cuma|pazar';
+  const ISO = { pazartesi: 1, 'salı': 2, 'çarşamba': 3, 'perşembe': 4, cuma: 5, cumartesi: 6, pazar: 7 };
+  const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // "2 haftada bir (salı)" / "iki haftada bir"
+  if ((m = s.match(new RegExp('\\s((2|iki)\\s+haftada\\s+bir(\\s+(' + DN + ')(\\s*(,|ve)\\s*(' + DN + '))*)?)(?=[\\s,.\'’]|$)', 'i')))) {
+    const days = (m[3] || '').toLocaleLowerCase('tr-TR').match(new RegExp(DN, 'g')) || [];
+    out.rule = makeRule({ base: 'weekly', days: days.length ? [...new Set(days.map((d) => ISO[d]))] : null, every: 2 });
+    out.removals.push(new RegExp(esc(m[1]), 'i'));
+    return out;
+  }
+  // "her salı ve perşembe", "her pazartesi, çarşamba ve cuma"
+  if ((m = s.match(new RegExp('\\s(her\\s+((' + DN + ')(\\s*(,|ve)\\s*(' + DN + '))+))(?=[\\s,.\'’]|$)', 'i')))) {
+    const days = m[2].toLocaleLowerCase('tr-TR').match(new RegExp(DN, 'g')) || [];
+    out.rule = makeRule({ base: 'weekly', days: [...new Set(days.map((d) => ISO[d]))], every: 1 });
+    out.removals.push(new RegExp(esc(m[1]), 'i'));
+    return out;
+  }
   if ((m = s.match(/\s(her\s+ay(ın)?\s+(\d{1,2})['’]?(\s?(i|ı|u|ü|si|sı|sü|su|inde|ında|unda|ünde|sinde|sında))?)(?=[\s,.]|$)/))) {
     out.rule = 'monthly'; out.monthDay = Math.min(31, Math.max(1, parseInt(m[3], 10))); out.removals.push(new RegExp(m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
   } else if ((m = s.match(/\s(her\s+ay)(?=[\s,.]|$)/))) { out.rule = 'monthly'; out.removals.push(new RegExp(m[1], 'i')); }

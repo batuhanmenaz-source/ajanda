@@ -814,7 +814,7 @@ button.pill { min-height: 32px; }
 .ad-time { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .ad-time .arrow { color: var(--muted); font-weight: 400; }
 .ad-bar { height: 6px; border-radius: 999px; background: var(--track); overflow: hidden; margin-top: 2px; }
-.ad-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--mp); }
+.ad-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--prog-live); }
 .ad-count { font-size: 13px; color: var(--muted); }
 .ad-count b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .ad-row { align-items: center; gap: 12px; }
@@ -1228,9 +1228,9 @@ button.pulse:hover { border-color: #C9C6BD; }
 .ctb.past .ctb-lbl > span:first-child { color: var(--muted); }
 .ctb-bar { height: 8px; border-radius: 999px; background: var(--track); overflow: hidden; }
 .ctb-bar > span { display: block; height: 100%; border-radius: 999px; }
-.ctb.soon .ctb-bar > span { background: linear-gradient(90deg, #FCD9A6, #E8A33D); }
-.ctb.live .ctb-bar > span { background: linear-gradient(90deg, #8CE99A, #2F9E44); }
-.ctb.past .ctb-bar > span { background: #CED4DA; }
+.ctb.soon .ctb-bar > span { background: var(--prog-soon); }
+.ctb.live .ctb-bar > span { background: var(--prog-live); }
+.ctb.past .ctb-bar > span { background: var(--prog-done); }
 .csteps { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .csteps-k { font-weight: 600; color: var(--ink-2); }
 .csteps-dots { display: inline-flex; gap: 4px; align-items: center; }
@@ -1678,7 +1678,7 @@ button.pulse:hover { border-color: #C9C6BD; }
 .ic-use-top b { font-family: var(--display); font-size: 18px; }
 .ic-use-top em { font-style: normal; font-weight: 700; color: var(--ink-2); }
 .ic-bar { height: 7px; border-radius: 999px; background: var(--track); overflow: hidden; }
-.ic-bar span { display: block; height: 100%; border-radius: 999px; background: var(--mp); }
+.ic-bar span { display: block; height: 100%; border-radius: 999px; background: var(--prog-live); }
 .ic-bar span.hot { background: #E03131; }
 .ic-use-s { font-size: 11.5px; color: var(--muted); }
 .ic-add { align-self: flex-start; }
@@ -1759,7 +1759,7 @@ button.it-row:hover { background: var(--chip); }
 .ic-ctb { margin-top: 0; }
 .ctb.live.end .ctb-lbl > span:first-child { color: var(--danger); }
 .ctb.live.end .ctb-bar > span { background: linear-gradient(90deg, #FFA8A8, #E03131); }
-.ctb.past .ctb-bar > span { background: #CED4DA; }
+.ctb.past .ctb-bar > span { background: var(--prog-done); }
 .it-tbar { position: relative; display: flex; align-items: center; gap: 6px; margin-top: 3px; }
 .it-tbar::before { content: ''; flex: 1; height: 4px; border-radius: 999px; background: var(--track); }
 .it-tbar > span { position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 999px; background: linear-gradient(90deg, #8CE99A, #2F9E44); }
@@ -1881,8 +1881,8 @@ button.it-row:hover { background: var(--chip); }
 /* Takvim: çok günlü kampanya / reklam ilerleme çubuğu */
 .spanbar { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; max-width: 320px; }
 .spanbar-track { position: relative; height: 6px; border-radius: 999px; background: var(--track); overflow: visible; }
-.spanbar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: #2F9E44; }
-.spanbar.past .spanbar-fill { background: #ADB5BD; }
+.spanbar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--prog-live); }
+.spanbar.past .spanbar-fill { background: var(--prog-done); }
 .spanbar-mark { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; border-radius: 1px; background: var(--ink); }
 .spanbar-lbl { font-size: 11.5px; color: var(--ink-2); }
 .spanbar-lbl b { font-weight: 700; }
@@ -1921,3 +1921,6 @@ button.it-row:hover { background: var(--chip); }
 .te-list { padding: 4px 0; }
 .te-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; font-size: 14.5px; cursor: pointer; }
 .te-row input { width: 40px; height: 22px; accent-color: var(--accent); }
+
+/* Tek tip durum renkleri: yeşil sürüyor · turuncu başlamadı · gri bitti */
+:root { --prog-live: #2F9E44; --prog-soon: #E8A33D; --prog-done: #ADB5BD; }

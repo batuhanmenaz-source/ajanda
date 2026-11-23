@@ -180,6 +180,14 @@ export function parseQuick(text, now = new Date()) {
     // Tekrarlayanlar hatırlatma olarak kaydedilir; geçmişte kalan ilk tarih bir sonrakine kayar
     type = 'Hatırlatma'; endDay = null;
     if (date && date <= now) date = nextOccurrence(date, rep.rule, now) || date;
+    // Belirli günler seçildiyse ilk tarih o günlerden biri olsun
+    const dz = (rep.rule.match(/days=([\d,]+)/) || [])[1];
+    if (date && dz) {
+      // Seçili günlerden şimdiden sonraki ilki (bugün de olabilir)
+      const days = dz.split(',').map(Number);
+      const c = new Date(now); c.setHours(date.getHours(), date.getMinutes(), 0, 0);
+      date = c > now && days.includes(((c.getDay() + 6) % 7) + 1) ? c : (nextOccurrence(c, rep.rule, now) || date);
+    }
   }
   return { type, date, hasTime, mp, brand, title, yarim, endDate: endDay, repeat: rep.rule };
 }
