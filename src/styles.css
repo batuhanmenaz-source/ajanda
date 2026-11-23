@@ -1838,3 +1838,25 @@ button.it-row:hover { background: var(--chip); }
 .hd-i.on .hd-e { filter: none; opacity: 1; }
 .hd-ck { position: absolute; right: -3px; bottom: -3px; width: 15px; height: 15px; border-radius: 50%; background: #7048E8; color: #fff; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--bg); }
 @media (max-width: 420px) { .hd-i { width: 30px; height: 30px; } .hd-i .hd-e { font-size: 15px; } }
+
+/* ---------- Bugün: sağlık (Google Health) ---------- */
+.hl { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0; overflow: hidden; }
+.hl-half { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; min-width: 0; }
+.hl-sleep { background: linear-gradient(170deg, #F3F0FF, #fff 75%); border-right: 1px solid var(--line-2); }
+.hl-steps { background: linear-gradient(170deg, #EBFBEE, #fff 75%); }
+.hl-k { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.hl-big { font-family: var(--display); font-size: 24px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.hl-sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hl-stages { display: flex; height: 7px; border-radius: 999px; overflow: hidden; gap: 1px; margin-top: 4px; }
+.hl-legend { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 11px; color: var(--ink-2); }
+.hl-legend i { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.hl-goal { height: 7px; border-radius: 999px; background: #D3F9D8; overflow: hidden; margin-top: 4px; }
+.hl-goal span { display: block; height: 100%; background: #2F9E44; border-radius: 999px; }
+.hl-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; height: 52px; margin-top: auto; padding-top: 8px; }
+.hl-bars > span { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; min-width: 0; }
+.hl-bars b { display: block; width: 100%; max-width: 14px; border-radius: 3px 3px 1px 1px; opacity: .45; }
+.hl-bars > span.on b { opacity: 1; }
+.hl-bars em { font-style: normal; font-size: 9.5px; color: var(--muted); line-height: 1; }
+.hl-re { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; padding: 4px; }
+.hl-warn { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; font-size: 13.5px; }
+@media (max-width: 420px) { .hl-half { padding: 10px 11px; } .hl-big { font-size: 21px; } }

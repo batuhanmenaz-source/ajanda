@@ -21,6 +21,7 @@ import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, su
 import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
+import { useHealth, connectHealth, disconnectHealth } from './health.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote } from './sync.js';
 
 const TABS = [
@@ -106,6 +107,16 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   }, [store, say]);
 
   useEffect(() => { load(false); }, [load]);
+
+  // Google Health izninden dönüş: /?health=ok
+  const [healthMsg] = useState(() => { try { return new URLSearchParams(location.search).get('health') || ''; } catch { return ''; } });
+  useEffect(() => {
+    if (!healthMsg) return;
+    try { const u = new URL(location.href); u.searchParams.delete('health'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } catch { /* yok say */ }
+    const M = { ok: 'Google Health bağlandı ❤️', iptal: 'Google Health izni verilmedi', 'suresi-doldu': 'Bağlantı süresi doldu, tekrar dene', 'anahtar-yok': 'Google yenileme anahtarı vermedi, tekrar dene', 'kayit-hatasi': 'Kaydedilemedi: Supabase\'de 25 numaralı SQL\'i çalıştır' };
+    say(M[healthMsg] || 'Google Health bağlanamadı');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ana ekran kısayolları: simgeye uzun bas → "Gider ekle", "Sesle ekle"…
   useEffect(() => {
@@ -773,6 +784,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     });
   }, []);
   const mailState = useMail(loading ? null : onMailAnswered);
+  const healthState = useHealth(!loading);
 
   const deleteFollowup = async (f) => {
     if (!window.confirm('"' + f.title + '" silinsin mi?')) return;
@@ -1087,7 +1099,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} />}
+              {tab === 'bugun' && <TodayScreen data={viewData} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={healthState} />}
               {tab === 'takvim' && <CalendarScreen data={viewData} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} mail={mailState} />}
               {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden}
@@ -1166,7 +1178,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <YarimSettingsSheet initial={love} count={love.count} onClose={() => setSheet(null)} onSave={saveYarimSettings} />
       )}
       {sheet && sheet.kind === 'account' && (
-        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
+        <AccountSheet email={email} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })}
+          healthConnected={!!(healthState.health && healthState.health.connected)} onHealthConnect={async () => { const r = await connectHealth(); if (r && r.error) say(r.error); }}
+          onHealthDisconnect={async () => { await disconnectHealth(); healthState.reload(); say('Google Health bağlantısı kaldırıldı'); }} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
           backup={backup} onBackupNow={() => runDriveBackup(false)} onDownload={downloadBackup} onRestore={restoreBackup}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}
