@@ -418,9 +418,23 @@ export function buildPlan(h, goalsIn, today) {
 function PlanCard({ h, goals, today }) {
   const plan = useMemo(() => buildPlan(h, goals, today), [h, JSON.stringify(goals), ymdLocal(today)]);
   const T = ymdLocal(today);
+  // Kapalıyken yalnız sıradaki seans görünür; tercih bu cihazda hatırlanır
+  const [open, setOpenRaw] = useState(() => { try { return localStorage.getItem('ajanda-plan-open') === '1'; } catch { return false; } });
+  const setOpen = (v) => { setOpenRaw(v); try { localStorage.setItem('ajanda-plan-open', v ? '1' : '0'); } catch { /* yok say */ } };
+  const nextS = plan.find((x) => x.session && !x.done);
+  const sessions = plan.filter((x) => x.session).length;
+  if (!open) {
+    return (
+      <button type="button" className="card hp-plan-mini" onClick={() => setOpen(true)} aria-expanded={false}>
+        <span className="hp-plan-mini-k">📋 Önümüzdeki 7 gün · {sessions} seans</span>
+        <span className="hp-plan-mini-v">{nextS ? <><b>{ymdLocal(nextS.d) === T ? 'Bugün' : WD[nextS.d.getDay()]}</b> {nextS.title}</> : 'Bu hafta planlı seans yok'}</span>
+        <span className="hp-plan-mini-go" aria-hidden="true">▾</span>
+      </button>
+    );
+  }
   return (
     <section className="card hp-coach" aria-label="Önümüzdeki 7 gün">
-      <div className="hp-coach-hd"><b>📋 Önümüzdeki 7 gün</b><span className="hint">hedeflerine ve son haftalarına göre</span></div>
+      <button type="button" className="hp-coach-hd hp-plan-toggle" onClick={() => setOpen(false)} aria-expanded><b>📋 Önümüzdeki 7 gün</b><span className="hint">kapat ▴</span></button>
       <div className="hp-plan">
         {plan.map((x) => (
           <div key={ymdLocal(x.d)} className={'hp-plan-r' + (x.session ? ' on' : '') + (x.done ? ' done' : '') + (ymdLocal(x.d) === T ? ' today' : '')}>
