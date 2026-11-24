@@ -422,7 +422,7 @@ const QUICK = [
   ['all', 'Tümü'], ['down', '▼ Düşenler'], ['up', '▲ Artanlar'], ['stopped', 'Satışı duranlar'], ['new', 'Yeni satanlar'], ['stock', 'Stok riski'], ['cancel', 'İptali yüksek']
 ];
 const COLS = [
-  ['code', 'Stok kodu'], ['name', 'Ürün'], ['mp', 'Pzr'], ['aq', 'Adet'], ['bq', 'Önceki adet'], ['dq', 'Adet farkı'], ['dp', 'Değişim'], ['ar', 'Ciro'], ['dr', 'Ciro farkı'], ['s', 'Stok']
+  ['code', 'Stok kodu'], ['name', 'Ürün'], ['mp', 'Pzr'], ['aq', 'Adet'], ['bq', 'Önceki adet'], ['dq', 'Adet farkı'], ['dp', 'Değişim'], ['ar', 'Ciro'], ['dr', 'Ciro farkı'], ['cover', 'Stok']
 ];
 const pctTxt = (a, b) => (b ? (a / b - 1) : null);
 const fmtPct = (v) => (v == null ? '' : Math.abs(v) < 0.005 ? '0' : (v > 0 ? '+' : '−') + '%' + (Math.abs(v * 100) < 10 ? Math.abs(v * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : Math.round(Math.abs(v * 100))));
@@ -447,6 +447,9 @@ export function SalesView({ now, actions }) {
   const [exporting, setExporting] = useState(false);
   const [catalog, setCatalog] = useState(null);
   const [catOpen, setCatOpen] = useState(false);
+  const [catF, setCatF] = useState('');
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem('ajanda-sales-tab') || 'ozet'; } catch { return 'ozet'; } });
+  const setTabS = (v) => { setTab(v); if (v !== 'urunler') setCatF(''); try { localStorage.setItem('ajanda-sales-tab', v); } catch { /* yok say */ } };
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -542,7 +545,8 @@ export function SalesView({ now, actions }) {
     cancel: (r) => r.ax >= 3 && r.ax / (r.aq + r.ax) >= 0.15
   };
   const DEF_SORT = { all: ['ar', -1], down: ['dq', 1], up: ['dq', -1], stopped: ['bq', -1], new: ['aq', -1], stock: ['cover', 1], cancel: ['ax', -1] };
-  const counts = useMemo(() => Object.fromEntries(QUICK.map(([k]) => [k, rowsAll.filter(QF[k]).length])), [rowsAll]);
+  const catOk = (r) => !catF || ((r.p.c || 'Diğer').trim() || 'Diğer') === catF;
+  const counts = useMemo(() => Object.fromEntries(QUICK.map(([k]) => [k, rowsAll.filter((r) => catOk(r) && QF[k](r)).length])), [rowsAll, catF]);
 
   const insights = useMemo(() => {
     if (!view) return [];
@@ -551,7 +555,7 @@ export function SalesView({ now, actions }) {
     const rp = pctTxt(T.a.r, T.b.r);
     if (!view.allNoB && rp != null) {
       const qp = pctTxt(T.a.q, T.b.q);
-      out.push({ tone: rp >= 0 ? 'up' : 'down', text: <>Ciro <b>{tl(T.a.r)}</b>, {DATIVE[cmpLabel] || 'kıyasa'} göre <b>{fmtPct(rp)}</b> ({sign(T.a.r - T.b.r, tlShort)}). Satış adedi {nf(T.a.q)} ({fmtPct(qp)}).</> });
+      out.push({ head: true, tone: rp >= 0 ? 'up' : 'down', text: <>Ciro <b>{tl(T.a.r)}</b>, {DATIVE[cmpLabel] || 'kıyasa'} göre <b>{fmtPct(rp)}</b> ({sign(T.a.r - T.b.r, tlShort)}). Satış adedi {nf(T.a.q)} ({fmtPct(qp)}).</> });
     }
     if (view.mpRows.length > 1 && !view.allNoB) {
       const ch = view.mpRows.filter((m) => m.b.r > 0 && m.a.r > 0).map((m) => ({ mp: m.mp, v: m.a.r / m.b.r - 1 }));
@@ -584,11 +588,12 @@ export function SalesView({ now, actions }) {
         return words.every((w) => n.includes(w));
       });
     } else l = l.filter(QF[quick]);
+    if (catF) l = l.filter((r) => ((r.p.c || 'Diğer').trim() || 'Diğer') === catF);
     const [k, dir] = sortBy ? [sortBy.k, sortBy.dir] : DEF_SORT[qq ? 'all' : quick];
     const val = (r) => (k === 'code' ? String(r.p.code || r.p.barcode || '') : k === 'name' ? r.p.n : k === 'mp' ? Object.keys(r.p.mps).length : k === 'dp' ? (Number.isFinite(r.dp) ? r.dp : 1e9) : (r[k] == null ? (dir > 0 ? 1e12 : -1e12) : r[k]));
     return [...l].sort((x, y) => { const a = val(x), b = val(y); return (typeof a === 'string' ? a.localeCompare(b, 'tr', { numeric: true }) : a - b) * dir; });
-  }, [rowsAll, quick, sortBy, q]);
-  useEffect(() => { setLimit(50); }, [quick, sortBy, mpF, q, key]);
+  }, [rowsAll, quick, sortBy, q, catF]);
+  useEffect(() => { setLimit(50); }, [quick, sortBy, mpF, q, key, catF]);
 
   const pick = async (fl) => {
     const arr = [...(fl || [])].slice(0, 62);
@@ -634,14 +639,50 @@ export function SalesView({ now, actions }) {
     return { days, rows: mpsAll.map((mp) => { const own = reports.filter((r) => r.marketplace === mp); return { mp, on: days.map((d) => own.some((r) => r.period_start <= d && r.period_end >= d)) }; }) };
   }, [reports, dayKey, mpsAll]);
 
+  // ---- Ek rapor hesapları (yalnız mevcut veriden; ek indirme yok) ----
+  // Günlük seri: tek günlük raporların toplamlarından (ürün verisi gerekmez)
+  const daily = useMemo(() => {
+    if (!opt || !reports) return null;
+    const n = lenOf(opt.A[0], opt.A[1]);
+    if (n < 2 || n > 31) return null;
+    const one = (d) => {
+      const rs = reports.filter((r) => r.period_start === d && r.period_end === d && (!mpF || r.marketplace === mpF));
+      return rs.length ? rs.reduce((s, r) => s + ((r.totals || {}).r || 0), 0) : null;
+    };
+    const pts = Array.from({ length: n }, (_, i) => { const d = shift(opt.A[0], i), e = shift(opt.B[0], i); return { d, e, a: one(d), b: e <= opt.B[1] ? one(e) : null }; });
+    return pts.filter((x) => x.a != null).length >= 2 ? pts : null;
+  }, [opt && opt.A.join(), opt && opt.B.join(), reports, mpF]);
+  const contrib = useMemo(() => {
+    const l = rowsAll.filter((r) => r.hasB && Math.abs(r.dr) >= 1);
+    const up = [...l].sort((x, y) => y.dr - x.dr).filter((r) => r.dr > 0).slice(0, 5);
+    const down = [...l].sort((x, y) => x.dr - y.dr).filter((r) => r.dr < 0).slice(0, 5);
+    const max = Math.max(1, ...up.map((r) => r.dr), ...down.map((r) => -r.dr));
+    return up.length || down.length ? { up, down, max } : null;
+  }, [rowsAll]);
+  const pareto = useMemo(() => {
+    const l = rowsAll.filter((r) => r.ar > 0).sort((x, y) => y.ar - x.ar);
+    const tot = l.reduce((s, r) => s + r.ar, 0);
+    if (!tot || l.length < 10) return null;
+    let acc = 0, n = 0;
+    for (const r of l) { acc += r.ar; n++; if (acc >= tot * 0.8) break; }
+    return { n, of: l.length, top: l.slice(0, 10).reduce((s, r) => s + r.ar, 0) / tot };
+  }, [rowsAll]);
+  const cats = useMemo(() => {
+    const m = new Map();
+    rowsAll.forEach((r) => {
+      const k = (r.p.c || 'Diğer').trim() || 'Diğer';
+      const e = m.get(k) || { k, ar: 0, br: 0, aq: 0, bq: 0, n: 0 };
+      e.ar += r.ar; e.br += r.br; e.aq += r.aq; e.bq += r.bq; if (r.aq > 0) e.n++;
+      m.set(k, e);
+    });
+    return [...m.values()].filter((c) => c.ar > 0 || c.br > 0).sort((x, y) => y.ar - x.ar);
+  }, [rowsAll]);
+
   const T = view && view.tot;
   const showB = view && !view.allNoB;
-  const kpi = (label, a, b, f, extra) => (
-    <div className="sl-kpi">
-      <span>{label}</span><b>{f(a)}</b>
-      {showB ? <small>önce {f(b)} <Delta a={a} b={b} money={f === tlShort} invert={extra === 'invert'} /></small> : null}
-    </div>
-  );
+  const goTable = (qk) => { setQ(''); setQuick(qk); setSortBy(null); setTabS('urunler'); };
+  const rp = T && showB ? pctTxt(T.a.r, T.b.r) : null;
+  const coverTxt = (c) => (c == null ? '' : c < 1 ? '<1g' : c > 365 ? '1y+' : Math.round(c) + 'g');
 
   return (
     <div className="sl">
@@ -653,7 +694,7 @@ export function SalesView({ now, actions }) {
         <div className="sl-top-b">
           <button type="button" className="btn" onClick={() => setCatOpen(true)}>Ürün listesi{cat.n ? '' : ' ⚠︎'}</button>
           {view && view.mpRows.length ? <button type="button" className="btn" onClick={doExport} disabled={exporting}>{exporting ? 'Hazırlanıyor…' : '⬇ Excel'}</button> : null}
-          <button type="button" className="btn primary" onClick={() => fileRef.current && fileRef.current.click()} disabled={reading}>{reading ? 'Okunuyor…' : '⬆ Excel yükle'}</button>
+          <button type="button" className="btn primary" onClick={() => fileRef.current && fileRef.current.click()} disabled={reading}>{reading ? 'Okunuyor…' : '⬆ Rapor yükle'}</button>
         </div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => pick(e.target.files)} />
       </div>
@@ -691,112 +732,173 @@ export function SalesView({ now, actions }) {
                 </div>
               </div>
             ) : null}
-            <span className="hint sl-ctrl-h"><b>{plabel(opt.A[0], opt.A[1])}</b> ile <b>{plabel(opt.B[0], opt.B[1])}</b> kıyaslanıyor{opt.note ? ' · ' + opt.note : ''}{view && view.scaled ? ' · gün sayısı farklı dönemler günlük ortalamayla kıyaslandı' : ''}</span>
           </div>
 
           {!view ? <p className="hint">{loading ? 'Yükleniyor…' : ''}</p> : !view.mpRows.length ? (
-            <div className="card sl-empty"><b>Bu dönemin raporu yok</b><span>{plabel(opt.A[0], opt.A[1])} için rapor yükle ya da başka dönem seç. Aşağıdaki rapor takviminde hangi günlerin yüklü olduğunu görebilirsin.</span></div>
+            <div className="card sl-empty"><b>Bu dönemin raporu yok</b><span>{plabel(opt.A[0], opt.A[1])} için rapor yükle ya da başka dönem seç. Özet sekmesinin altındaki rapor takviminde hangi günlerin yüklü olduğunu görebilirsin.</span></div>
           ) : (
             <>
-              <div className="sl-kpis">
-                {kpi('Ciro', T.a.r, T.b.r, tlShort)}
-                {kpi('Satış adedi', T.a.q, T.b.q, nf)}
-                {T.a.o ? kpi('Sipariş', T.a.o, T.b.o, nf) : null}
-                {T.a.o ? kpi('Sepet ortalaması', T.a.r / T.a.o, T.b.o ? T.b.r / T.b.o : 0, tlShort) : null}
-                {T.a.x ? (
-                  <div className="sl-kpi"><span>İptal oranı</span><b>%{((T.a.x / (T.a.q + T.a.x || 1)) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</b>
-                    {showB && T.b.q ? <small>önce %{((T.b.x / (T.b.q + T.b.x || 1)) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</small> : <small>{nf(T.a.x)} adet</small>}</div>
-                ) : null}
-              </div>
+              {/* Başlık: dönem, ana sonuç ve rakamlar */}
+              <section className="card sl-hero">
+                <div className="sl-hero-top">
+                  <div className="sl-hero-p">
+                    <span>{plabel(opt.A[0], opt.A[1])}{mpF ? ' · ' + mpF : ''}</span>
+                    <small>{showB ? 'kıyas: ' + plabel(opt.B[0], opt.B[1]) + ' (' + cmpLabel.toLocaleLowerCase('tr-TR') + ')' : 'kıyas dönemi raporu yok'}{opt.note ? ' · ' + opt.note : ''}</small>
+                  </div>
+                  {rp != null ? <div className={'sl-hero-ch ' + (rp >= 0 ? 'up' : 'down')}><b>{fmtPct(rp)}</b><span>ciro</span></div> : null}
+                </div>
+                {insights[0] && insights[0].head ? <p className="sl-hero-s">{insights[0].text}</p> : null}
+                <div className="sl-strip">
+                  <div><span>Ciro</span><b>{tlShort(T.a.r)}</b>{showB ? <small>önce {tlShort(T.b.r)}</small> : null}</div>
+                  <div><span>Satış adedi</span><b>{nf(T.a.q)}</b>{showB ? <small>önce {nf(T.b.q)} <Delta a={T.a.q} b={T.b.q} /></small> : null}</div>
+                  {T.a.o ? <div><span>Sipariş</span><b>{nf(T.a.o)}</b>{showB ? <small>önce {nf(T.b.o)} <Delta a={T.a.o} b={T.b.o} /></small> : null}</div> : null}
+                  {T.a.o ? <div><span>Sepet ort.</span><b>{tlShort(T.a.r / T.a.o)}</b>{showB && T.b.o ? <small>önce {tlShort(T.b.r / T.b.o)} <Delta a={T.a.r / T.a.o} b={T.b.r / T.b.o} money /></small> : null}</div> : null}
+                  {T.a.x ? <div><span>İptal oranı</span><b>%{((T.a.x / (T.a.q + T.a.x || 1)) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</b>{showB && T.b.q ? <small>önce %{((T.b.x / (T.b.q + T.b.x || 1)) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</small> : null}</div> : null}
+                </div>
+                {view.scaled ? <span className="hint">Gün sayısı farklı dönemler günlük ortalamaya çevrilerek kıyaslandı.</span> : null}
+              </section>
 
               {view.allNoB ? <div className="card sl-note">Kıyas dönemi ({plabel(opt.B[0], opt.B[1])}) için rapor yok. Artış ve düşüşleri görmek için o dönemin raporunu da yükle ya da başka bir kıyas seç.</div> : null}
 
-              {insights.length ? (
-                <section className="card sl-card sl-ins">
-                  <h3>Özet</h3>
-                  <ul>
-                    {insights.map((x, i) => (
-                      <li key={i} className={'t-' + x.tone}>
-                        <span>{x.text}</span>
-                        {x.quick ? <button type="button" className="linkbtn" onClick={() => { setQ(''); setQuick(x.quick); setSortBy(null); document.getElementById('sl-table') && document.getElementById('sl-table').scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Listele</button> : null}
-                        {x.mp ? <button type="button" className="linkbtn" onClick={() => setMpF(x.mp)}>Süz</button> : null}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+              <div className="sl-tabs" role="tablist" aria-label="Rapor bölümü">
+                {[['ozet', 'Özet'], ['urunler', 'Ürünler', rowsAll.length], ['kategori', 'Kategoriler', cats.length]].map(([k, l, c]) => (
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTabS(k)}>{l}{c ? <span>{c}</span> : null}</button>
+                ))}
+              </div>
+
+              {tab === 'ozet' ? (
+                <>
+                  {insights.some((x) => !x.head) || pareto ? (
+                    <section className="card sl-card sl-ins">
+                      <h3>Öne çıkanlar</h3>
+                      <ul>
+                        {insights.filter((x) => !x.head).map((x, i) => (
+                          <li key={i} className={'t-' + x.tone}>
+                            <span>{x.text}</span>
+                            {x.quick ? <button type="button" className="linkbtn" onClick={() => goTable(x.quick)}>Listele</button> : null}
+                            {x.mp ? <button type="button" className="linkbtn" onClick={() => setMpF(x.mp)}>Süz</button> : null}
+                          </li>
+                        ))}
+                        {pareto ? <li className="t-info"><span>Cironun %80'i <b>{pareto.n} üründen</b> geliyor ({nf(pareto.of)} satan ürünün %{Math.max(1, Math.round((pareto.n / pareto.of) * 100))}'i). İlk 10 ürün cironun <b>%{Math.round(pareto.top * 100)}</b>'ini yapıyor.</span><button type="button" className="linkbtn" onClick={() => goTable('all')}>Listele</button></li> : null}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  <div className="sl-two">
+                    {daily ? <DailyChart pts={daily} showB={showB} /> : null}
+                    {contrib ? (
+                      <section className="card sl-card">
+                        <div className="sl-card-h"><h3>Değişimi getiren ürünler</h3><span className="hint">ciro farkı</span></div>
+                        <div className="sl-contrib">
+                          {[...contrib.up, ...contrib.down].map((r) => (
+                            <button key={r.p.id + '|' + r.p.n} type="button" className="sl-cb" onClick={() => setProd(r.p)} title={r.p.n}>
+                              <span className="sl-cb-n"><b>{r.p.code || '—'}</b> {r.p.n}</span>
+                              <span className="sl-cb-bar">
+                                <span className="neg">{r.dr < 0 ? <i style={{ width: (-r.dr / contrib.max) * 100 + '%' }} /> : null}</span>
+                                <span className="pos">{r.dr > 0 ? <i style={{ width: (r.dr / contrib.max) * 100 + '%' }} /> : null}</span>
+                              </span>
+                              <span className={'sl-cb-v ' + (r.dr > 0 ? 'up' : 'down')}>{sign(r.dr, tlShort)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
+                  </div>
+
+                  {view.mpRows.length > 1 && !mpF ? (
+                    <section className="card sl-card">
+                      <h3>Pazaryerleri</h3>
+                      <div className="sl-mpt">
+                        <div className="sl-mpt-r head"><span>Pazaryeri</span><span>Ciro</span><span>Değişim</span><span>Adet</span><span>Değişim</span><span>Pay</span></div>
+                        {view.mpRows.map((m) => {
+                          const c = m.cov; const nb = !c.B.ids.length;
+                          const warn = !c.A.ids.length ? 'bu dönem raporu yok' : nb ? 'kıyas raporu yok' : c.A.days < c.A.total ? c.A.days + '/' + c.A.total + ' gün' : c.A.approx ? 'yakın dönem' : '';
+                          return (
+                            <button key={m.mp} type="button" className="sl-mpt-r" onClick={() => setMpF(m.mp)}>
+                              <span className="sl-mpn"><span className="dot" style={{ background: mpColor(m.mp) }} />{m.mp}{warn ? <small>{warn}</small> : null}</span>
+                              <span>{tlShort(m.a.r)}</span>
+                              <span><Delta a={m.a.r} b={m.b.r} money none={nb} /></span>
+                              <span>{nf(m.a.q)}</span>
+                              <span><Delta a={m.a.q} b={m.b.q} none={nb} /></span>
+                              <span className="sl-share"><i style={{ width: (T.a.r ? (m.a.r / T.a.r) * 100 : 0) + '%', background: mpColor(m.mp) }} />%{T.a.r ? Math.round((m.a.r / T.a.r) * 100) : 0}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : null}
+                </>
               ) : null}
 
-              {view.mpRows.length > 1 && !mpF ? (
+              {tab === 'kategori' ? (
                 <section className="card sl-card">
-                  <h3>Pazaryerleri</h3>
-                  <div className="sl-mpt">
-                    <div className="sl-mpt-r head"><span>Pazaryeri</span><span>Ciro</span><span>Fark</span><span>Adet</span><span>Fark</span><span>Pay</span></div>
-                    {view.mpRows.map((m) => {
-                      const c = m.cov; const nb = !c.B.ids.length;
-                      const warn = !c.A.ids.length ? 'bu dönem raporu yok' : nb ? 'kıyas raporu yok' : c.A.days < c.A.total ? c.A.days + '/' + c.A.total + ' gün' : c.A.approx ? 'yakın dönem' : '';
-                      return (
-                        <button key={m.mp} type="button" className="sl-mpt-r" onClick={() => setMpF(m.mp)}>
-                          <span className="sl-mpn"><span className="dot" style={{ background: mpColor(m.mp) }} />{m.mp}{warn ? <small>{warn}</small> : null}</span>
-                          <span>{tlShort(m.a.r)}</span>
-                          <span><Delta a={m.a.r} b={m.b.r} money none={nb} /></span>
-                          <span>{nf(m.a.q)}</span>
-                          <span><Delta a={m.a.q} b={m.b.q} none={nb} /></span>
-                          <span className="sl-share"><i style={{ width: (T.a.r ? (m.a.r / T.a.r) * 100 : 0) + '%', background: mpColor(m.mp) }} />%{T.a.r ? Math.round((m.a.r / T.a.r) * 100) : 0}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ) : null}
-
-              <section className="card sl-card" id="sl-table">
-                <div className="sl-card-h">
-                  <h3>Ürünler{mpF ? <span className="sl-fil"> · {mpF} <button type="button" className="linkbtn" aria-label="Pazaryeri süzgecini kaldır" onClick={() => setMpF('')}>✕</button></span> : null}</h3>
-                  <span className="hint">{q.trim() ? list.length + ' sonuç' : counts[quick] + ' ürün'}</span>
-                </div>
-                {view.noCode ? (
-                  <div className="sl-cat-hint">
-                    <span>{nf(view.noCode)} ürünün stok kodu yok{cat.n ? ' (ürün listesinde barkodu bulunamadı)' : ''}. {cat.n ? 'Güncel ürün listesini yükle.' : 'Trendyol ürünlerini stok koduna bağlamak için barkod–stok kodu listeni bir kez yükle.'}</span>
-                    <button type="button" className="linkbtn" onClick={() => setCatOpen(true)}>{cat.n ? 'Güncelle' : 'Ürün listesi yükle'}</button>
-                  </div>
-                ) : null}
-                <p className="sl-legend"><b>Adet</b> ve <b>Ciro</b>: {plabel(opt.A[0], opt.A[1])} · <b>Önceki adet</b>: {plabel(opt.B[0], opt.B[1])}{view.scaled ? ' (gün sayısı farklı, günlük ortalamaya çevrildi)' : ''} · <b>Adet farkı</b> = Adet − Önceki adet · <b>Değişim</b> = farkın önceki adede oranı</p>
-                <input className="sl-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Stok kodu, barkod ya da ürün adı" aria-label="Stok kodu, barkod ya da ürün adı ile ara" />
-                {!q.trim() ? (
-                  <div className="typechips sl-quick">
-                    {QUICK.map(([k, l]) => (counts[k] || k === 'all' || k === quick ? <button key={k} type="button" className={'chip' + (quick === k ? ' on' : '')} onClick={() => { setQuick(k); setSortBy(null); }}>{l} <span className="sl-cnt">{counts[k]}</span></button> : null))}
-                  </div>
-                ) : null}
-                <div className="sl-tbl" role="table" aria-label="Ürün raporu">
-                  <div className="sl-tr head" role="row">
-                    {COLS.map(([k, l]) => (
-                      <button key={k} type="button" role="columnheader" className={'c-' + k + (sortCur.k === k ? ' on' : '')} aria-sort={sortCur.k === k ? (sortCur.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick={() => clickSort(k)}>
-                        {l}{sortCur.k === k ? (sortCur.dir > 0 ? ' ↑' : ' ↓') : ''}
+                  <div className="sl-card-h"><h3>Kategoriler</h3><span className="hint">dokun → kategorinin ürünleri</span></div>
+                  <div className="sl-ct">
+                    <div className="sl-ct-r head"><span>Kategori</span><span>Ciro</span><span>Ciro farkı</span><span>Değişim</span><span>Adet</span><span>Satan ürün</span></div>
+                    {cats.map((c) => (
+                      <button key={c.k} type="button" className="sl-ct-r" onClick={() => { setCatF(c.k); setQ(''); setQuick('all'); setSortBy(null); setTabS('urunler'); }}>
+                        <span className="sl-ct-n">{c.k}<i style={{ width: (cats[0].ar ? (c.ar / cats[0].ar) * 100 : 0) + '%' }} /></span>
+                        <span>{tlShort(c.ar)}</span>
+                        <span className={showB && Math.abs(c.ar - c.br) >= 1 ? (c.ar > c.br ? 'up' : 'down') : ''}>{showB ? sign(c.ar - c.br, tlShort) : ''}</span>
+                        <span>{showB ? <Delta a={c.ar} b={c.br} money /> : null}</span>
+                        <span>{nf(c.aq)}</span>
+                        <span>{c.n}</span>
                       </button>
                     ))}
                   </div>
-                  {list.slice(0, limit).map((r) => (
-                    <button key={r.p.id + '|' + r.p.n} type="button" role="row" className="sl-tr" onClick={() => setProd(r.p)}>
-                      <span className="c-code">{r.p.code || r.p.barcode || '—'}</span>
-                      <span className="c-name" title={r.p.n}>{r.p.n}</span>
-                      <span className="c-mp">{Object.keys(r.p.mps).filter((mp) => !mpF || mp === mpF).map((mp) => <span key={mp} className="dot" title={mp} style={{ background: mpColor(mp) }} />)}</span>
-                      <span className="c-aq"><b>{nf(r.aq)}</b></span>
-                      <span className="c-bq">{r.hasB ? nf(r.bq) : '—'}</span>
-                      <span className={'c-dq ' + (r.hasB && Math.abs(r.dq) >= 0.5 ? (r.dq > 0 ? 'up' : 'down') : '')}>{r.hasB ? sign(r.dq, nf) : ''}</span>
-                      <span className={'c-dp ' + (r.hasB && Math.abs(r.dq) >= 0.5 ? (r.dq > 0 ? 'up' : 'down') : '')}>{!r.hasB ? '' : !r.bq ? (r.aq ? 'yeni' : '') : !r.aq ? '−%100' : fmtPct(r.aq / r.bq - 1)}</span>
-                      <span className="c-ar">{tlShort(r.ar)}</span>
-                      <span className={'c-dr ' + (r.hasB && Math.abs(r.dr) >= 1 ? (r.dr > 0 ? 'up' : 'down') : '')}>{r.hasB ? sign(r.dr, tlShort) : ''}</span>
-                      <span className={'c-s' + (r.cover != null && r.cover < 7 ? ' hot' : '')}>{r.s == null ? '' : nf(r.s)}</span>
-                    </button>
-                  ))}
-                </div>
-                {!list.length ? <p className="hint" style={{ margin: 0 }}>{q.trim() ? 'Bu kodla ya da adla ürün bulunamadı.' : 'Bu listede ürün yok.'}</p> : null}
-                {list.length > limit ? <button type="button" className="btn" onClick={() => setLimit((l) => l + 100)}>Daha fazla göster ({list.length - limit})</button> : null}
-              </section>
+                </section>
+              ) : null}
+
+              {tab === 'urunler' ? (
+                <section className="card sl-card" id="sl-table">
+                  <div className="sl-card-h">
+                    <h3>Ürünler{mpF ? <span className="sl-fil"> · {mpF} <button type="button" className="linkbtn" aria-label="Pazaryeri süzgecini kaldır" onClick={() => setMpF('')}>✕</button></span> : null}{catF ? <span className="sl-fil"> · {catF} <button type="button" className="linkbtn" aria-label="Kategori süzgecini kaldır" onClick={() => setCatF('')}>✕</button></span> : null}</h3>
+                    <span className="hint">{list.length} ürün</span>
+                  </div>
+                  {view.noCode ? (
+                    <div className="sl-cat-hint">
+                      <span>{nf(view.noCode)} ürünün stok kodu yok{cat.n ? ' (ürün listesinde barkodu bulunamadı)' : ''}. {cat.n ? 'Güncel ürün listesini yükle.' : 'Trendyol ürünlerini stok koduna bağlamak için barkod–stok kodu listeni bir kez yükle.'}</span>
+                      <button type="button" className="linkbtn" onClick={() => setCatOpen(true)}>{cat.n ? 'Güncelle' : 'Ürün listesi yükle'}</button>
+                    </div>
+                  ) : null}
+                  <input className="sl-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Stok kodu, barkod ya da ürün adı" aria-label="Stok kodu, barkod ya da ürün adı ile ara" />
+                  {!q.trim() ? (
+                    <div className="typechips sl-quick">
+                      {QUICK.map(([k, l]) => (counts[k] || k === 'all' || k === quick ? <button key={k} type="button" className={'chip' + (quick === k ? ' on' : '')} onClick={() => { setQuick(k); setSortBy(null); }}>{l} <span className="sl-cnt">{counts[k]}</span></button> : null))}
+                    </div>
+                  ) : null}
+                  <p className="sl-legend"><b>Adet</b>, <b>Ciro</b>: {plabel(opt.A[0], opt.A[1])} · <b>Önceki adet</b>: {plabel(opt.B[0], opt.B[1])} · <b>Adet farkı</b> = Adet − Önceki adet · <b>Stok</b>: güncel stok ve bu satış hızıyla kaç gün yeteceği</p>
+                  <div className="sl-tbl" role="table" aria-label="Ürün raporu">
+                    <div className="sl-tr head" role="row">
+                      {COLS.map(([k, l]) => (
+                        <button key={k} type="button" role="columnheader" className={'c-' + k + (sortCur.k === k ? ' on' : '')} aria-sort={sortCur.k === k ? (sortCur.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick={() => clickSort(k)}>
+                          {l}{sortCur.k === k ? (sortCur.dir > 0 ? ' ↑' : ' ↓') : ''}
+                        </button>
+                      ))}
+                    </div>
+                    {list.slice(0, limit).map((r) => (
+                      <button key={r.p.id + '|' + r.p.n} type="button" role="row" className="sl-tr" onClick={() => setProd(r.p)}>
+                        <span className={'c-code' + (r.p.code ? '' : ' none')}>{r.p.code || r.p.barcode || '—'}</span>
+                        <span className="c-name" title={r.p.n}>{r.p.n}</span>
+                        <span className="c-mp">{Object.keys(r.p.mps).filter((mp) => !mpF || mp === mpF).map((mp) => <span key={mp} className="dot" title={mp} style={{ background: mpColor(mp) }} />)}</span>
+                        <span className="c-aq"><b>{nf(r.aq)}</b></span>
+                        <span className="c-bq">{r.hasB ? nf(r.bq) : '—'}</span>
+                        <span className={'c-dq ' + (r.hasB && Math.abs(r.dq) >= 0.5 ? (r.dq > 0 ? 'up' : 'down') : '')}>{r.hasB ? sign(r.dq, nf) : ''}</span>
+                        <span className={'c-dp ' + (r.hasB && Math.abs(r.dq) >= 0.5 ? (r.dq > 0 ? 'up' : 'down') : '')}>{!r.hasB ? '' : !r.bq ? (r.aq ? 'yeni' : '') : !r.aq ? '−%100' : fmtPct(r.aq / r.bq - 1)}</span>
+                        <span className="c-ar">{tlShort(r.ar)}</span>
+                        <span className={'c-dr ' + (r.hasB && Math.abs(r.dr) >= 1 ? (r.dr > 0 ? 'up' : 'down') : '')}>{r.hasB ? sign(r.dr, tlShort) : ''}</span>
+                        <span className={'c-s' + (r.cover != null && r.cover < 7 ? ' hot' : r.cover != null && r.cover < 14 ? ' warm' : '')}>{r.s == null ? '' : <>{nf(r.s)}{r.cover != null ? <small>{coverTxt(r.cover)}</small> : null}</>}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {!list.length ? <p className="hint" style={{ margin: 0 }}>{q.trim() ? 'Bu kodla ya da adla ürün bulunamadı.' : 'Bu listede ürün yok.'}</p> : null}
+                  {list.length > limit ? <button type="button" className="btn" onClick={() => setLimit((l) => l + 100)}>Daha fazla göster ({list.length - limit})</button> : null}
+                </section>
+              ) : null}
             </>
           )}
 
-          {coverage ? (
+          {coverage && (tab === 'ozet' || !view || !view.mpRows.length) ? (
             <section className="card sl-card">
               <div className="sl-card-h"><h3>Rapor takvimi</h3><span className="hint">son 35 gün · dolu = rapor var</span></div>
               <div className="sl-cov">
@@ -840,5 +942,35 @@ export function SalesView({ now, actions }) {
       {catOpen ? <CatalogSheet catalog={catalog} onClose={() => setCatOpen(false)} onSaved={(row) => { setCatalog(row); setCatOpen(false); }} /> : null}
       {prod && opt ? <ProductSheet noB={view ? view.noB : new Set()} p={prod} A={opt.A} B={opt.B} metric="q" reports={reports || []} now={now} onClose={() => setProd(null)} /> : null}
     </div>
+  );
+}
+
+// Günlük ciro: bu dönem (dolu çubuk) ve kıyas dönemi (açık çubuk), aynı eksende
+function DailyChart({ pts, showB }) {
+  const [hov, setHov] = useState(null);
+  const max = Math.max(1, ...pts.map((x) => Math.max(x.a || 0, showB ? x.b || 0 : 0)));
+  const h = hov != null ? pts[hov] : null;
+  const tA = pts.reduce((s, x) => s + (x.a || 0), 0);
+  return (
+    <section className="card sl-card">
+      <div className="sl-card-h"><h3>Günlük ciro</h3>
+        <span className="sl-leg"><i className="a" />Bu dönem{showB ? <><i className="b" />Kıyas</> : null}</span>
+      </div>
+      <div className="sl-dc-tip" aria-live="polite">
+        {h ? <><b>{dm(h.d)}</b> {h.a == null ? 'rapor yok' : tl(h.a)}{showB ? <> · <span>{dm(h.e)}: {h.b == null ? 'rapor yok' : tl(h.b)}</span>{h.a != null && h.b ? <> <Delta a={h.a} b={h.b} money /></> : null}</> : null}</>
+          : <span className="hint">Günlük ortalama {tlShort(tA / Math.max(1, pts.filter((x) => x.a != null).length))} · çubuğun üzerine gel</span>}
+      </div>
+      <div className="sl-dc" style={{ '--n': pts.length }} onMouseLeave={() => setHov(null)}>
+        {pts.map((x, i) => (
+          <div key={x.d} className={'sl-dc-c' + (hov === i ? ' on' : '')} onMouseEnter={() => setHov(i)} onClick={() => setHov(i)} role="img" aria-label={dm(x.d) + ': ' + (x.a == null ? 'rapor yok' : tl(x.a))}>
+            <div className="sl-dc-bars">
+              {showB ? <span className="b" style={{ height: x.b ? (x.b / max) * 100 + '%' : 0 }} /> : null}
+              <span className={'a' + (x.a == null ? ' none' : '')} style={{ height: x.a == null ? '100%' : (x.a / max) * 100 + '%' }} />
+            </div>
+            <span className="sl-dc-l">{pts.length > 16 && i % 2 ? '' : Number(x.d.slice(8))}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
