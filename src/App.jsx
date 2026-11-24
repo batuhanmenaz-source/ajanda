@@ -84,10 +84,11 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const toastTimer = useRef(null);
   const loadedRange = useRef(null);
 
-  const say = useCallback((msg) => {
-    setToast(msg);
+  // Bildirim; undo verilirse 6 sn "Geri al" düğmesiyle
+  const say = useCallback((msg, undo) => {
+    setToast(undo ? { msg, undo } : msg);
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 3500);
+    toastTimer.current = setTimeout(() => setToast(null), undo ? 6000 : 3500);
   }, []);
 
   useEffect(() => { try { sessionStorage.setItem('ajanda-tab', tab); } catch { /* yok say */ } }, [tab]);
@@ -486,6 +487,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     const done = !item.done;
     if (table === 'calls') cleaning.current.add(item.id);
     patchLocal(table, item.id, { done });
+    if (done) say(table === 'calls' ? 'Arandı olarak işaretlendi' : 'Tamamlandı ✓', () => toggle(table, { ...item, done: true }));
     try {
       await store.update(table, item.id, { done });
       const id = await gsync(() => (table === 'reminders' ? syncReminder({ ...item, done }) : syncCall({ ...item, done })));
@@ -943,7 +945,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     const base = item.due_at ? new Date(item.due_at) : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0);
     const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, base.getHours(), base.getMinutes());
     const row = await saveItem(table, { id: item.id, due_at: t.toISOString() }, true);
-    if (row) say((table === 'calls' ? item.who : item.title) + ' yarına alındı');
+    if (row) say((table === 'calls' ? item.who : item.title) + ' yarına alındı', () => saveItem(table, { id: item.id, due_at: item.due_at || null }, true));
   };
   const actions = {
     saveSalesPrefs,
@@ -1319,7 +1321,11 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}
 
-      {toast ? <div className="toast" role="status">{toast}</div> : null}
+      {toast ? (
+        <div className="toast" role="status">
+          {typeof toast === 'string' ? toast : <>{toast.msg}<button type="button" className="toast-undo" onClick={() => { const u = toast.undo; setToast(null); u(); }}>Geri al</button></>}
+        </div>
+      ) : null}
     </div>
   );
 }

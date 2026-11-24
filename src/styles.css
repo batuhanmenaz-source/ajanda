@@ -2376,3 +2376,5 @@ button.it-row:hover { background: var(--chip); }
 .row-later { align-self: center; flex: none; margin-left: 4px; }
 .ct-open { background: #E7F5FF; color: #1864AB; }
 .ct-last { color: var(--muted); }
+.toast-undo { margin-left: 14px; border: 0; background: none; color: #91A7FF; font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
+.toast { display: flex; align-items: center; }
