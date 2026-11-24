@@ -311,3 +311,78 @@ export function buildCatalog(rows, bc, code) {
   rows.forEach((r) => { const b = cell(r[bc]).replace(/\s/g, ''), c = cell(r[code]); if (b && c) m.set(b, c.slice(0, 40)); });
   return [...m.entries()];
 }
+
+// ---------- Ürün karnesi matrisi ----------
+// Bir "son gün" (çapa) etrafında sabit dönemler: dün/önceki gün/geçen hafta aynı gün, 7 gün/önceki 7, 30 gün/önceki 30, 8 hafta
+export function anchorPeriods(A) {
+  const P = {
+    D: [A, A], D1: [shift(A, -1), shift(A, -1)], Dw: [shift(A, -7), shift(A, -7)],
+    W: [shift(A, -6), A], W1: [shift(A, -13), shift(A, -7)],
+    M: [shift(A, -29), A], M1: [shift(A, -59), shift(A, -30)]
+  };
+  for (let i = 0; i < 8; i++) P['w' + i] = [shift(A, -7 * i - 6), shift(A, -7 * i)];
+  return P;
+}
+// Son gün: tek günlük raporların en yenisi (yoksa herhangi bir raporun en son günü)
+export function anchorDay(reports) {
+  const one = reports.filter((r) => r.period_start === r.period_end).map((r) => r.period_end).sort();
+  if (one.length) return one[one.length - 1];
+  const all = reports.map((r) => r.period_end).sort();
+  return all.length ? all[all.length - 1] : null;
+}
+// Gereken rapor kimlikleri ve kapsama
+export function planMatrix(reports, mps, periods) {
+  const cov = {};
+  mps.forEach((mp) => { cov[mp] = {}; Object.entries(periods).forEach(([pid, [a, b]]) => { cov[mp][pid] = coverReports(reports, mp, a, b); }); });
+  const ids = [...new Set(mps.flatMap((mp) => Object.values(cov[mp]).flatMap((c) => c.ids)))];
+  return { cov, ids };
+}
+// Ürünler × dönemler × pazaryerleri. codeOf(mp, item) stok kodunu verir (ürün listesi / SaticiSKU).
+export function buildMatrix({ cov, byId, mps, periods, codeOf, barcodeOf }) {
+  const maps = {};
+  mps.forEach((mp) => { maps[mp] = {}; Object.keys(periods).forEach((pid) => { const c = cov[mp][pid]; maps[mp][pid] = c.ids.length ? sumItems(c.ids.map((id) => byId[id])) : null; }); });
+  const entries = [], idx = new Map();
+  mps.forEach((mp) => Object.values(maps[mp]).forEach((m) => m && m.forEach((x) => {
+    const key = mp + '|' + x.k;
+    if (idx.has(key)) { const e = entries[idx.get(key)]; if ((x.n || '').length > (e.n || '').length) e.n = x.n; if (!e.c && x.c) e.c = x.c; return; }
+    idx.set(key, entries.length); entries.push({ mp, k: x.k, m: codeOf(mp, x), n: x.n, br: x.br, b: x.b, c: x.c });
+  })));
+  const g = groupProducts(entries);
+  const out = new Map();
+  const stockOrder = ['D', 'W', 'M'];
+  entries.forEach((e, i) => {
+    const p = out.get(g[i]) || { id: '', n: e.n, code: '', barcode: '', c: e.c, keys: {}, codes: [], v: {}, s: {} };
+    if ((e.n || '').length > (p.n || '').length && !/\($/.test(e.n)) p.n = e.n;
+    if (!p.c && e.c) p.c = e.c;
+    (p.keys[e.mp] = p.keys[e.mp] || []).push(e.k);
+    if (e.m && !p.code) p.code = e.m;
+    const bcd = e.b || (isBarcode(e.k) ? e.k : null) || (e.m ? barcodeOf(e.m) : '');
+    if (bcd && !p.barcode) p.barcode = bcd;
+    p.codes.push(e.k); if (e.m) p.codes.push(e.m); if (bcd) p.codes.push(bcd);
+    Object.keys(periods).forEach((pid) => {
+      const m = maps[e.mp][pid]; const x = m && m.get(e.k); if (!x) return;
+      const t = (p.v[pid] = p.v[pid] || {}); const z = (t[e.mp] = t[e.mp] || { q: 0, r: 0, x: 0 });
+      z.q += x.q || 0; z.r += x.r || 0; z.x += x.x || 0;
+    });
+    for (const pid of stockOrder) { const m = maps[e.mp][pid]; const x = m && m.get(e.k); if (x && x.s != null) { p.s[e.mp] = (p.s[e.mp] || 0) + x.s; break; } }
+    out.set(g[i], p);
+  });
+  const list = [...out.values()];
+  list.forEach((p) => { p.id = p.code ? 'c:' + codeKey(p.code) : p.barcode ? 'b:' + p.barcode : 'k:' + p.keys[Object.keys(p.keys)[0]][0]; });
+  return list;
+}
+// Bir ürünün (ya da toplamın) dönem değeri; mpF verilirse yalnız o pazaryeri
+export const valOf = (p, pid, mps, metric) => { const t = p.v[pid]; if (!t) return 0; let s = 0; mps.forEach((mp) => { if (t[mp]) s += t[mp][metric] || 0; }); return s; };
+// İki dönem kıyası: yalnız iki dönemde de raporu olan pazaryerleri, gün başı ortalamayla
+export function deltaOf(p, P, P2, mps, cov, metric) {
+  let a = 0, b = 0, ok = false;
+  mps.forEach((mp) => {
+    const ca = cov[mp] && cov[mp][P], cb = cov[mp] && cov[mp][P2];
+    if (!ca || !cb || !ca.days || !cb.days) return;
+    ok = true;
+    const t = p.v[P] && p.v[P][mp], u = p.v[P2] && p.v[P2][mp];
+    a += (t ? t[metric] : 0) / ca.days; b += (u ? u[metric] : 0) / cb.days;
+  });
+  if (!ok) return null;
+  return { a, b, pct: b ? a / b - 1 : (a ? Infinity : 0) };
+}

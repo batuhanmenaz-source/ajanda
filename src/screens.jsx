@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SalesDigestCard } from './salesdigest.jsx';
 import { Icon } from './Icons.jsx';
 import { Mp, Check, Section, Progress, Sheet } from './ui.jsx';
 import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START, YARIM_STARTS } from './constants.js';
@@ -598,7 +599,7 @@ function DoneFold({ items, render }) {
 
 
 // ---------- BUGÜN ----------
-export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health, healthHidden, hide = new Set(), onEditToday }) {
+export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health, salesDigest, healthHidden, hide = new Set(), onEditToday }) {
   const H = (k) => !hide.has(k);
   const allData = scopeData(rawData, scope);
   const missedEl = <MissedCallsSection missed={allData.missed_calls} now={now} actions={actions} contacts={allData.contacts} />;
@@ -720,6 +721,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
     <TodayTiles scope={scope} data={rawData} now={now} revenue={revenue} revReady={revReady} mail={mail} health={health} budgets={budgets}
       campLive={liveCamps} campSoon={campsAll.filter((c) => campaignStatus(c, now).key === 'soon')} lateCount={lateCount}
       hide={healthHidden ? new Set([...hide, 'saglik']) : hide} goTab={goTab} actions={actions} />
+    {scope !== 'ozel' && H('satis') ? <SalesDigestCard digest={salesDigest} now={now} onOpen={() => goTab('satislar')} /> : null}
     {showSummary && H('ozet') ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2 today-grid">
       <div className="today-col">
@@ -808,7 +810,7 @@ export const TODAY_CARDS = [
   ['hava', '🌤️ Hava durumu'], ['piyasa', '💱 Döviz ve altın'],
   ['ciro', '📈 Kutu: Dünkü ciro'], ['saglik', '❤️ Kutu: Sağlık'], ['mail', '📧 Kutu: Mailler'], ['influencer', '🎬 Kutu: Influencer'],
   ['bekleyen', '⏳ Kutu: Bekleyenler'], ['cuzdan', '👛 Kutu: Cüzdan'], ['aliskanlik', '✅ Kutu: Alışkanlıklar (Özel)'], ['ozelgun', '🎂 Kutu: Özel gün (Özel)'],
-  ['ozet', '🗓️ Haftalık özet'], ['kampanya', '📣 Kampanyalar'], ['takvim', '📅 Google Takvim'], ['yaklasan', '🔜 Yaklaşan günler'], ['pazaryeri', '🏪 Pazaryerleri şeridi']
+  ['satis', '🛒 Satış raporu özeti'], ['ozet', '🗓️ Haftalık özet'], ['kampanya', '📣 Kampanyalar'], ['takvim', '📅 Google Takvim'], ['yaklasan', '🔜 Yaklaşan günler'], ['pazaryeri', '🏪 Pazaryerleri şeridi']
 ];
 export function TodayEditSheet({ hide, onToggle, onReset, onClose }) {
   return (

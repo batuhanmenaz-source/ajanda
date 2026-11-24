@@ -1,5 +1,6 @@
 // İş → Özet: işin tamamına tek bakış (ciro, kampanya, influencer, bekleyen, mail, geciken)
 import { useMemo } from 'react';
+import { SalesDigestCard } from './salesdigest.jsx';
 import { mpColor, SRC_COLORS } from './constants.js';
 import { WEEKDAYS, MONTHS, startOfDay, addDays, toDateInput, fromDateInput, daysBetween, fmtShort, fmtTime } from './dates.js';
 import { tl, tlShort, glanceDefaultDay } from './revenue.jsx';
@@ -25,7 +26,7 @@ function Card({ title, tone, meta, onAll, children, className }) {
   );
 }
 
-export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, setSeg }) {
+export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, setSeg, salesDigest }) {
   const today = startOfDay(now);
   const todayKey = toDateInput(today);
   const mk = todayKey.slice(0, 7);
@@ -111,6 +112,8 @@ export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, se
           {late.length ? <span className="wd-pill" style={{ '--tone': '#C92A2A' }}>{late.length} geciken iş</span> : <span className="wd-pill" style={{ '--tone': '#2B8A3E' }}>Geciken iş yok</span>}
         </div>
       </div>
+
+      <SalesDigestCard digest={salesDigest} now={now} onOpen={() => setSeg('satislar')} />
 
       {/* Özet kutuları */}
       <div className="wd-tiles">

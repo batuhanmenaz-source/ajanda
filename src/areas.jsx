@@ -16,15 +16,15 @@ import { WORK_TABS, PRIVATE_TABS, SubTabs, WORK_PRIMARY, PRIVATE_PRIMARY } from 
 export { WORK_TABS, PRIVATE_TABS, SubTabs };
 
 
-export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder, mail }) {
+export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder, mail, salesPrefs }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" grid primary={WORK_PRIMARY} />
-      {seg === 'ozet' ? <WorkDashboard data={data} now={now} actions={actions} revenue={revenue} revTarget={revTarget} mail={mail} setSeg={setSeg} />
+      {seg === 'ozet' ? <WorkDashboard data={data} now={now} actions={actions} revenue={revenue} revTarget={revTarget} mail={mail} setSeg={setSeg} salesDigest={salesPrefs && salesPrefs.digest} />
         : seg === 'ciro' ? <RevenueScreen revenue={revenue} loaded={revLoaded} error={revError} target={revTarget} now={now} actions={actions} order={revOrder} campaigns={data.campaigns} onSales={() => setSeg('satislar')} />
         : seg === 'mailler' ? <MailView mail={mail} followups={data.followups} actions={actions} now={now} />
         : seg === 'bekleyenler' ? <FollowupsView data={data} now={now} actions={actions} />
-        : seg === 'satislar' ? <SalesView now={now} actions={actions} />
+        : seg === 'satislar' ? <SalesView now={now} actions={actions} prefs={salesPrefs} />
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
         : seg === 'notlar' ? <MarketplaceNotes data={data} actions={actions} />
           : seg === 'influencer' ? <InfluencerScreen data={data} now={now} actions={actions} />

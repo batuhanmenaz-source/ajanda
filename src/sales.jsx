@@ -1,12 +1,12 @@
-// İş → Satış raporları: pazaryeri satış Excel'lerinden ürün ve pazaryeri bazında dönem karşılaştırması.
+// İş → Satış raporları: ürün karnesi. Her ürün için dün / 7 gün / 30 gün değişimi, pazaryeri kırılımı, stok.
 // Hafif kalması için: Excel okuyucu yalnız yükleme anında iner; raporlar yalnız bu sayfa açılınca listelenir;
-// ürünler sadece seçilen dönemlerin raporları için çekilir ve oturum boyunca bellekte tutulur.
+// ürünler son 60 günün raporlarından bir kez indirilir ve cihazda (IndexedDB) saklanır, sonra yalnız yeni raporlar iner.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, DEMO } from './supabase.js';
 import { MARKETPLACES, mpColor } from './constants.js';
 import { tl, tlShort } from './revenue.jsx';
 import { Sheet } from './ui.jsx';
-import { parseSales, fileDate, readCatalog, buildCatalog, codeKey, str, coverReports, sumItems, compareProducts, lenOf, shift, ymd } from './salesparse.js';
+import { parseSales, fileDate, readCatalog, buildCatalog, codeKey, str, lenOf, shift, ymd, anchorDay, anchorPeriods, planMatrix, buildMatrix, valOf, deltaOf } from './salesparse.js';
 
 // ---------- Saklama ----------
 const DEMO_KEY = 'ajanda-sales-demo-v1';
@@ -21,15 +21,52 @@ async function listReports() {
   if (error) throw error;
   return data || [];
 }
+// Kalıcı önbellek: rapor ürünleri değişmez; bir kez inen cihazda kalır
+let idbP = null;
+function idb() {
+  if (idbP) return idbP;
+  idbP = new Promise((res) => {
+    try { const r = indexedDB.open('ajanda-sales', 1); r.onupgradeneeded = () => r.result.createObjectStore('items'); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }
+    catch { res(null); }
+  });
+  return idbP;
+}
+async function idbGet(ids) {
+  const db = await idb(); if (!db || !ids.length) return {};
+  return new Promise((res) => {
+    const out = {};
+    try {
+      const tx = db.transaction('items', 'readonly'); const st = tx.objectStore('items');
+      ids.forEach((id) => { const q = st.get(id); q.onsuccess = () => { if (q.result) out[id] = q.result; }; });
+      tx.oncomplete = () => res(out); tx.onerror = () => res(out); tx.onabort = () => res(out);
+    } catch { res(out); }
+  });
+}
+async function idbPut(pairs) {
+  const db = await idb(); if (!db || !pairs.length) return;
+  try { const tx = db.transaction('items', 'readwrite'); const st = tx.objectStore('items'); pairs.forEach(([id, v]) => st.put(v, id)); } catch { /* yok say */ }
+}
+// Artık listede olmayan raporları cihazdan da sil
+async function idbPrune(keep) {
+  const db = await idb(); if (!db) return;
+  try {
+    const tx = db.transaction('items', 'readwrite'); const st = tx.objectStore('items'); const q = st.getAllKeys();
+    q.onsuccess = () => (q.result || []).forEach((k) => { if (!keep.has(k)) st.delete(k); });
+  } catch { /* yok say */ }
+}
 async function loadItems(ids) {
-  const need = ids.filter((id) => !itemCache.has(id));
+  let need = ids.filter((id) => !itemCache.has(id));
   if (need.length) {
     if (DEMO) demoAll().filter((x) => need.includes(x.id)).forEach((x) => itemCache.set(x.id, x.items || []));
     else {
-      for (let i = 0; i < need.length; i += 20) {
-        const { data, error } = await supabase.from('sales_reports').select('id, items').in('id', need.slice(i, i + 20));
+      const local = await idbGet(need);
+      Object.entries(local).forEach(([id, v]) => itemCache.set(id, v));
+      need = need.filter((id) => !itemCache.has(id));
+      for (let i = 0; i < need.length; i += 15) {
+        const { data, error } = await supabase.from('sales_reports').select('id, items').in('id', need.slice(i, i + 15));
         if (error) throw error;
         (data || []).forEach((x) => itemCache.set(x.id, x.items || []));
+        idbPut((data || []).map((x) => [x.id, x.items || []]));
       }
     }
   }
@@ -48,10 +85,12 @@ async function saveReport(rep, replaceId) {
   const { data, error } = await supabase.from('sales_reports').insert({ user_id: u.user.id, ...rep }).select(META).single();
   if (error) throw error;
   itemCache.set(data.id, rep.items);
+  idbPut([[data.id, rep.items]]);
   return data;
 }
 async function deleteReport(id) {
   itemCache.delete(id);
+  idb().then((db) => { try { if (db) db.transaction('items', 'readwrite').objectStore('items').delete(id); } catch { /* yok say */ } });
   if (DEMO) { demoSet(demoAll().filter((x) => x.id !== id)); return; }
   const { error } = await supabase.from('sales_reports').delete().eq('id', id);
   if (error) throw error;
@@ -83,46 +122,6 @@ const nf = (v) => Math.round(v || 0).toLocaleString('tr-TR');
 const SHORT = { Trendyol: 'TY', Hepsiburada: 'HB', Amazon: 'AMZ', MCLUB: 'MC', Boyner: 'BOY', N11: 'N11', Pazarama: 'PZR', Beymen: 'BEY', 'İdefix': 'İDF' };
 const short = (mp) => SHORT[mp] || mp.slice(0, 3).toUpperCase();
 const missingTable = (e) => /sales_reports/.test(String(e && e.message));
-
-function Delta({ a, b, money, invert, showAbs, none }) {
-  if (none) return <span className="sl-d flat">kıyas yok</span>;
-  if (!b && !a) return <span className="sl-d flat">—</span>;
-  if (!b) return <span className="sl-d up">yeni</span>;
-  if (!a) return <span className="sl-d down">satış yok</span>;
-  const v = a / b - 1;
-  if (Math.abs(v) < 0.005) return <span className="sl-d flat">aynı</span>;
-  const up = v > 0;
-  const abs = a - b;
-  const p = Math.abs(v * 100);
-  return (
-    <span className={'sl-d ' + (up !== !!invert ? 'up' : 'down')}>
-      {up ? '▲' : '▼'} %{p < 10 ? p.toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : Math.round(p)}
-      {showAbs ? <small> ({up ? '+' : '−'}{money ? tlShort(Math.abs(abs)) : nf(Math.abs(abs))})</small> : null}
-    </span>
-  );
-}
-
-// Dönem seçenekleri: A (incelenen) ve B (kıyas)
-function periodOptions(today, reports) {
-  const t = ymd(today), y = shift(t, -1);
-  const d = new Date(today.getFullYear(), today.getMonth(), 1);
-  const pm1 = ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), pm2 = ymd(new Date(d.getFullYear(), d.getMonth(), 0));
-  const opts = [];
-  // En son tarihli rapor (yükleme sırası değil, dönem sonu)
-  const last = [...reports].sort((x, z) => z.period_end.localeCompare(x.period_end) || lenOf(x.period_start, x.period_end) - lenOf(z.period_start, z.period_end))[0];
-  if (last) {
-    const a = last.period_start, b = last.period_end;
-    opts.push({ id: 'son', label: 'Son rapor', A: [a, b] });
-  }
-  opts.push(
-    { id: 'bugun', label: 'Bugün', A: [t, t], note: 'Gün henüz bitmedi.' },
-    { id: 'dun', label: 'Dün', A: [y, y] },
-    { id: '7', label: 'Son 7 gün', A: [shift(t, -7), y] },
-    { id: '30', label: 'Son 30 gün', A: [shift(t, -30), y] },
-    { id: 'ay', label: 'Geçen ay', A: [pm1, pm2] }
-  );
-  return opts;
-}
 
 // ---------- Yükleme penceresi (birden çok dosya) ----------
 function ImportSheet({ files: files0, reports, now, onClose, onDone, onRevenue }) {
@@ -242,107 +241,6 @@ function ImportSheet({ files: files0, reports, now, onClose, onDone, onRevenue }
   );
 }
 
-// ---------- Ürün detayı ----------
-// Ürünün dün ve son 7 gün kıyası ile son 14 günün günlük satışı (günlük rapor varsa). Yalnız pencere açılınca hesaplanır.
-function useProductTrend(p, reports, now) {
-  const [st, setSt] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    const t = ymd(now), y = shift(t, -1);
-    const periods = [
-      ['Dün', [y, y], [shift(y, -1), shift(y, -1)]],
-      ['Son 7 gün', [shift(t, -7), y], [shift(t, -14), shift(t, -8)]]
-    ];
-    const mps = Object.keys(p.keys);
-    const plan = periods.map(([label, A, B]) => ({ label, A, B, cov: Object.fromEntries(mps.map((mp) => [mp, { A: coverReports(reports, mp, A[0], A[1]), B: coverReports(reports, mp, B[0], B[1]) }])) }));
-    const days = Array.from({ length: 14 }, (_, i) => shift(t, i - 14));
-    const daily = days.map((d) => ({ d, ids: Object.fromEntries(mps.map((mp) => [mp, (reports.find((r) => r.marketplace === mp && r.period_start === d && r.period_end === d) || {}).id]).filter(([, id]) => id)) }));
-    const ids = [...new Set([...plan.flatMap((x) => Object.values(x.cov).flatMap((c) => [...c.A.ids, ...c.B.ids])), ...daily.flatMap((x) => Object.values(x.ids))])];
-    loadItems(ids).then((byId) => {
-      if (!alive) return;
-      const sumFor = (mp, list) => { let q = 0, r = 0; const ks = new Set(p.keys[mp]); list.forEach((id) => (byId[id] || []).forEach((x) => { if (ks.has(x.k)) { q += x.q || 0; r += x.r || 0; } })); return { q, r }; };
-      const rows = plan.map((pl) => {
-        const per = mps.map((mp) => {
-          const c = pl.cov[mp]; const a = sumFor(mp, c.A.ids), b0 = sumFor(mp, c.B.ids);
-          const sc = c.A.days && c.B.days && c.A.days !== c.B.days ? c.A.days / c.B.days : 1;
-          return { mp, has: c.A.ids.length > 0, hasB: c.B.ids.length > 0, a, b: { q: b0.q * sc, r: b0.r * sc } };
-        }).filter((x) => x.has || x.hasB);
-        const tot = per.reduce((s, x) => ({ a: { q: s.a.q + x.a.q, r: s.a.r + x.a.r }, b: { q: s.b.q + x.b.q, r: s.b.r + x.b.r } }), { a: { q: 0, r: 0 }, b: { q: 0, r: 0 } });
-        return { label: pl.label, A: pl.A, per, tot };
-      });
-      const series = daily.map((x) => ({ d: x.d, has: Object.keys(x.ids).length > 0, v: Object.entries(x.ids).reduce((s, [mp, id]) => { const z = sumFor(mp, [id]); return { q: s.q + z.q, r: s.r + z.r }; }, { q: 0, r: 0 }) }));
-      setSt({ rows, series: series.filter((x) => x.has).length >= 3 ? series : null });
-    }).catch(() => alive && setSt({ rows: [], series: null }));
-    return () => { alive = false; };
-  }, [p, reports]);
-  return st;
-}
-
-function ProductSheet({ p, A, B, metric, reports, now, onClose, noB }) {
-  const allNo = Object.keys(p.mps).every((mp) => noB.has(mp));
-  const rows = Object.entries(p.mps).sort((x, z) => (z[1].a.r + z[1].b.r) - (x[1].a.r + x[1].b.r));
-  const tr = useProductTrend(p, reports, now);
-  const money = metric === 'r';
-  const fmtV = (v) => (money ? tlShort(v) : nf(v));
-  const max = tr && tr.series ? Math.max(1, ...tr.series.map((x) => x.v[metric])) : 1;
-  return (
-    <Sheet title="Ürün" onClose={onClose}>
-      <div className="sl-ps-name">{p.n}</div>
-      <div className="sl-ps-codes">{p.code ? <span>Stok kodu <b>{p.code}</b></span> : null}{p.barcode ? <span>Barkod <b>{p.barcode}</b></span> : null}{(p.keys.Hepsiburada || []).length ? <span>HB SKU <b>{p.keys.Hepsiburada[0]}</b></span> : null}</div>
-      <span className="hint">{plabel(A[0], A[1])} · kıyas: {plabel(B[0], B[1])}</span>
-      <div className="sl-ps-tot">
-        <div><span>Adet</span><b>{nf(p.a.q)}</b>{allNo ? null : <small>önce {nf(p.b.q)}</small>}<Delta a={p.a.q} b={p.b.q} showAbs none={allNo} /></div>
-        <div><span>Ciro</span><b>{tlShort(p.a.r)}</b>{allNo ? null : <small>önce {tlShort(p.b.r)}</small>}<Delta a={p.a.r} b={p.b.r} money showAbs none={allNo} /></div>
-      </div>
-      <div className="sl-ps-tab" role="table" aria-label="Pazaryerine göre">
-        <div className="sl-ps-r head" role="row"><span>Pazaryeri</span><span>Adet</span><span>Ciro</span><span>Değişim</span></div>
-        {rows.map(([mp, m]) => (
-          <div key={mp} className="sl-ps-r" role="row">
-            <span><span className="dot" style={{ background: mpColor(mp) }} />{mp}</span>
-            <span>{nf(m.a.q)}{noB.has(mp) ? null : <small> / {nf(m.b.q)}</small>}</span>
-            <span>{tlShort(m.a.r)}</span>
-            <span>{money ? <Delta a={m.a.r} b={m.b.r} money none={noB.has(mp)} /> : <Delta a={m.a.q} b={m.b.q} none={noB.has(mp)} />}</span>
-          </div>
-        ))}
-      </div>
-
-      {!tr ? <p className="hint" style={{ margin: 0 }}>Dönemler hesaplanıyor…</p> : tr.rows.some((r) => r.per.length) ? (
-        <div className="sl-ps-per">
-          <h4>{money ? 'Ciro' : 'Adet'} · dönemlere göre</h4>
-          {tr.rows.filter((r) => r.per.length).map((r) => (
-            <div key={r.label} className="sl-ps-pr">
-              <div className="sl-ps-prh"><b>{r.label}</b><span className="hint">{plabel(r.A[0], r.A[1])}</span><span className="sl-ps-prv">{fmtV(r.tot.a[metric])} <small>önce {fmtV(r.tot.b[metric])}</small> <Delta a={r.tot.a[metric]} b={r.tot.b[metric]} money={money} /></span></div>
-              {r.per.length > 1 || rows.length > 1 ? (
-                <div className="sl-pmps">
-                  {r.per.map((x) => <span key={x.mp} className="sl-pmp"><span className="dot" style={{ background: mpColor(x.mp) }} />{short(x.mp)} {x.has ? fmtV(x.a[metric]) : 'rapor yok'} {x.has && x.hasB ? <Delta a={x.a[metric]} b={x.b[metric]} money={money} /> : null}</span>)}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {tr && tr.series ? (
-        <div className="sl-ps-ser">
-          <h4>Son 14 gün · günlük {money ? 'ciro' : 'adet'}</h4>
-          <div className="sl-bars" role="img" aria-label={'Son 14 günün günlük ' + (money ? 'cirosu' : 'satış adedi')}>
-            {tr.series.map((x) => (
-              <div key={x.d} className="sl-barc" title={dm(x.d) + ': ' + (x.has ? fmtV(x.v[metric]) : 'rapor yok')}>
-                <span className="sl-barv">{x.has && x.v[metric] ? (money ? tlShort(x.v[metric]).replace('₺', '') : nf(x.v[metric])) : ''}</span>
-                <span className="sl-bart"><span className={'sl-barb' + (x.has ? '' : ' none')} style={{ height: x.has ? Math.max(2, (x.v[metric] / max) * 100) + '%' : '100%' }} /></span>
-                <span className="sl-barl">{Number(x.d.slice(8))}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {rows.some(([, m]) => m.s != null) ? <p className="hint" style={{ margin: 0 }}>Stok: {rows.filter(([, m]) => m.s != null).map(([mp, m]) => mp + ' ' + nf(m.s)).join(' · ')}</p> : null}
-      <p className="hint" style={{ margin: 0 }}>Adette ilk sayı incelenen dönem, ikincisi kıyas dönemi. Pazaryerleri ürün adı ve barkoda göre otomatik eşleştirilir.</p>
-    </Sheet>
-  );
-}
-
 // ---------- Ürün listesi penceresi ----------
 function CatalogSheet({ catalog, onClose, onSaved }) {
   const [file, setFile] = useState(null); // { name, heads, rows, guess }
@@ -407,194 +305,319 @@ function CatalogSheet({ catalog, onClose, onSaved }) {
   );
 }
 
-// ---------- Ana görünüm: rapor ----------
-const CMP = [['prev', 'Önceki dönem'], ['week', 'Geçen hafta'], ['month', 'Geçen ay']];
-const shiftMonth = (k, n) => { const [y, m, d] = k.split('-').map(Number); const last = new Date(y, m - 1 + n + 1, 0).getDate(); return ymd(new Date(y, m - 1 + n, Math.min(d, last))); };
-function compareRange(opt, mode) {
-  const [a, b] = opt.A; const n = lenOf(a, b);
-  if (mode === 'week' && n <= 7) return [shift(a, -7), shift(b, -7)];
-  if (mode === 'month') return opt.id === 'ay' ? [shiftMonth(a, -1), ymd(new Date(+a.slice(0, 4), +a.slice(5, 7) - 1, 0))] : [shiftMonth(a, -1), shiftMonth(b, -1)];
-  if (opt.id === 'ay') return [shiftMonth(a, -1), shift(a, -1)];
-  return [shift(a, -n), shift(a, -1)];
+// ---------- Ürün karnesi: ortak hesaplar ----------
+const WDAY = ['pazar', 'pazartesi', 'salı', 'çarşamba', 'perşembe', 'cuma', 'cumartesi'];
+const wdayOf = (k) => { const [y, m, d] = k.split('-').map(Number); return WDAY[new Date(y, m - 1, d).getDay()]; };
+const WDAT = ['pazara', 'pazartesiye', 'salıya', 'çarşambaya', 'perşembeye', 'cumaya', 'cumartesiye'];
+const wdat = (k) => { const [y, m, d] = k.split('-').map(Number); return WDAT[new Date(y, m - 1, d).getDay()]; };
+const pctStr = (v) => (v == null ? '' : !Number.isFinite(v) ? 'yeni' : Math.abs(v) < 0.005 ? '0' : (v > 0 ? '+' : '−') + '%' + (Math.abs(v * 100) < 10 ? Math.abs(v * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : Math.round(Math.abs(v * 100))));
+const tone = (v, min = 0.03) => (v == null ? '' : !Number.isFinite(v) ? 'up' : v >= min ? 'up' : v <= -min ? 'down' : 'flat');
+// Değişim rozeti: ▲ +%12 / ▼ −%8
+function Chg({ d, label }) {
+  if (!d) return <span className="sr-chg none">{label ? label + ' ' : ''}kıyas yok</span>;
+  const t = tone(d.pct);
+  return <span className={'sr-chg ' + t}>{label ? <em>{label}</em> : null}<span className="v">{t === 'up' ? '▲' : t === 'down' ? '▼' : '•'} {pctStr(d.pct)}</span></span>;
 }
-const DATIVE = { 'Önceki dönem': 'önceki döneme', 'Geçen hafta': 'geçen haftaya', 'Geçen ay': 'geçen aya' };
-const QUICK = [
-  ['all', 'Tümü'], ['down', '▼ Düşenler'], ['up', '▲ Artanlar'], ['stopped', 'Satışı duranlar'], ['new', 'Yeni satanlar'], ['stock', 'Stok riski'], ['cancel', 'İptali yüksek']
-];
-const COLS = [
-  ['code', 'Stok kodu'], ['name', 'Ürün'], ['mp', 'Pzr'], ['aq', 'Adet'], ['bq', 'Önceki adet'], ['dq', 'Adet farkı'], ['dp', 'Değişim'], ['ar', 'Ciro'], ['dr', 'Ciro farkı'], ['cover', 'Stok']
-];
-const pctTxt = (a, b) => (b ? (a / b - 1) : null);
-const fmtPct = (v) => (v == null ? '' : Math.abs(v) < 0.005 ? '0' : (v > 0 ? '+' : '−') + '%' + (Math.abs(v * 100) < 10 ? Math.abs(v * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : Math.round(Math.abs(v * 100))));
-const sign = (v, f) => (Math.abs(v) < 0.5 ? '0' : (v > 0 ? '+' : '−') + f(Math.abs(v)));
+const daysOf = (cov, mps, pid) => Math.max(0, ...mps.map((mp) => (cov[mp] && cov[mp][pid] ? cov[mp][pid].days : 0)));
+// Stok: pazaryerlerinin bildirdiği stok (Trendyol raporunda var) ve 30 günlük satış hızıyla kaç gün yeteceği
+function stockOf(p, mps, cov) {
+  const ms = mps.filter((mp) => p.s[mp] != null);
+  if (!ms.length) return null;
+  const s = ms.reduce((t, mp) => t + p.s[mp], 0);
+  const dM = daysOf(cov, ms, 'M'), dW = daysOf(cov, ms, 'W');
+  const rate = dM ? valOf(p, 'M', ms, 'q') / dM : dW ? valOf(p, 'W', ms, 'q') / dW : 0;
+  return { s, cover: rate > 0 ? s / rate : null, mps: ms };
+}
+// Bir ürünün haftalara göre pazaryeri kıyas cümleleri
+function mpVerdict(p, mps, cov) {
+  const live = mps.filter((mp) => valOf(p, 'M', [mp], 'q') + valOf(p, 'W', [mp], 'q') > 0);
+  if (live.length < 2) return [];
+  const out = [];
+  const tot = valOf(p, 'M', live, 'q') || valOf(p, 'W', live, 'q');
+  const sh = live.map((mp) => ({ mp, v: valOf(p, 'M', [mp], 'q') || valOf(p, 'W', [mp], 'q') })).sort((x, y) => y.v - x.v);
+  if (tot) out.push(<>Son 30 günde satışın <b>%{Math.round((sh[0].v / tot) * 100)}</b>'i <b>{sh[0].mp}</b>'dan{sh[1] ? <>, %{Math.round((sh[1].v / tot) * 100)}'i {sh[1].mp}'dan</> : null}.</>);
+  const w = live.map((mp) => ({ mp, d: deltaOf(p, 'W', 'W1', [mp], cov, 'q') })).filter((x) => x.d && x.d.b > 0);
+  const dn = w.filter((x) => x.d.pct <= -0.1), upw = w.filter((x) => x.d.pct >= 0.05);
+  if (w.length >= 2) {
+    if (dn.length === w.length) out.push(<>Son 7 günde <b>tüm pazaryerlerinde düştü</b> ({w.map((x) => short(x.mp) + ' ' + pctStr(x.d.pct)).join(', ')}): genel talep ya da sezon etkisi olabilir.</>);
+    else if (dn.length && upw.length) out.push(<>Son 7 günde düşüş <b>{dn.map((x) => x.mp).join(', ')}'a özel</b> ({dn.map((x) => pctStr(x.d.pct)).join(', ')}); {upw.map((x) => x.mp + ' ' + pctStr(x.d.pct)).join(', ')}. O pazaryerinde fiyat, kampanya, stok ya da listeleme kontrol edilebilir.</>);
+    else if (dn.length) out.push(<>Son 7 günde {dn.map((x) => <b key={x.mp}>{x.mp} {pctStr(x.d.pct)}</b>)} düştü; diğerlerinde belirgin değişim yok.</>);
+    else if (upw.length === w.length) out.push(<>Son 7 günde tüm pazaryerlerinde arttı ({w.map((x) => short(x.mp) + ' ' + pctStr(x.d.pct)).join(', ')}).</>);
+  }
+  // Ana pazaryerinin düştüğü haftalarda diğeri ne yaptı?
+  const main = sh[0].mp, others = sh.slice(1).map((x) => x.mp);
+  let drops = 0, same = 0, opp = 0;
+  for (let i = 0; i < 7; i++) {
+    const dm1 = deltaOf(p, 'w' + i, 'w' + (i + 1), [main], cov, 'q');
+    if (!dm1 || !dm1.b || dm1.pct > -0.1) continue;
+    const dO = deltaOf(p, 'w' + i, 'w' + (i + 1), others, cov, 'q');
+    if (!dO || !dO.b) continue;
+    drops++; if (dO.pct <= -0.05) same++; else if (dO.pct >= 0.05) opp++;
+  }
+  if (drops) out.push(<>Son 8 haftada {main}'un düştüğü <b>{drops} haftanın</b> {same ? <><b>{same}</b>'{same === 1 ? 'inde' : 'sinde'} {others.join(', ')} de düştü</> : null}{same && opp ? ', ' : ''}{opp ? <><b>{opp}</b>'{opp === 1 ? 'inde' : 'sinde'} arttı</> : null}{!same && !opp ? <>hiçbirinde {others.join(', ')} belirgin değişmedi</> : null}.</>);
+  return out;
+}
 
-export function SalesView({ now, actions }) {
+// Günlük özet + hero ürün uyarıları (Bugün ve İş → Özet için; küçük JSON olarak saklanır)
+export function buildDigest({ products, mps, cov, A, heroIds }) {
+  const T = { v: {} };
+  products.forEach((p) => Object.entries(p.v).forEach(([pid, t]) => { const z = (T.v[pid] = T.v[pid] || {}); Object.entries(t).forEach(([mp, x]) => { const y = (z[mp] = z[mp] || { q: 0, r: 0, x: 0 }); y.q += x.q; y.r += x.r; y.x += x.x; }); }));
+  const r = valOf(T, 'D', mps, 'r');
+  const dd = deltaOf(T, 'D', 'D1', mps, cov, 'r'), dw = deltaOf(T, 'D', 'Dw', mps, cov, 'r'), ww = deltaOf(T, 'W', 'W1', mps, cov, 'r');
+  const alerts = [];
+  products.filter((p) => heroIds.has(p.id)).forEach((p) => {
+    const nm = (p.code ? p.code + ' · ' : '') + p.n.slice(0, 44);
+    const st = stockOf(p, mps, cov);
+    if (st && st.s <= 0) alerts.push({ id: p.id, t: 'stock', w: 5, n: nm, x: 'stok bitti' + (st.mps.length < mps.length ? ' (' + st.mps.map(short).join(', ') + ')' : '') });
+    else if (st && st.cover != null && st.cover < 10) alerts.push({ id: p.id, t: 'stock', w: 3, n: nm, x: 'stok ~' + Math.max(1, Math.round(st.cover)) + ' gün yeter (' + nf(st.s) + ' adet)' });
+    const dM = daysOf(cov, mps, 'M');
+    const avg = dM ? valOf(p, 'M', mps, 'q') / dM : 0;
+    const qD = valOf(p, 'D', mps, 'q');
+    if (cov && mps.some((mp) => cov[mp].D.days) && qD === 0 && avg >= 2) alerts.push({ id: p.id, t: 'stop', w: 4, n: nm, x: 'dün hiç satmadı (günde ort. ' + nf(avg) + ')' });
+    const w = deltaOf(p, 'W', 'W1', mps, cov, 'q');
+    if (w && w.b && w.pct <= -0.15 && (w.b - w.a) * 7 >= 5) {
+      const per = mps.map((mp) => ({ mp, d: deltaOf(p, 'W', 'W1', [mp], cov, 'q') })).filter((x) => x.d && x.d.b);
+      alerts.push({ id: p.id, t: 'drop', w: 2 + Math.min(1, -w.pct), n: nm, x: '7 günde ' + pctStr(w.pct) + (per.length > 1 ? ' (' + per.map((x) => short(x.mp) + ' ' + pctStr(x.d.pct)).join(', ') + ')' : '') });
+    } else {
+      const d = deltaOf(p, 'D', 'Dw', mps, cov, 'q');
+      if (d && d.b >= 5 && d.pct <= -0.4 && qD > 0) alerts.push({ id: p.id, t: 'drop', w: 1, n: nm, x: 'dün, geçen ' + wdat(A) + ' göre ' + pctStr(d.pct) });
+    }
+  });
+  alerts.sort((x, y) => y.w - x.w);
+  return {
+    day: A, r: Math.round(r), d1: dd && Number.isFinite(dd.pct) ? Math.round(dd.pct * 1000) / 1000 : null, dw: dw && Number.isFinite(dw.pct) ? Math.round(dw.pct * 1000) / 1000 : null,
+    wr: Math.round(valOf(T, 'W', mps, 'r')), ww: ww && Number.isFinite(ww.pct) ? Math.round(ww.pct * 1000) / 1000 : null,
+    alerts: alerts.slice(0, 5).map(({ w, ...a }) => a)
+  };
+}
+
+// ---------- Ürün karnesi penceresi ----------
+function ProductCard({ p, mps, cov, P, A, starred, onStar, onClose }) {
+  const [hov, setHov] = useState(null);
+  const live = mps.filter((mp) => Object.values(p.v).some((t) => t[mp]));
+  const st = stockOf(p, mps, cov);
+  const tiles = [
+    { k: 'D', label: 'Dün · ' + dm(A), sub: [['önceki güne', deltaOf(p, 'D', 'D1', live, cov, 'q')], ['geçen ' + wdat(A) + '', deltaOf(p, 'D', 'Dw', live, cov, 'q')]] },
+    { k: 'W', label: 'Son 7 gün', sub: [['önceki 7 güne', deltaOf(p, 'W', 'W1', live, cov, 'q')]] },
+    { k: 'M', label: 'Son 30 gün', sub: [['önceki 30 güne', deltaOf(p, 'M', 'M1', live, cov, 'q')]] }
+  ];
+  const verdict = mpVerdict(p, live, cov);
+  // 8 haftalık seri (eskiden yeniye)
+  const weeks = [];
+  for (let i = 7; i >= 0; i--) {
+    const pid = 'w' + i;
+    if (!live.some((mp) => cov[mp][pid] && cov[mp][pid].days)) continue;
+    weeks.push({ pid, a: P[pid][0], b: P[pid][1], v: live.map((mp) => ({ mp, q: valOf(p, pid, [mp], 'q'), has: !!(cov[mp][pid] && cov[mp][pid].days) })) });
+  }
+  const max = Math.max(1, ...weeks.flatMap((w) => w.v.map((x) => x.q)));
+  const h = hov != null ? weeks[hov] : null;
+  return (
+    <Sheet title="Ürün karnesi" onClose={onClose}>
+      <div className="sr-pc-head">
+        <div>
+          <div className="sr-pc-code">{p.code || 'Stok kodu yok'}{p.barcode ? <span> · {p.barcode}</span> : null}</div>
+          <div className="sr-pc-name">{p.n}</div>
+        </div>
+        <button type="button" className={'sr-star' + (starred ? ' on' : '')} onClick={onStar} aria-pressed={starred} title={starred ? 'Hero ürünlerden çıkar' : 'Hero ürün olarak işaretle'}>{starred ? '★' : '☆'}</button>
+      </div>
+
+      <div className="sr-pc-tiles">
+        {tiles.map((t) => (
+          <div key={t.k} className="sr-pc-t">
+            <span>{t.label}</span>
+            <b>{nf(valOf(p, t.k, live, 'q'))} <small>adet</small></b>
+            <small className="sr-pc-r">{tlShort(valOf(p, t.k, live, 'r'))}</small>
+            {t.sub.map(([l, d]) => <Chg key={l} d={d} label={l} />)}
+          </div>
+        ))}
+      </div>
+
+      {live.length ? (
+        <div className="sr-pc-mp">
+          <div className="sr-pc-mpr head"><span>Pazaryeri</span><span>Dün</span><span>7 gün</span><span>30 gün</span></div>
+          {live.map((mp) => (
+            <div key={mp} className="sr-pc-mpr">
+              <span><i className="dot" style={{ background: mpColor(mp) }} />{mp}</span>
+              {['D', 'W', 'M'].map((k) => (
+                <span key={k}>
+                  <b>{cov[mp][k] && cov[mp][k].days ? nf(valOf(p, k, [mp], 'q')) : '—'}</b>
+                  {cov[mp][k] && cov[mp][k].days ? <Chg d={deltaOf(p, k, k === 'D' ? 'D1' : k + '1', [mp], cov, 'q')} /> : null}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {verdict.length ? <ul className="sr-pc-v">{verdict.map((v, i) => <li key={i}>{v}</li>)}</ul> : null}
+
+      {weeks.length >= 2 ? (
+        <div className="sr-wk">
+          <div className="sr-wk-h"><b>Haftalık satış (adet)</b>
+            <span className="sr-leg">{live.map((mp) => <span key={mp}><i style={{ background: mpColor(mp) }} />{short(mp)}</span>)}</span>
+          </div>
+          <div className="sr-wk-tip">{h ? <><b>{plabel(h.a, h.b)}</b> {h.v.map((x) => short(x.mp) + ' ' + (x.has ? nf(x.q) : '—')).join(' · ')}</> : <span className="hint">Bir haftanın üzerine gel ya da dokun</span>}</div>
+          <div className="sr-wk-c" style={{ '--n': weeks.length }} onMouseLeave={() => setHov(null)}>
+            {weeks.map((w, i) => (
+              <div key={w.pid} className={'sr-wk-col' + (hov === i ? ' on' : '')} onMouseEnter={() => setHov(i)} onClick={() => setHov(i)}>
+                <div className="sr-wk-bars">
+                  {w.v.map((x) => <span key={x.mp} className={x.has ? '' : 'none'} style={{ height: x.has ? Math.max(1, (x.q / max) * 100) + '%' : '100%', background: x.has ? mpColor(x.mp) : null }} />)}
+                </div>
+                <span className="sr-wk-l">{dm(w.b)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {st ? (
+        <p className={'sr-pc-stock' + (st.s <= 0 || (st.cover != null && st.cover < 10) ? ' hot' : '')}>
+          Stok {st.mps.map(short).join(', ')}: <b>{nf(st.s)}</b>{st.cover != null ? <> · bu satış hızıyla ~<b>{Math.round(st.cover)} gün</b> yeter</> : null}
+        </p>
+      ) : null}
+      <p className="hint" style={{ margin: 0 }}>Değişimler gün başı ortalamayla hesaplanır; raporu eksik günler kıyası bozmaz. ☆ ile hero ürün olarak işaretlersen Bugün sayfasında düşüş ve stok uyarısı alırsın.</p>
+    </Sheet>
+  );
+}
+
+// ---------- Ana görünüm ----------
+const SHOW = [['all', 'Tümü'], ['hero', '★ Hero'], ['down', '7 günde düşen'], ['up', '7 günde artan'], ['stock', 'Stok riski'], ['stop', 'Satışı durdu']];
+const SORTS = [['m', '30 günlük satışa göre'], ['wdown', '7 gün: en çok düşen'], ['wup', '7 gün: en çok artan'], ['ddown', 'Dün: en çok düşen'], ['cover', 'Stok: en az kalan']];
+
+export function SalesView({ now, actions, prefs }) {
   const [reports, setReports] = useState(null);
   const [err, setErr] = useState('');
-  const [optId, setOptId] = useState(null);
-  const [cmp, setCmp] = useState(() => { try { return localStorage.getItem('ajanda-sales-cmp') || 'prev'; } catch { return 'prev'; } });
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [quick, setQuick] = useState('all');
-  const [sortBy, setSortBy] = useState(null); // { k, dir }
-  const [mpF, setMpF] = useState('');
-  const [q, setQ] = useState('');
-  const [limit, setLimit] = useState(50);
-  const [prod, setProd] = useState(null);
-  const [imp, setImp] = useState(null);
-  const [reading, setReading] = useState(false);
-  const [showList, setShowList] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [catalog, setCatalog] = useState(null);
   const [catOpen, setCatOpen] = useState(false);
-  const [catF, setCatF] = useState('');
-  const [tab, setTab] = useState(() => { try { return localStorage.getItem('ajanda-sales-tab') || 'ozet'; } catch { return 'ozet'; } });
-  const setTabS = (v) => { setTab(v); if (v !== 'urunler') setCatF(''); try { localStorage.setItem('ajanda-sales-tab', v); } catch { /* yok say */ } };
+  const [imp, setImp] = useState(null);
+  const [reading, setReading] = useState(false);
+  const [mx, setMx] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState('');
+  const [mpF, setMpF] = useState('');
+  const [show, setShow] = useState('all');
+  const [sort, setSort] = useState('m');
+  const [metric, setMetric] = useState(() => { try { return localStorage.getItem('ajanda-sales-metric') === 'r' ? 'r' : 'q'; } catch { return 'q'; } });
+  const [limit, setLimit] = useState(40);
+  const [prod, setProd] = useState(null);
+  const [showList, setShowList] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [stars, setStars] = useState(() => (prefs && prefs.heroes) || []);
+  useEffect(() => { if (prefs && prefs.heroes) setStars(prefs.heroes); }, [prefs && (prefs.heroes || []).join()]);
   const fileRef = useRef(null);
 
   useEffect(() => {
     loadCatalog().then(setCatalog).catch(() => setCatalog(null));
-    listReports().then(setReports).catch((e) => setErr(missingTable(e) ? 'Satış raporları için Supabase\'de 29 numaralı SQL\'i çalıştır (Hesap → Kurulum durumu → Kopyala).' : String(e && e.message)));
+    listReports().then((r) => { setReports(r); if (!DEMO) idbPrune(new Set(r.map((x) => x.id))); })
+      .catch((e) => setErr(missingTable(e) ? 'Satış raporları için Supabase\'de 29 numaralı SQL\'i çalıştır (Hesap → Kurulum durumu → Kopyala).' : String(e && e.message)));
   }, []);
-
-  const dayKey = now ? now.toDateString() : '';
-  const opts = useMemo(() => periodOptions(now, reports || []), [reports, dayKey]);
-  const mpsAll = useMemo(() => [...new Set((reports || []).map((r) => r.marketplace))], [reports]);
-  const opt0 = useMemo(() => {
-    if (!reports) return null;
-    const chosen = opts.find((o) => o.id === optId);
-    if (chosen) return chosen;
-    const has = (r) => mpsAll.some((mp) => coverReports(reports, mp, r[0], r[1]).ids.length);
-    return opts.find((o) => o.id !== 'bugun' && has(o.A) && has(compareRange(o, cmp))) || opts.find((o) => o.id !== 'bugun' && has(o.A)) || opts[0];
-  }, [opts, optId, reports, mpsAll, cmp]);
-  const opt = opt0 ? { ...opt0, B: compareRange(opt0, cmp) } : null;
-  const weekOk = opt && lenOf(opt.A[0], opt.A[1]) <= 7;
-  const cmpLabel = (CMP.find(([k]) => k === (cmp === 'week' && !weekOk ? 'prev' : cmp)) || CMP[0])[1];
-
-  const key = opt ? opt.A.join() + '|' + opt.B.join() + '|' + (reports || []).map((r) => r.id).join() : '';
-  useEffect(() => {
-    if (!opt || !reports) return undefined;
-    let alive = true;
-    const cov = {};
-    mpsAll.forEach((mp) => { cov[mp] = { A: coverReports(reports, mp, opt.A[0], opt.A[1]), B: coverReports(reports, mp, opt.B[0], opt.B[1]) }; });
-    const ids = [...new Set(Object.values(cov).flatMap((c) => [...c.A.ids, ...c.B.ids]))];
-    setLoading(true);
-    loadItems(ids).then((byId) => {
-      if (!alive) return;
-      const byMp = {};
-      Object.entries(cov).forEach(([mp, c]) => {
-        if (!c.A.ids.length && !c.B.ids.length) return;
-        byMp[mp] = { A: sumItems(c.A.ids.map((id) => byId[id])), B: sumItems(c.B.ids.map((id) => byId[id])) };
-      });
-      setData({ key, byMp, cov });
-    }).catch((e) => alive && setErr(String(e && e.message))).finally(() => alive && setLoading(false));
-    return () => { alive = false; };
-  }, [key]);
 
   const cat = useMemo(() => {
     const bc = new Map(), byCode = new Map();
     ((catalog && catalog.items) || []).forEach(([b, c]) => { bc.set(String(b), c); if (!byCode.has(codeKey(c))) byCode.set(codeKey(c), String(b)); });
     return { bc, byCode, n: bc.size };
   }, [catalog]);
-  // Stok kodu: ürün listesinde barkodu varsa oradan; yoksa raporun kendi stok kodu sütunu (HB SaticiSKU)
-  const codeOf = (mp, x) => cat.bc.get(String(x.b || x.k)) || (mp === 'Trendyol' ? '' : x.m) || '';
-  const barcodeOf = (c) => cat.byCode.get(codeKey(c)) || '';
 
-  const view = useMemo(() => {
-    if (!data || data.key !== key) return null;
-    const scaleB = {};
-    Object.keys(data.byMp).forEach((mp) => { const c = data.cov[mp]; scaleB[mp] = c.B.days && c.A.days && c.A.days !== c.B.days ? c.A.days / c.B.days : 1; });
-    const products = compareProducts(data.byMp, scaleB, codeOf, barcodeOf);
-    const noCode = products.filter((p) => !p.code).length;
-    const mpRows = Object.keys(data.byMp).map((mp) => {
-      const t = { a: { q: 0, r: 0, o: 0, x: 0 }, b: { q: 0, r: 0, o: 0, x: 0 } };
-      data.byMp[mp].A.forEach((x) => { t.a.q += x.q || 0; t.a.r += x.r || 0; t.a.o += x.o || 0; t.a.x += x.x || 0; });
-      data.byMp[mp].B.forEach((x) => { const s = scaleB[mp]; t.b.q += (x.q || 0) * s; t.b.r += (x.r || 0) * s; t.b.o += (x.o || 0) * s; t.b.x += (x.x || 0) * s; });
-      return { mp, ...t, cov: data.cov[mp] };
-    }).sort((x, z) => z.a.r - x.a.r);
-    const add = (s, m) => ({ q: s.q + m.q, r: s.r + m.r, o: s.o + m.o, x: s.x + m.x });
-    const z = { q: 0, r: 0, o: 0, x: 0 };
-    const tot = { a: mpRows.reduce((s, m) => add(s, m.a), z), b: mpRows.reduce((s, m) => add(s, m.b), z) };
-    const noB = new Set(mpRows.filter((m) => !m.cov.B.ids.length).map((m) => m.mp));
-    const daysA = Math.max(1, ...mpRows.map((m) => m.cov.A.days || 0));
-    products.forEach((p) => {
-      p.hasB = Object.keys(p.mps).some((mp) => !noB.has(mp));
-      p.cover = p.s != null && p.a.q > 0 ? p.s / (p.a.q / daysA) : null;
+  const mps = useMemo(() => {
+    const t = {}; (reports || []).forEach((r) => { t[r.marketplace] = (t[r.marketplace] || 0) + ((r.totals || {}).r || 0); });
+    return Object.keys(t).sort((a, b) => t[b] - t[a]);
+  }, [reports]);
+  const A = useMemo(() => (reports && reports.length ? anchorDay(reports) : null), [reports]);
+  const P = useMemo(() => (A ? anchorPeriods(A) : null), [A]);
+  const key = A ? A + '|' + (reports || []).map((r) => r.id).join() + '|' + cat.n : '';
+
+  useEffect(() => {
+    if (!A || !reports) return undefined;
+    let alive = true;
+    const { cov, ids } = planMatrix(reports, mps, P);
+    setLoading(true);
+    loadItems(ids).then((byId) => {
+      if (!alive) return;
+      const codeOf = (mp, x) => cat.bc.get(String(x.b || x.k)) || (mp === 'Trendyol' ? '' : x.m) || '';
+      const barcodeOf = (c) => cat.byCode.get(codeKey(c)) || '';
+      setMx({ key, cov, products: buildMatrix({ cov, byId, mps, periods: P, codeOf, barcodeOf }) });
+    }).catch((e) => alive && setErr(String(e && e.message))).finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [key]);
+
+  const ready = mx && mx.key === key;
+  const cov = ready ? mx.cov : null;
+  const sel = mpF ? [mpF] : mps;
+
+  // Hero: ★ ile işaretlenenler + son 30 günün en çok ciro yapan 10 ürünü
+  const heroIds = useMemo(() => {
+    const s = new Set(stars);
+    if (ready) [...mx.products].sort((x, y) => valOf(y, 'M', mps, 'r') - valOf(x, 'M', mps, 'r')).slice(0, 10).forEach((p) => s.add(p.id));
+    return s;
+  }, [ready, mx, stars, mps]);
+
+  const rows = useMemo(() => {
+    if (!ready) return [];
+    return mx.products.filter((p) => sel.some((mp) => Object.values(p.v).some((t) => t[mp]))).map((p) => {
+      const st = stockOf(p, sel, cov);
+      return {
+        p, hero: heroIds.has(p.id), st,
+        D: valOf(p, 'D', sel, metric), W: valOf(p, 'W', sel, metric), M: valOf(p, 'M', sel, metric),
+        dD: deltaOf(p, 'D', 'D1', sel, cov, metric), dW: deltaOf(p, 'W', 'W1', sel, cov, metric), dM: deltaOf(p, 'M', 'M1', sel, cov, metric),
+        share: sel.length > 1 ? sel.map((mp) => ({ mp, v: valOf(p, 'W', [mp], 'q') || valOf(p, 'M', [mp], 'q') })) : null
+      };
     });
-    return { products, noCode, mpRows, tot, noB, allNoB: noB.size === mpRows.length, scaled: Object.values(scaleB).some((v) => v !== 1) };
-  }, [data, key, cat]);
+  }, [ready, mx, mpF, metric, heroIds, mps]);
 
-  // Satır değerleri (pazaryeri süzgeci uygulanmış)
-  const rowsAll = useMemo(() => {
-    if (!view) return [];
-    return view.products.filter((p) => !mpF || p.mps[mpF]).map((p) => {
-      const src = mpF ? p.mps[mpF] : p;
-      const a = src.a, b = src.b;
-      const s = mpF ? p.mps[mpF].s : p.s;
-      return { p, aq: a.q, bq: b.q, ar: a.r, br: b.r, ax: a.x || 0, dq: a.q - b.q, dr: a.r - b.r, dp: b.q ? a.q / b.q - 1 : (a.q ? Infinity : 0), s, cover: s != null && a.q > 0 ? s / (a.q / Math.max(1, ...view.mpRows.map((m) => m.cov.A.days || 0))) : null, hasB: mpF ? !view.noB.has(mpF) : p.hasB };
-    });
-  }, [view, mpF]);
-
-  const QF = {
+  const FILTER = {
     all: () => true,
-    down: (r) => r.hasB && r.dq < 0,
-    up: (r) => r.hasB && r.dq > 0,
-    stopped: (r) => r.hasB && r.bq >= 2 && r.aq === 0,
-    new: (r) => r.hasB && r.bq === 0 && r.aq > 0,
-    stock: (r) => r.cover != null && r.cover < 14,
-    cancel: (r) => r.ax >= 3 && r.ax / (r.aq + r.ax) >= 0.15
+    hero: (r) => r.hero,
+    down: (r) => r.dW && r.dW.b > 0 && r.dW.pct <= -0.1 && (r.dW.b - r.dW.a) * 7 >= (metric === 'q' ? 3 : 300),
+    up: (r) => r.dW && r.dW.pct >= 0.1 && (r.dW.a - r.dW.b) * 7 >= (metric === 'q' ? 3 : 300),
+    stock: (r) => r.st && (r.st.s <= 0 || (r.st.cover != null && r.st.cover < 14)) && r.M > 0,
+    stop: (r) => r.dW && r.dW.b * 7 >= 3 && r.W === 0
   };
-  const DEF_SORT = { all: ['ar', -1], down: ['dq', 1], up: ['dq', -1], stopped: ['bq', -1], new: ['aq', -1], stock: ['cover', 1], cancel: ['ax', -1] };
-  const catOk = (r) => !catF || ((r.p.c || 'Diğer').trim() || 'Diğer') === catF;
-  const counts = useMemo(() => Object.fromEntries(QUICK.map(([k]) => [k, rowsAll.filter((r) => catOk(r) && QF[k](r)).length])), [rowsAll, catF]);
-
-  const insights = useMemo(() => {
-    if (!view) return [];
-    const out = [];
-    const T = view.tot;
-    const rp = pctTxt(T.a.r, T.b.r);
-    if (!view.allNoB && rp != null) {
-      const qp = pctTxt(T.a.q, T.b.q);
-      out.push({ head: true, tone: rp >= 0 ? 'up' : 'down', text: <>Ciro <b>{tl(T.a.r)}</b>, {DATIVE[cmpLabel] || 'kıyasa'} göre <b>{fmtPct(rp)}</b> ({sign(T.a.r - T.b.r, tlShort)}). Satış adedi {nf(T.a.q)} ({fmtPct(qp)}).</> });
-    }
-    if (view.mpRows.length > 1 && !view.allNoB) {
-      const ch = view.mpRows.filter((m) => m.b.r > 0 && m.a.r > 0).map((m) => ({ mp: m.mp, v: m.a.r / m.b.r - 1 }));
-      if (ch.length > 1) {
-        const best = ch.reduce((x, y) => (y.v > x.v ? y : x)), worst = ch.reduce((x, y) => (y.v < x.v ? y : x));
-        out.push({ tone: 'info', text: <>En iyi giden pazaryeri <b>{best.mp}</b> ({fmtPct(best.v)}){worst.mp !== best.mp ? <>, en çok düşen <b>{worst.mp}</b> ({fmtPct(worst.v)})</> : null}.</>, mp: worst.v < 0 ? worst.mp : best.mp });
-      }
-    }
-    const nm = (r) => (r.p.code ? r.p.code + ' · ' : '') + r.p.n.slice(0, 48);
-    const down = rowsAll.filter(QF.down).sort((x, y) => x.dq - y.dq).slice(0, 3);
-    if (down.length) out.push({ tone: 'down', text: <>En çok düşenler: {down.map((r, i) => <span key={r.p.id + i}>{i ? ', ' : ''}<b>{nm(r)}</b> ({sign(r.dq, nf)} adet)</span>)}</>, quick: 'down' });
-    const up = rowsAll.filter(QF.up).sort((x, y) => y.dq - x.dq).slice(0, 3);
-    if (up.length) out.push({ tone: 'up', text: <>En çok artanlar: {up.map((r, i) => <span key={r.p.id + i}>{i ? ', ' : ''}<b>{nm(r)}</b> ({sign(r.dq, nf)} adet)</span>)}</>, quick: 'up' });
-    if (counts.stopped) out.push({ tone: 'down', text: <><b>{counts.stopped} ürün</b> önceki dönemde satıp bu dönem hiç satmadı.</>, quick: 'stopped' });
-    if (counts.stock) out.push({ tone: 'warn', text: <><b>{counts.stock} ürünün</b> stoğu bu satış hızıyla 2 haftadan az yetiyor.</>, quick: 'stock' });
-    if (counts.cancel) out.push({ tone: 'warn', text: <><b>{counts.cancel} üründe</b> iptal oranı %15'in üstünde.</>, quick: 'cancel' });
-    if (counts.new) out.push({ tone: 'info', text: <><b>{counts.new} ürün</b> önceki dönemde satmazken bu dönem sattı.</>, quick: 'new' });
-    return out;
-  }, [view, rowsAll, counts, cmpLabel]);
-
+  const counts = useMemo(() => Object.fromEntries(SHOW.map(([k]) => [k, rows.filter(FILTER[k]).length])), [rows]);
   const list = useMemo(() => {
-    let l = rowsAll;
+    let l = rows;
     const qq = q.trim().toLocaleLowerCase('tr-TR');
     if (qq) {
       const words = qq.split(/\s+/);
       l = l.filter((r) => {
         const codes = r.p.codes.map((c) => String(c).toLocaleLowerCase('tr-TR'));
         if (words.length === 1 && codes.some((c) => c === qq || c.startsWith(qq))) return true;
-        const n = (r.p.n + ' ' + (r.p.br || '') + ' ' + codes.join(' ')).toLocaleLowerCase('tr-TR');
+        const n = (r.p.n + ' ' + codes.join(' ')).toLocaleLowerCase('tr-TR');
         return words.every((w) => n.includes(w));
       });
-    } else l = l.filter(QF[quick]);
-    if (catF) l = l.filter((r) => ((r.p.c || 'Diğer').trim() || 'Diğer') === catF);
-    const [k, dir] = sortBy ? [sortBy.k, sortBy.dir] : DEF_SORT[qq ? 'all' : quick];
-    const val = (r) => (k === 'code' ? String(r.p.code || r.p.barcode || '') : k === 'name' ? r.p.n : k === 'mp' ? Object.keys(r.p.mps).length : k === 'dp' ? (Number.isFinite(r.dp) ? r.dp : 1e9) : (r[k] == null ? (dir > 0 ? 1e12 : -1e12) : r[k]));
-    return [...l].sort((x, y) => { const a = val(x), b = val(y); return (typeof a === 'string' ? a.localeCompare(b, 'tr', { numeric: true }) : a - b) * dir; });
-  }, [rowsAll, quick, sortBy, q, catF]);
-  useEffect(() => { setLimit(50); }, [quick, sortBy, mpF, q, key, catF]);
+    } else l = l.filter(FILTER[show]);
+    const pc = (d) => (d && d.b ? (d.a - d.b) * 7 : 0);
+    const by = {
+      m: (x, y) => y.M - x.M || y.W - x.W,
+      wdown: (x, y) => pc(x.dW) - pc(y.dW),
+      wup: (x, y) => pc(y.dW) - pc(x.dW),
+      ddown: (x, y) => ((x.dD && x.dD.b ? x.dD.a - x.dD.b : 0) - (y.dD && y.dD.b ? y.dD.a - y.dD.b : 0)),
+      cover: (x, y) => ((x.st && x.st.cover != null ? x.st.cover : 1e9) - (y.st && y.st.cover != null ? y.st.cover : 1e9))
+    };
+    return [...l].sort(by[sort] || by.m);
+  }, [rows, show, sort, q]);
+  useEffect(() => { setLimit(40); }, [show, sort, q, mpF, metric, key]);
 
+  // Genel bakış (toplam) ve günlük özet
+  const total = useMemo(() => {
+    if (!ready) return null;
+    const T = { v: {} };
+    mx.products.forEach((p) => Object.entries(p.v).forEach(([pid, t]) => { const z = (T.v[pid] = T.v[pid] || {}); Object.entries(t).forEach(([mp, x]) => { const y = (z[mp] = z[mp] || { q: 0, r: 0, x: 0 }); y.q += x.q; y.r += x.r; y.x += x.x; }); }));
+    return T;
+  }, [ready, mx]);
+  const digest = useMemo(() => (ready ? buildDigest({ products: mx.products, mps, cov, A, heroIds }) : null), [ready, mx, heroIds]);
+  // Özet değiştiyse kaydet (Bugün ve İş → Özet bunu okur; uygulama açılışında ek indirme yok)
+  useEffect(() => {
+    if (!digest || !actions || !actions.saveSalesPrefs) return;
+    const old = prefs && prefs.digest;
+    const sig = (d) => (d ? JSON.stringify({ ...d, at: undefined }) : '');
+    if (sig(old) !== sig(digest)) actions.saveSalesPrefs({ digest: { ...digest, at: new Date().toISOString() } });
+  }, [digest && JSON.stringify(digest)]);
+
+  const toggleStar = (id) => {
+    const next = stars.includes(id) ? stars.filter((x) => x !== id) : [...stars, id].slice(-60);
+    setStars(next);
+    if (actions && actions.saveSalesPrefs) actions.saveSalesPrefs({ heroes: next });
+  };
   const pick = async (fl) => {
     const arr = [...(fl || [])].slice(0, 62);
     if (!arr.length) return;
@@ -603,10 +626,8 @@ export function SalesView({ now, actions }) {
       const { default: readXlsx } = await import('read-excel-file/browser');
       const files = [];
       for (const f of arr) {
-        try {
-          const parsed = parseSales(await readXlsx(f), f.name);
-          files.push({ name: f.name, parsed, own: fileDate(f.name, now) || parsed.range || null });
-        } catch (e) { files.push({ name: f.name, error: e && e.message ? e.message : 'Okunamadı' }); }
+        try { const parsed = parseSales(await readXlsx(f), f.name); files.push({ name: f.name, parsed, own: fileDate(f.name, now) || parsed.range || null }); }
+        catch (e) { files.push({ name: f.name, error: e && e.message ? e.message : 'Okunamadı' }); }
       }
       setImp(files);
     } catch (e) { setErr(e.message || 'Dosya okunamadı.'); }
@@ -615,85 +636,52 @@ export function SalesView({ now, actions }) {
   const toRevenue = async (day, mp, amount, orders) => {
     if (actions && actions.saveRevenue) await actions.saveRevenue(day, [{ marketplace: mp, amount: Math.round(amount * 100) / 100, orders: orders ? Math.round(orders) : null }], { keepOpen: true });
   };
-  const setCmpS = (v) => { setCmp(v); try { localStorage.setItem('ajanda-sales-cmp', v); } catch { /* yok say */ } };
-  const clickSort = (k) => setSortBy((s) => {
-    const [dk, dd] = DEF_SORT[quick];
-    const cur = s || { k: dk, dir: dd };
-    return cur.k === k ? { k, dir: -cur.dir } : { k, dir: k === 'code' || k === 'name' || k === 'cover' ? 1 : -1 };
-  });
-  const sortCur = sortBy || { k: DEF_SORT[q.trim() ? 'all' : quick][0], dir: DEF_SORT[q.trim() ? 'all' : quick][1] };
+  const setMetricS = (v) => { setMetric(v); try { localStorage.setItem('ajanda-sales-metric', v); } catch { /* yok say */ } };
   const doExport = async () => {
-    if (!view) return;
     setExporting(true);
     try {
-      const { exportSales } = await import('./excel.js');
-      await exportSales({ A: opt.A, B: opt.B, cmpLabel, tot: view.tot, mpRows: view.mpRows, rows: rowsAll, mps: view.mpRows.map((m) => m.mp), label: plabel(opt.A[0], opt.A[1]) });
+      const { exportSalesCard } = await import('./excel.js');
+      const P2 = (d) => (d && d.b && Number.isFinite(d.pct) ? d.pct : '');
+      const head = ['Stok kodu', 'Barkod', 'Ürün', 'Hero', 'Dün adet', 'Dün değişim', 'Dün ciro', '7 gün adet', '7 gün değişim', '7 gün ciro', '30 gün adet', '30 gün değişim', '30 gün ciro', ...sel.map((mp) => short(mp) + ' 7 gün adet'), ...sel.map((mp) => short(mp) + ' 30 gün adet'), 'Stok', 'Stok günü'];
+      const data = list.map((r) => {
+        const p = r.p;
+        return [p.code, p.barcode, p.n, r.hero ? 'evet' : '',
+          valOf(p, 'D', sel, 'q'), P2(deltaOf(p, 'D', 'D1', sel, cov, 'q')), valOf(p, 'D', sel, 'r'),
+          valOf(p, 'W', sel, 'q'), P2(deltaOf(p, 'W', 'W1', sel, cov, 'q')), valOf(p, 'W', sel, 'r'),
+          valOf(p, 'M', sel, 'q'), P2(deltaOf(p, 'M', 'M1', sel, cov, 'q')), valOf(p, 'M', sel, 'r'),
+          ...sel.map((mp) => valOf(p, 'W', [mp], 'q')), ...sel.map((mp) => valOf(p, 'M', [mp], 'q')),
+          r.st ? r.st.s : '', r.st && r.st.cover != null ? Math.round(r.st.cover) : ''];
+      });
+      await exportSalesCard({ head, data, label: dm(A) + (mpF ? ' ' + mpF : ''), day: A, mps: sel });
     } catch (e) { setErr('Excel oluşturulamadı: ' + (e && e.message)); } finally { setExporting(false); }
   };
 
-  // Rapor takvimi: son 35 günde hangi günlerin raporu var
   const coverage = useMemo(() => {
     if (!reports || !reports.length) return null;
-    const t = ymd(now);
-    const days = Array.from({ length: 35 }, (_, i) => shift(t, i - 35));
-    return { days, rows: mpsAll.map((mp) => { const own = reports.filter((r) => r.marketplace === mp); return { mp, on: days.map((d) => own.some((r) => r.period_start <= d && r.period_end >= d)) }; }) };
-  }, [reports, dayKey, mpsAll]);
+    const end = A || ymd(now);
+    const days = Array.from({ length: 35 }, (_, i) => shift(end, i - 34));
+    return { days, rows: mps.map((mp) => { const own = reports.filter((r) => r.marketplace === mp); return { mp, on: days.map((d) => own.some((r) => r.period_start <= d && r.period_end >= d)) }; }) };
+  }, [reports, A, mps]);
 
-  // ---- Ek rapor hesapları (yalnız mevcut veriden; ek indirme yok) ----
-  // Günlük seri: tek günlük raporların toplamlarından (ürün verisi gerekmez)
-  const daily = useMemo(() => {
-    if (!opt || !reports) return null;
-    const n = lenOf(opt.A[0], opt.A[1]);
-    if (n < 2 || n > 31) return null;
-    const one = (d) => {
-      const rs = reports.filter((r) => r.period_start === d && r.period_end === d && (!mpF || r.marketplace === mpF));
-      return rs.length ? rs.reduce((s, r) => s + ((r.totals || {}).r || 0), 0) : null;
-    };
-    const pts = Array.from({ length: n }, (_, i) => { const d = shift(opt.A[0], i), e = shift(opt.B[0], i); return { d, e, a: one(d), b: e <= opt.B[1] ? one(e) : null }; });
-    return pts.filter((x) => x.a != null).length >= 2 ? pts : null;
-  }, [opt && opt.A.join(), opt && opt.B.join(), reports, mpF]);
-  const contrib = useMemo(() => {
-    const l = rowsAll.filter((r) => r.hasB && Math.abs(r.dr) >= 1);
-    const up = [...l].sort((x, y) => y.dr - x.dr).filter((r) => r.dr > 0).slice(0, 5);
-    const down = [...l].sort((x, y) => x.dr - y.dr).filter((r) => r.dr < 0).slice(0, 5);
-    const max = Math.max(1, ...up.map((r) => r.dr), ...down.map((r) => -r.dr));
-    return up.length || down.length ? { up, down, max } : null;
-  }, [rowsAll]);
-  const pareto = useMemo(() => {
-    const l = rowsAll.filter((r) => r.ar > 0).sort((x, y) => y.ar - x.ar);
-    const tot = l.reduce((s, r) => s + r.ar, 0);
-    if (!tot || l.length < 10) return null;
-    let acc = 0, n = 0;
-    for (const r of l) { acc += r.ar; n++; if (acc >= tot * 0.8) break; }
-    return { n, of: l.length, top: l.slice(0, 10).reduce((s, r) => s + r.ar, 0) / tot };
-  }, [rowsAll]);
-  const cats = useMemo(() => {
-    const m = new Map();
-    rowsAll.forEach((r) => {
-      const k = (r.p.c || 'Diğer').trim() || 'Diğer';
-      const e = m.get(k) || { k, ar: 0, br: 0, aq: 0, bq: 0, n: 0 };
-      e.ar += r.ar; e.br += r.br; e.aq += r.aq; e.bq += r.bq; if (r.aq > 0) e.n++;
-      m.set(k, e);
-    });
-    return [...m.values()].filter((c) => c.ar > 0 || c.br > 0).sort((x, y) => y.ar - x.ar);
-  }, [rowsAll]);
-
-  const T = view && view.tot;
-  const showB = view && !view.allNoB;
-  const goTable = (qk) => { setQ(''); setQuick(qk); setSortBy(null); setTabS('urunler'); };
-  const rp = T && showB ? pctTxt(T.a.r, T.b.r) : null;
-  const coverTxt = (c) => (c == null ? '' : c < 1 ? '<1g' : c > 365 ? '1y+' : Math.round(c) + 'g');
+  const part = (pid) => { if (!cov) return ''; const d = daysOf(cov, sel, pid), n = lenOf(P[pid][0], P[pid][1]); return d && d < n ? d + '/' + n + ' gün rapor' : !d ? 'rapor yok' : ''; };
+  const fmtV = (v) => (metric === 'r' ? tlShort(v) : nf(v));
+  const ov = (pid, pid2, lbl) => {
+    const d = total ? deltaOf(total, pid, pid2, sel, cov, 'r') : null;
+    return { v: total ? valOf(total, pid, sel, 'r') : 0, q: total ? valOf(total, pid, sel, 'q') : 0, d, lbl };
+  };
+  const alerts = digest ? digest.alerts : [];
+  const openById = (id) => { const p = ready && mx.products.find((x) => x.id === id); if (p) setProd(p); };
 
   return (
-    <div className="sl">
-      <div className="sl-top">
+    <div className="sr">
+      <div className="sr-top">
         <div>
-          <h2 className="sl-h">Satış raporu</h2>
-          <span className="hint">Pazaryeri satış Excel'lerinden dönem kıyası: ne arttı, ne düştü, nerede.</span>
+          <h2 className="sr-h">Satış raporu</h2>
+          {A ? <span className="sr-sub">Son rapor günü <b>{dm(A)} {wdayOf(A)}</b> · dün, son 7 gün ve son 30 gün bu güne göre</span> : <span className="sr-sub">Pazaryeri satış Excel'lerini yükle</span>}
         </div>
-        <div className="sl-top-b">
+        <div className="sr-top-b">
           <button type="button" className="btn" onClick={() => setCatOpen(true)}>Ürün listesi{cat.n ? '' : ' ⚠︎'}</button>
-          {view && view.mpRows.length ? <button type="button" className="btn" onClick={doExport} disabled={exporting}>{exporting ? 'Hazırlanıyor…' : '⬇ Excel'}</button> : null}
+          {ready ? <button type="button" className="btn" onClick={doExport} disabled={exporting}>{exporting ? '…' : '⬇ Excel'}</button> : null}
           <button type="button" className="btn primary" onClick={() => fileRef.current && fileRef.current.click()} disabled={reading}>{reading ? 'Okunuyor…' : '⬆ Rapor yükle'}</button>
         </div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => pick(e.target.files)} />
@@ -703,274 +691,145 @@ export function SalesView({ now, actions }) {
       {reports && !reports.length ? (
         <div className="card sl-empty">
           <b>Henüz rapor yok</b>
-          <span>Panelden satış raporunu Excel olarak indir ve yükle. Gün gün indirdiysen dosya adına tarihi yaz ("1 Kasım"), hepsini birlikte seç.</span>
-          <span>Trendyol (ürün bazlı satış raporu) ve Hepsiburada (satış raporu) doğrudan tanınır; diğer pazaryerlerinde ürün adı, adet ve tutar sütunu olan Excel'ler okunur.</span>
+          <span>Panelden günlük satış raporunu Excel olarak indir, dosya adına tarihi yaz ("22 Kasım") ve yükle. Birden çok günü ve pazaryerini birlikte seçebilirsin.</span>
         </div>
       ) : null}
+      {reports && reports.length && !ready ? <p className="hint">{loading ? 'Raporlar hazırlanıyor…' : ''}</p> : null}
 
-      {reports && reports.length && opt ? (
+      {ready ? (
         <>
-          <div className="card sl-ctrl">
-            <div className="sl-ctrl-r">
-              <span className="sl-ctrl-l">Dönem</span>
-              <div className="typechips" role="tablist" aria-label="Dönem">
-                {opts.map((o) => <button key={o.id} type="button" role="tab" aria-selected={opt.id === o.id} className={'chip' + (opt.id === o.id ? ' on' : '')} onClick={() => { setOptId(o.id); setSortBy(null); }}>{o.label}</button>)}
-              </div>
-            </div>
-            <div className="sl-ctrl-r">
-              <span className="sl-ctrl-l">Kıyas</span>
-              <div className="typechips" role="tablist" aria-label="Kıyas">
-                {CMP.filter(([k]) => k !== 'week' || weekOk).map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={(cmp === 'week' && !weekOk ? 'prev' : cmp) === k} className={'chip' + ((cmp === 'week' && !weekOk ? 'prev' : cmp) === k ? ' on' : '')} onClick={() => setCmpS(k)}>{l}</button>)}
-              </div>
-            </div>
-            {mpsAll.length > 1 ? (
-              <div className="sl-ctrl-r">
-                <span className="sl-ctrl-l">Pazaryeri</span>
-                <div className="typechips">
-                  <button type="button" className={'chip' + (!mpF ? ' on' : '')} onClick={() => setMpF('')}>Tümü</button>
-                  {mpsAll.map((mp) => <button key={mp} type="button" className={'chip' + (mpF === mp ? ' on' : '')} onClick={() => setMpF(mp)}><span className="dot" style={{ background: mpColor(mp) }} /> {mp}</button>)}
+          {/* Genel bakış */}
+          <section className="sr-ov">
+            {[ov('D', 'D1'), ov('W', 'W1'), ov('M', 'M1')].map((o, i) => {
+              const pid = ['D', 'W', 'M'][i];
+              const dw = i === 0 && total ? deltaOf(total, 'D', 'Dw', sel, cov, 'r') : null;
+              return (
+                <div key={pid} className="sr-ov-t">
+                  <span className="sr-ov-l">{['Dün · ' + dm(A), 'Son 7 gün', 'Son 30 gün'][i]}{part(pid) ? <em>{part(pid)}</em> : null}</span>
+                  <b>{tlShort(o.v)}</b>
+                  <small>{nf(o.q)} adet</small>
+                  <Chg d={o.d} label={['önceki güne', 'önceki 7 güne', 'önceki 30 güne'][i]} />
+                  {i === 0 ? <Chg d={dw} label={'geçen ' + wdat(A) + ''} /> : null}
                 </div>
+              );
+            })}
+            {alerts.length ? (
+              <div className="sr-ov-al">
+                <span className="sr-ov-l">Hero ürünlerde dikkat</span>
+                {alerts.map((a, i) => (
+                  <button key={i} type="button" className={'sr-al t-' + a.t} onClick={() => openById(a.id)}>
+                    <i>{a.t === 'stock' ? '📦' : a.t === 'stop' ? '⛔' : '📉'}</i><span><b>{a.x.charAt(0).toLocaleUpperCase('tr-TR') + a.x.slice(1)}</b> · {a.n}</span>
+                  </button>
+                ))}
               </div>
             ) : null}
-          </div>
+          </section>
 
-          {!view ? <p className="hint">{loading ? 'Yükleniyor…' : ''}</p> : !view.mpRows.length ? (
-            <div className="card sl-empty"><b>Bu dönemin raporu yok</b><span>{plabel(opt.A[0], opt.A[1])} için rapor yükle ya da başka dönem seç. Özet sekmesinin altındaki rapor takviminde hangi günlerin yüklü olduğunu görebilirsin.</span></div>
-          ) : (
-            <>
-              {/* Başlık: dönem, ana sonuç ve rakamlar */}
-              <section className="card sl-hero">
-                <div className="sl-hero-top">
-                  <div className="sl-hero-p">
-                    <span>{plabel(opt.A[0], opt.A[1])}{mpF ? ' · ' + mpF : ''}</span>
-                    <small>{showB ? 'kıyas: ' + plabel(opt.B[0], opt.B[1]) + ' (' + cmpLabel.toLocaleLowerCase('tr-TR') + ')' : 'kıyas dönemi raporu yok'}{opt.note ? ' · ' + opt.note : ''}</small>
-                  </div>
-                  {rp != null ? <div className={'sl-hero-ch ' + (rp >= 0 ? 'up' : 'down')}><b>{fmtPct(rp)}</b><span>ciro</span></div> : null}
+          {/* Süzgeçler */}
+          <section className="card sr-f">
+            <input className="sr-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Stok kodu, barkod ya da ürün adı (ör. 4682)" aria-label="Stok kodu, barkod ya da ürün adı ile ara" />
+            <div className="sr-f-r">
+              {mps.length > 1 ? (
+                <div className="sr-seg" role="group" aria-label="Pazaryeri">
+                  <button type="button" className={!mpF ? 'on' : ''} onClick={() => setMpF('')}>Tümü</button>
+                  {mps.map((mp) => <button key={mp} type="button" className={mpF === mp ? 'on' : ''} onClick={() => setMpF(mp)}><i className="dot" style={{ background: mpColor(mp) }} />{short(mp)}</button>)}
                 </div>
-                {insights[0] && insights[0].head ? <p className="sl-hero-s">{insights[0].text}</p> : null}
-                <div className="sl-strip">
-                  <div><span>Ciro</span><b>{tlShort(T.a.r)}</b>{showB ? <small>önce {tlShort(T.b.r)}</small> : null}</div>
-                  <div><span>Satış adedi</span><b>{nf(T.a.q)}</b>{showB ? <small>önce {nf(T.b.q)} <Delta a={T.a.q} b={T.b.q} /></small> : null}</div>
-                  {T.a.o ? <div><span>Sipariş</span><b>{nf(T.a.o)}</b>{showB ? <small>önce {nf(T.b.o)} <Delta a={T.a.o} b={T.b.o} /></small> : null}</div> : null}
-                  {T.a.o ? <div><span>Sepet ort.</span><b>{tlShort(T.a.r / T.a.o)}</b>{showB && T.b.o ? <small>önce {tlShort(T.b.r / T.b.o)} <Delta a={T.a.r / T.a.o} b={T.b.r / T.b.o} money /></small> : null}</div> : null}
-                  {T.a.x ? <div><span>İptal oranı</span><b>%{((T.a.x / (T.a.q + T.a.x || 1)) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</b>{showB && T.b.q ? <small>önce %{((T.b.x / (T.b.q + T.b.x || 1)) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</small> : null}</div> : null}
-                </div>
-                {view.scaled ? <span className="hint">Gün sayısı farklı dönemler günlük ortalamaya çevrilerek kıyaslandı.</span> : null}
-              </section>
-
-              {view.allNoB ? <div className="card sl-note">Kıyas dönemi ({plabel(opt.B[0], opt.B[1])}) için rapor yok. Artış ve düşüşleri görmek için o dönemin raporunu da yükle ya da başka bir kıyas seç.</div> : null}
-
-              <div className="sl-tabs" role="tablist" aria-label="Rapor bölümü">
-                {[['ozet', 'Özet'], ['urunler', 'Ürünler', rowsAll.length], ['kategori', 'Kategoriler', cats.length]].map(([k, l, c]) => (
-                  <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTabS(k)}>{l}{c ? <span>{c}</span> : null}</button>
-                ))}
+              ) : null}
+              <div className="sr-seg" role="group" aria-label="Ölçü">
+                <button type="button" className={metric === 'q' ? 'on' : ''} onClick={() => setMetricS('q')}>Adet</button>
+                <button type="button" className={metric === 'r' ? 'on' : ''} onClick={() => setMetricS('r')}>Ciro</button>
               </div>
-
-              {tab === 'ozet' ? (
-                <>
-                  {insights.some((x) => !x.head) || pareto ? (
-                    <section className="card sl-card sl-ins">
-                      <h3>Öne çıkanlar</h3>
-                      <ul>
-                        {insights.filter((x) => !x.head).map((x, i) => (
-                          <li key={i} className={'t-' + x.tone}>
-                            <span>{x.text}</span>
-                            {x.quick ? <button type="button" className="linkbtn" onClick={() => goTable(x.quick)}>Listele</button> : null}
-                            {x.mp ? <button type="button" className="linkbtn" onClick={() => setMpF(x.mp)}>Süz</button> : null}
-                          </li>
-                        ))}
-                        {pareto ? <li className="t-info"><span>Cironun %80'i <b>{pareto.n} üründen</b> geliyor ({nf(pareto.of)} satan ürünün %{Math.max(1, Math.round((pareto.n / pareto.of) * 100))}'i). İlk 10 ürün cironun <b>%{Math.round(pareto.top * 100)}</b>'ini yapıyor.</span><button type="button" className="linkbtn" onClick={() => goTable('all')}>Listele</button></li> : null}
-                      </ul>
-                    </section>
-                  ) : null}
-
-                  <div className="sl-two">
-                    {daily ? <DailyChart pts={daily} showB={showB} /> : null}
-                    {contrib ? (
-                      <section className="card sl-card">
-                        <div className="sl-card-h"><h3>Değişimi getiren ürünler</h3><span className="hint">ciro farkı</span></div>
-                        <div className="sl-contrib">
-                          {[...contrib.up, ...contrib.down].map((r) => (
-                            <button key={r.p.id + '|' + r.p.n} type="button" className="sl-cb" onClick={() => setProd(r.p)} title={r.p.n}>
-                              <span className="sl-cb-n"><b>{r.p.code || '—'}</b> {r.p.n}</span>
-                              <span className="sl-cb-bar">
-                                <span className="neg">{r.dr < 0 ? <i style={{ width: (-r.dr / contrib.max) * 100 + '%' }} /> : null}</span>
-                                <span className="pos">{r.dr > 0 ? <i style={{ width: (r.dr / contrib.max) * 100 + '%' }} /> : null}</span>
-                              </span>
-                              <span className={'sl-cb-v ' + (r.dr > 0 ? 'up' : 'down')}>{sign(r.dr, tlShort)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </section>
-                    ) : null}
-                  </div>
-
-                  {view.mpRows.length > 1 && !mpF ? (
-                    <section className="card sl-card">
-                      <h3>Pazaryerleri</h3>
-                      <div className="sl-mpt">
-                        <div className="sl-mpt-r head"><span>Pazaryeri</span><span>Ciro</span><span>Değişim</span><span>Adet</span><span>Değişim</span><span>Pay</span></div>
-                        {view.mpRows.map((m) => {
-                          const c = m.cov; const nb = !c.B.ids.length;
-                          const warn = !c.A.ids.length ? 'bu dönem raporu yok' : nb ? 'kıyas raporu yok' : c.A.days < c.A.total ? c.A.days + '/' + c.A.total + ' gün' : c.A.approx ? 'yakın dönem' : '';
-                          return (
-                            <button key={m.mp} type="button" className="sl-mpt-r" onClick={() => setMpF(m.mp)}>
-                              <span className="sl-mpn"><span className="dot" style={{ background: mpColor(m.mp) }} />{m.mp}{warn ? <small>{warn}</small> : null}</span>
-                              <span>{tlShort(m.a.r)}</span>
-                              <span><Delta a={m.a.r} b={m.b.r} money none={nb} /></span>
-                              <span>{nf(m.a.q)}</span>
-                              <span><Delta a={m.a.q} b={m.b.q} none={nb} /></span>
-                              <span className="sl-share"><i style={{ width: (T.a.r ? (m.a.r / T.a.r) * 100 : 0) + '%', background: mpColor(m.mp) }} />%{T.a.r ? Math.round((m.a.r / T.a.r) * 100) : 0}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ) : null}
-                </>
-              ) : null}
-
-              {tab === 'kategori' ? (
-                <section className="card sl-card">
-                  <div className="sl-card-h"><h3>Kategoriler</h3><span className="hint">dokun → kategorinin ürünleri</span></div>
-                  <div className="sl-ct">
-                    <div className="sl-ct-r head"><span>Kategori</span><span>Ciro</span><span>Ciro farkı</span><span>Değişim</span><span>Adet</span><span>Satan ürün</span></div>
-                    {cats.map((c) => (
-                      <button key={c.k} type="button" className="sl-ct-r" onClick={() => { setCatF(c.k); setQ(''); setQuick('all'); setSortBy(null); setTabS('urunler'); }}>
-                        <span className="sl-ct-n">{c.k}<i style={{ width: (cats[0].ar ? (c.ar / cats[0].ar) * 100 : 0) + '%' }} /></span>
-                        <span>{tlShort(c.ar)}</span>
-                        <span className={showB && Math.abs(c.ar - c.br) >= 1 ? (c.ar > c.br ? 'up' : 'down') : ''}>{showB ? sign(c.ar - c.br, tlShort) : ''}</span>
-                        <span>{showB ? <Delta a={c.ar} b={c.br} money /> : null}</span>
-                        <span>{nf(c.aq)}</span>
-                        <span>{c.n}</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-
-              {tab === 'urunler' ? (
-                <section className="card sl-card" id="sl-table">
-                  <div className="sl-card-h">
-                    <h3>Ürünler{mpF ? <span className="sl-fil"> · {mpF} <button type="button" className="linkbtn" aria-label="Pazaryeri süzgecini kaldır" onClick={() => setMpF('')}>✕</button></span> : null}{catF ? <span className="sl-fil"> · {catF} <button type="button" className="linkbtn" aria-label="Kategori süzgecini kaldır" onClick={() => setCatF('')}>✕</button></span> : null}</h3>
-                    <span className="hint">{list.length} ürün</span>
-                  </div>
-                  {view.noCode ? (
-                    <div className="sl-cat-hint">
-                      <span>{nf(view.noCode)} ürünün stok kodu yok{cat.n ? ' (ürün listesinde barkodu bulunamadı)' : ''}. {cat.n ? 'Güncel ürün listesini yükle.' : 'Trendyol ürünlerini stok koduna bağlamak için barkod–stok kodu listeni bir kez yükle.'}</span>
-                      <button type="button" className="linkbtn" onClick={() => setCatOpen(true)}>{cat.n ? 'Güncelle' : 'Ürün listesi yükle'}</button>
-                    </div>
-                  ) : null}
-                  <input className="sl-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Stok kodu, barkod ya da ürün adı" aria-label="Stok kodu, barkod ya da ürün adı ile ara" />
-                  {!q.trim() ? (
-                    <div className="typechips sl-quick">
-                      {QUICK.map(([k, l]) => (counts[k] || k === 'all' || k === quick ? <button key={k} type="button" className={'chip' + (quick === k ? ' on' : '')} onClick={() => { setQuick(k); setSortBy(null); }}>{l} <span className="sl-cnt">{counts[k]}</span></button> : null))}
-                    </div>
-                  ) : null}
-                  <p className="sl-legend"><b>Adet</b>, <b>Ciro</b>: {plabel(opt.A[0], opt.A[1])} · <b>Önceki adet</b>: {plabel(opt.B[0], opt.B[1])} · <b>Adet farkı</b> = Adet − Önceki adet · <b>Stok</b>: güncel stok ve bu satış hızıyla kaç gün yeteceği</p>
-                  <div className="sl-tbl" role="table" aria-label="Ürün raporu">
-                    <div className="sl-tr head" role="row">
-                      {COLS.map(([k, l]) => (
-                        <button key={k} type="button" role="columnheader" className={'c-' + k + (sortCur.k === k ? ' on' : '')} aria-sort={sortCur.k === k ? (sortCur.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick={() => clickSort(k)}>
-                          {l}{sortCur.k === k ? (sortCur.dir > 0 ? ' ↑' : ' ↓') : ''}
-                        </button>
-                      ))}
-                    </div>
-                    {list.slice(0, limit).map((r) => (
-                      <button key={r.p.id + '|' + r.p.n} type="button" role="row" className="sl-tr" onClick={() => setProd(r.p)}>
-                        <span className={'c-code' + (r.p.code ? '' : ' none')}>{r.p.code || r.p.barcode || '—'}</span>
-                        <span className="c-name" title={r.p.n}>{r.p.n}</span>
-                        <span className="c-mp">{Object.keys(r.p.mps).filter((mp) => !mpF || mp === mpF).map((mp) => <span key={mp} className="dot" title={mp} style={{ background: mpColor(mp) }} />)}</span>
-                        <span className="c-aq"><b>{nf(r.aq)}</b></span>
-                        <span className="c-bq">{r.hasB ? nf(r.bq) : '—'}</span>
-                        <span className={'c-dq ' + (r.hasB && Math.abs(r.dq) >= 0.5 ? (r.dq > 0 ? 'up' : 'down') : '')}>{r.hasB ? sign(r.dq, nf) : ''}</span>
-                        <span className={'c-dp ' + (r.hasB && Math.abs(r.dq) >= 0.5 ? (r.dq > 0 ? 'up' : 'down') : '')}>{!r.hasB ? '' : !r.bq ? (r.aq ? 'yeni' : '') : !r.aq ? '−%100' : fmtPct(r.aq / r.bq - 1)}</span>
-                        <span className="c-ar">{tlShort(r.ar)}</span>
-                        <span className={'c-dr ' + (r.hasB && Math.abs(r.dr) >= 1 ? (r.dr > 0 ? 'up' : 'down') : '')}>{r.hasB ? sign(r.dr, tlShort) : ''}</span>
-                        <span className={'c-s' + (r.cover != null && r.cover < 7 ? ' hot' : r.cover != null && r.cover < 14 ? ' warm' : '')}>{r.s == null ? '' : <>{nf(r.s)}{r.cover != null ? <small>{coverTxt(r.cover)}</small> : null}</>}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {!list.length ? <p className="hint" style={{ margin: 0 }}>{q.trim() ? 'Bu kodla ya da adla ürün bulunamadı.' : 'Bu listede ürün yok.'}</p> : null}
-                  {list.length > limit ? <button type="button" className="btn" onClick={() => setLimit((l) => l + 100)}>Daha fazla göster ({list.length - limit})</button> : null}
-                </section>
-              ) : null}
-            </>
-          )}
-
-          {coverage && (tab === 'ozet' || !view || !view.mpRows.length) ? (
-            <section className="card sl-card">
-              <div className="sl-card-h"><h3>Rapor takvimi</h3><span className="hint">son 35 gün · dolu = rapor var</span></div>
-              <div className="sl-cov">
-                {coverage.rows.map((r) => (
-                  <div key={r.mp} className="sl-cov-r">
-                    <span className="sl-cov-mp">{short(r.mp)}</span>
-                    <span className="sl-cov-days">{r.on.map((on, i) => <i key={i} className={on ? 'on' : ''} style={on ? { background: mpColor(r.mp) } : null} title={dm(coverage.days[i]) + (on ? '' : ' · rapor yok')} />)}</span>
-                  </div>
-                ))}
-                <div className="sl-cov-r foot"><span /><span className="sl-cov-days lbl"><em>{dm(coverage.days[0])}</em><em>{dm(coverage.days[coverage.days.length - 1])}</em></span></div>
+              <label className="sr-sort"><span>Sırala</span>
+                <select value={sort} onChange={(e) => setSort(e.target.value)}>{SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+              </label>
+            </div>
+            {!q.trim() ? (
+              <div className="sr-chips">
+                {SHOW.map(([k, l]) => (counts[k] || k === 'all' || k === show ? <button key={k} type="button" className={'chip' + (show === k ? ' on' : '')} onClick={() => setShow(k)}>{l} <span>{counts[k]}</span></button> : null))}
               </div>
-              <details className="sl-replist" onToggle={(e) => setShowList(e.currentTarget.open)}>
-                <summary>Yüklenen raporlar ({reports.length})</summary>
-                {showList ? reports.slice(0, 200).map((r) => (
-                  <div key={r.id} className="sl-rrow">
-                    <span className="dot" style={{ background: mpColor(r.marketplace) }} />
-                    <span className="sl-rmp">{r.marketplace}</span>
-                    <span className="sl-rp">{plabel(r.period_start, r.period_end)}</span>
-                    <span className="sl-rv">{tlShort((r.totals || {}).r || 0)}</span>
-                    <button type="button" className="linkbtn" style={{ color: 'var(--danger)' }} aria-label={r.marketplace + ' ' + plabel(r.period_start, r.period_end) + ' raporunu sil'} onClick={async () => {
-                      if (!window.confirm(r.marketplace + ' ' + plabel(r.period_start, r.period_end) + ' raporu silinsin mi?')) return;
-                      try { await deleteReport(r.id); setReports((x) => x.filter((z2) => z2.id !== r.id)); } catch (e) { setErr(String(e && e.message)); }
-                    }}>Sil</button>
-                  </div>
-                )) : null}
-              </details>
-            </section>
-          ) : null}
+            ) : null}
+            {!cat.n && rows.some((r) => !r.p.code) ? (
+              <div className="sl-cat-hint"><span>Trendyol ürünlerinde stok kodu görünmesi için barkod–stok kodu listeni bir kez yükle.</span><button type="button" className="linkbtn" onClick={() => setCatOpen(true)}>Ürün listesi yükle</button></div>
+            ) : null}
+          </section>
+
+          {/* Ürün listesi */}
+          <section className="card sr-list">
+            <div className={'sr-row head' + (sel.length > 1 ? '' : ' one')} aria-hidden="true">
+              <span className="sr-c-p">Ürün</span>
+              <span className="sr-c-n">Dün<small>{dm(A)}</small></span>
+              <span className="sr-c-n">7 gün</span>
+              <span className="sr-c-n">30 gün</span>
+              {sel.length > 1 ? <span className="sr-c-mp">Pazaryeri payı</span> : null}
+              <span className="sr-c-s">Stok</span>
+            </div>
+            {list.slice(0, limit).map((r) => (
+              <button key={r.p.id} type="button" className={'sr-row' + (sel.length > 1 ? '' : ' one')} onClick={() => setProd(r.p)}>
+                <span className="sr-c-p">
+                  <span className="sr-code">{r.hero ? <i className={'sr-hero' + (stars.includes(r.p.id) ? ' on' : '')} title="Hero ürün">★</i> : null}{r.p.code || <em>{r.p.barcode || 'kodsuz'}</em>}</span>
+                  <span className="sr-name">{r.p.n}</span>
+                </span>
+                {[['D', r.D, r.dD, 'Dün'], ['W', r.W, r.dW, '7g'], ['M', r.M, r.dM, '30g']].map(([k, v, d, l]) => (
+                  <span key={k} className="sr-c-n"><em className="sr-ml">{l}</em><b>{fmtV(v)}</b><Chg d={d} /></span>
+                ))}
+                {r.share ? (
+                  <span className="sr-c-mp">
+                    <span className="sr-share">{r.share.filter((x) => x.v > 0).map((x) => <i key={x.mp} style={{ flexGrow: x.v, background: mpColor(x.mp) }} />)}</span>
+                    <small>{r.share.filter((x) => x.v > 0).sort((x, y) => y.v - x.v).slice(0, 2).map((x) => short(x.mp) + ' %' + Math.round((x.v / r.share.reduce((t, z) => t + z.v, 0)) * 100)).join(' · ')}</small>
+                  </span>
+                ) : null}
+                <span className={'sr-c-s' + (r.st && (r.st.s <= 0 || (r.st.cover != null && r.st.cover < 7)) ? ' hot' : r.st && r.st.cover != null && r.st.cover < 14 ? ' warm' : '')}>
+                  {r.st ? <><b>{r.st.s <= 0 ? 'bitti' : nf(r.st.s)}</b>{r.st.cover != null && r.st.s > 0 ? <small>~{r.st.cover > 365 ? '1y+' : Math.round(r.st.cover) + 'g'}</small> : null}</> : <small>—</small>}
+                </span>
+              </button>
+            ))}
+            {!list.length ? <p className="hint" style={{ margin: '8px 0' }}>{q.trim() ? 'Bu kodla ya da adla ürün bulunamadı.' : 'Bu süzgeçte ürün yok.'}</p> : null}
+            {list.length > limit ? <button type="button" className="btn" onClick={() => setLimit((l) => l + 60)}>Daha fazla göster ({list.length - limit})</button> : null}
+            <p className="sr-note">Yüzdeler bir önceki eşit dönemle kıyas: dün → önceki gün, 7 gün → önceki 7 gün, 30 gün → önceki 30 gün. Raporu eksik günler gün başı ortalamayla dengelenir. Ürüne dokun → pazaryeri kırılımı ve haftalık grafik.</p>
+          </section>
         </>
+      ) : null}
+
+      {coverage ? (
+        <section className="card sl-card">
+          <div className="sl-card-h"><h3>Rapor takvimi</h3><span className="hint">son 35 gün · dolu = rapor var</span></div>
+          <div className="sl-cov">
+            {coverage.rows.map((r) => (
+              <div key={r.mp} className="sl-cov-r">
+                <span className="sl-cov-mp">{short(r.mp)}</span>
+                <span className="sl-cov-days">{r.on.map((on, i) => <i key={i} className={on ? 'on' : ''} style={on ? { background: mpColor(r.mp) } : null} title={dm(coverage.days[i]) + (on ? '' : ' · rapor yok')} />)}</span>
+              </div>
+            ))}
+            <div className="sl-cov-r foot"><span /><span className="sl-cov-days lbl"><em>{dm(coverage.days[0])}</em><em>{dm(coverage.days[coverage.days.length - 1])}</em></span></div>
+          </div>
+          <details className="sl-replist" onToggle={(e) => setShowList(e.currentTarget.open)}>
+            <summary>Yüklenen raporlar ({reports.length})</summary>
+            {showList ? reports.slice(0, 200).map((r) => (
+              <div key={r.id} className="sl-rrow">
+                <span className="dot" style={{ background: mpColor(r.marketplace) }} />
+                <span className="sl-rmp">{r.marketplace}</span>
+                <span className="sl-rp">{plabel(r.period_start, r.period_end)}</span>
+                <span className="sl-rv">{tlShort((r.totals || {}).r || 0)}</span>
+                <button type="button" className="linkbtn" style={{ color: 'var(--danger)' }} aria-label={r.marketplace + ' ' + plabel(r.period_start, r.period_end) + ' raporunu sil'} onClick={async () => {
+                  if (!window.confirm(r.marketplace + ' ' + plabel(r.period_start, r.period_end) + ' raporu silinsin mi?')) return;
+                  try { await deleteReport(r.id); setReports((x) => x.filter((z) => z.id !== r.id)); } catch (e) { setErr(String(e && e.message)); }
+                }}>Sil</button>
+              </div>
+            )) : null}
+          </details>
+        </section>
       ) : !reports && !err ? <p className="hint">Yükleniyor…</p> : null}
 
       {imp ? (
         <ImportSheet files={imp} reports={reports || []} now={now} onClose={() => setImp(null)} onRevenue={toRevenue}
           onDone={(saved, keepOpen) => {
             const gone = new Set(saved.map((s) => s.replaced).filter(Boolean));
-            setReports((r) => [...saved.map((s) => s.row), ...(r || []).filter((x) => !gone.has(x.id))].sort((x, z2) => z2.period_end.localeCompare(x.period_end)));
-            setOptId('son');
+            setReports((r) => [...saved.map((s) => s.row), ...(r || []).filter((x) => !gone.has(x.id))].sort((x, z) => z.period_end.localeCompare(x.period_end)));
             if (!keepOpen) setImp(null);
           }} />
       ) : null}
       {catOpen ? <CatalogSheet catalog={catalog} onClose={() => setCatOpen(false)} onSaved={(row) => { setCatalog(row); setCatOpen(false); }} /> : null}
-      {prod && opt ? <ProductSheet noB={view ? view.noB : new Set()} p={prod} A={opt.A} B={opt.B} metric="q" reports={reports || []} now={now} onClose={() => setProd(null)} /> : null}
+      {prod && ready ? <ProductCard p={prod} mps={mps} cov={cov} P={P} A={A} starred={stars.includes(prod.id)} onStar={() => toggleStar(prod.id)} onClose={() => setProd(null)} /> : null}
     </div>
-  );
-}
-
-// Günlük ciro: bu dönem (dolu çubuk) ve kıyas dönemi (açık çubuk), aynı eksende
-function DailyChart({ pts, showB }) {
-  const [hov, setHov] = useState(null);
-  const max = Math.max(1, ...pts.map((x) => Math.max(x.a || 0, showB ? x.b || 0 : 0)));
-  const h = hov != null ? pts[hov] : null;
-  const tA = pts.reduce((s, x) => s + (x.a || 0), 0);
-  return (
-    <section className="card sl-card">
-      <div className="sl-card-h"><h3>Günlük ciro</h3>
-        <span className="sl-leg"><i className="a" />Bu dönem{showB ? <><i className="b" />Kıyas</> : null}</span>
-      </div>
-      <div className="sl-dc-tip" aria-live="polite">
-        {h ? <><b>{dm(h.d)}</b> {h.a == null ? 'rapor yok' : tl(h.a)}{showB ? <> · <span>{dm(h.e)}: {h.b == null ? 'rapor yok' : tl(h.b)}</span>{h.a != null && h.b ? <> <Delta a={h.a} b={h.b} money /></> : null}</> : null}</>
-          : <span className="hint">Günlük ortalama {tlShort(tA / Math.max(1, pts.filter((x) => x.a != null).length))} · çubuğun üzerine gel</span>}
-      </div>
-      <div className="sl-dc" style={{ '--n': pts.length }} onMouseLeave={() => setHov(null)}>
-        {pts.map((x, i) => (
-          <div key={x.d} className={'sl-dc-c' + (hov === i ? ' on' : '')} onMouseEnter={() => setHov(i)} onClick={() => setHov(i)} role="img" aria-label={dm(x.d) + ': ' + (x.a == null ? 'rapor yok' : tl(x.a))}>
-            <div className="sl-dc-bars">
-              {showB ? <span className="b" style={{ height: x.b ? (x.b / max) * 100 + '%' : 0 }} /> : null}
-              <span className={'a' + (x.a == null ? ' none' : '')} style={{ height: x.a == null ? '100%' : (x.a / max) * 100 + '%' }} />
-            </div>
-            <span className="sl-dc-l">{pts.length > 16 && i % 2 ? '' : Number(x.d.slice(8))}</span>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }

@@ -59,7 +59,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const navTo = (id) => { if (id === 'is' && tab !== 'is') setIsSeg('ozet'); if (id === 'ozel' && tab !== 'ozel') setOzelSeg('ozet'); setTab(id); };
   const setOzelSeg = (v) => { setOzelSegState(v); try { sessionStorage.setItem('ajanda-ozel-seg', v); } catch { /* yok say */ } };
   const goTab = (t) => {
-    if (t === 'ozet' || t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer' || t === 'bekleyenler' || t === 'raporlar' || t === 'mailler') { setSheet(null); setIsSeg(t); setTab('is'); }
+    if (t === 'ozet' || t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer' || t === 'bekleyenler' || t === 'raporlar' || t === 'mailler' || t === 'satislar') { setSheet(null); setIsSeg(t); setTab('is'); }
     else if (t === 'yarim') { setOzelSeg('yarim'); setTab('ozel'); }
     else if (t === 'cuzdan' || t === 'saglik' || t === 'listeler' || t === 'aliskanlik' || t === 'ozelgun' || t === 'gunluk') { setOzelSeg(t); setTab('ozel'); }
     else setTab(t);
@@ -189,6 +189,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const [todayHide, setTodayHide] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('ajanda-today-hide') || '[]')); } catch { return new Set(); } });
   const saveTodayHide = (set) => { setTodayHide(new Set(set)); try { localStorage.setItem('ajanda-today-hide', JSON.stringify([...set])); } catch { /* yok say */ } };
   const [healthGoals, setHealthGoals] = useState(null);
+  // Satış raporu tercihleri: hero ürünler + günlük özet (app_settings.sales_prefs; SQL 31 yoksa bu cihazda)
+  const [salesPrefs, setSalesPrefs] = useState(() => { try { return JSON.parse(localStorage.getItem('ajanda-sales-prefs') || 'null'); } catch { return null; } });
   // Spor günleri Google Takvim'e haftalık tekrarlanan tek etkinlik olarak yazılır (1 saat önce bildirim)
   const syncSportEvent = async (g0) => {
     const g = goalsOf(g0);
@@ -214,6 +216,16 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     }
     try { const s2 = await store.saveSettings({ health_goals: g }); setHealthGoals(s2.health_goals || g); say('Hedeflerin kaydedildi 🎯' + calMsg); return true; }
     catch (e) { if (/health_goals/.test(String(e && e.message))) say('Kaydedilemedi: Supabase\'de 26 numaralı SQL\'i çalıştırman gerekiyor.'); else fail(e); return false; }
+  };
+  const salesPrefsRef = useRef(salesPrefs);
+  salesPrefsRef.current = salesPrefs;
+  const saveSalesPrefs = async (patch) => {
+    const next = { ...(salesPrefsRef.current || {}), ...patch };
+    salesPrefsRef.current = next;
+    setSalesPrefs(next);
+    try { localStorage.setItem('ajanda-sales-prefs', JSON.stringify(next)); } catch { /* yok say */ }
+    try { await store.saveSettings({ sales_prefs: next }); }
+    catch (e) { if (!/sales_prefs/.test(String(e && e.message))) console.warn(e); }
   };
   const toggleHealthHidden = () => {
     const v = !healthHidden;
@@ -244,7 +256,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setMoneyCats(s.money_cats || []); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setHealthGoals(s.health_goals || null); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setMoneyCats(s.money_cats || []); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setHealthGoals(s.health_goals || null); if (s.sales_prefs) setSalesPrefs(s.sales_prefs); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -925,6 +937,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
 
   const actions = {
+    saveSalesPrefs,
     saveRevenue,
     toggleReminder: (r) => toggle('reminders', r),
     toggleCall: (c) => toggle('calls', c),
@@ -1173,10 +1186,10 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
 
           {loading ? <div className="spinner">Yükleniyor…</div> : (
             <>
-              {tab === 'bugun' && <TodayScreen data={viewDataS} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={{ ...healthState, goals: healthGoals }} healthHidden={healthHidden} hide={todayHide} onEditToday={() => setSheet({ kind: 'todayEdit' })} />}
+              {tab === 'bugun' && <TodayScreen data={viewDataS} events={visibleEvents} google={google} now={now} actions={actions} goTab={goTab} love={love} yarimHidden={yarimHidden} month={month} setMonth={setMonth} revenue={revenue} scope={scope} setScope={setScope} budgets={budgets} revReady={revLoaded && !revError} revTarget={revTarget} mail={mailState} health={{ ...healthState, goals: healthGoals }} salesDigest={salesPrefs && salesPrefs.digest} healthHidden={healthHidden} hide={todayHide} onEditToday={() => setSheet({ kind: 'todayEdit' })} />}
               {tab === 'takvim' && <CalendarScreen data={viewDataS} events={visibleEvents} google={google} now={now} day={day} setDay={setDay} month={month} setMonth={setMonth} actions={actions} yarimHidden={yarimHidden} />}
               <Suspense fallback={<div className="spinner">Yükleniyor…</div>}>
-              {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} mail={mailState} />}
+              {tab === 'is' && <WorkScreen seg={isSeg} setSeg={setIsSeg} data={data} now={now} actions={actions} revenue={revenue} revLoaded={revLoaded} revError={revError} revTarget={revTarget} revOrder={revOrder} mail={mailState} salesPrefs={salesPrefs} />}
               {tab === 'ozel' && <PrivateScreen seg={ozelSeg} setSeg={setOzelSeg} data={viewData} now={now} actions={actions} budgets={budgets} yarimHidden={yarimHidden} health={{ state: { ...healthState, goals: healthGoals }, hidden: healthHidden, toggle: toggleHealthHidden, goals: healthGoals, saveGoals: saveHealthGoals }}
                 yarim={{ seg: yarimSeg, setSeg: setYarimSeg, love, prefs: yarimPrefs, photoUrl }} />}
               </Suspense>
