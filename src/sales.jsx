@@ -809,6 +809,19 @@ export function SalesView({ now, actions, prefs }) {
           </div>
           <details className="sl-replist" onToggle={(e) => setShowList(e.currentTarget.open)}>
             <summary>Yüklenen raporlar ({reports.length})</summary>
+            {showList ? (
+              <div className="sl-bulk">
+                {mps.map((mp) => {
+                  const own = reports.filter((r) => r.marketplace === mp);
+                  return (
+                    <button key={mp} type="button" className="linkbtn" style={{ color: 'var(--danger)' }} onClick={async () => {
+                      if (!window.confirm(mp + ' için yüklenen ' + own.length + ' raporun hepsi silinsin mi? (Excel dosyaların durur, yeniden yükleyebilirsin.)')) return;
+                      try { for (const r of own) await deleteReport(r.id); setReports((x) => x.filter((z) => z.marketplace !== mp)); } catch (e) { setErr(String(e && e.message)); }
+                    }}>{mp} raporlarının hepsini sil ({own.length})</button>
+                  );
+                })}
+              </div>
+            ) : null}
             {showList ? reports.slice(0, 200).map((r) => (
               <div key={r.id} className="sl-rrow">
                 <span className="dot" style={{ background: mpColor(r.marketplace) }} />

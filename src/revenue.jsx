@@ -124,10 +124,12 @@ export function RevenueGlance({ revenue, now, actions, order }) {
         <div className="rg-left">
           <div className="rg-nav">
             <button type="button" className="iconbtn" aria-label="Önceki gün" onClick={() => go(-1)}><Icon.Left /></button>
-            <div className="rg-day">
-              <span>Günlük ciro</span>
+            <label className="rg-day rg-pick" title="Gün seç">
+              <span>Günlük ciro · 📅 gün seç</span>
               <b>{relLabel(day, now)}</b>
-            </div>
+              <input type="date" value={day} max={T} aria-label="Gün seç" onChange={(e) => e.target.value && pick(e.target.value)}
+                onClick={(e) => { try { e.currentTarget.showPicker && e.currentTarget.showPicker(); } catch { /* yok say */ } }} />
+            </label>
             <button type="button" className="iconbtn" aria-label="Sonraki gün" onClick={() => go(1)} disabled={day >= T}><Icon.Right /></button>
           </div>
           {cur.rows.length ? (

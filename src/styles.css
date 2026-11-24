@@ -2378,3 +2378,7 @@ button.it-row:hover { background: var(--chip); }
 .ct-last { color: var(--muted); }
 .toast-undo { margin-left: 14px; border: 0; background: none; color: #91A7FF; font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
 .toast { display: flex; align-items: center; }
+.rg-pick { position: relative; cursor: pointer; }
+.rg-pick input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; border: 0; }
+.rg-pick:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.sl-bulk { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 0; font-size: 13px; }

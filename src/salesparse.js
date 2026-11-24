@@ -276,29 +276,32 @@ function parseStoreReport(sheets, fileName) {
       if (!hit) return;
       mp = hit[1];
       const q = num(r[iQ]), rv = num(r[iR]);
-      if (rv <= 0) return; // numune / iade
+      if (rv === 0) return; // numune (cirosuz)
       let d = iD >= 0 ? toDate(r[iD]) : null;
       if (d && r[iD] instanceof Date && d.getUTCHours() === 0) d = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
       const day = d ? ymd(d) : '';
       if (d) { if (!dmin || day < dmin) dmin = day; if (!dmax || day > dmax) dmax = day; }
       const code = str(r[iK], 40);
       const m = byDay.get(day) || new Map();
-      const it = m.get(code) || { k: code, m: code, n: str(r[iN]), br: str(iB >= 0 ? r[iB] : '', 40), q: 0, r: 0 };
-      it.q += q; it.r += rv;
+      const it = m.get(code) || { k: code, m: code, n: str(r[iN]), br: str(iB >= 0 ? r[iB] : '', 40), q: 0, r: 0, i: 0 };
+      // İade satırı (eksi ciro/adet): ciroyu düşür, adedi iade olarak say
+      if (rv < 0 || q < 0) { it.r += rv; it.i += Math.abs(q); } else { it.q += q; it.r += rv; }
       m.set(code, it); byDay.set(day, m);
     });
     if (!mp) return { mp: null, items: [], totals: totalsOf([]), range: null, error: 'Bu dosyada web mağazası (mclub.com.tr) satırı bulunamadı.' };
     const all = new Map();
-    byDay.forEach((m) => m.forEach((x) => { const e = all.get(x.k); if (e) { e.q += x.q; e.r += x.r; } else all.set(x.k, { ...x }); }));
+    byDay.forEach((m) => m.forEach((x) => { const e = all.get(x.k); if (e) { e.q += x.q; e.r += x.r; e.i += x.i; } else all.set(x.k, { ...x }); }));
     const items = [...all.values()];
     // Günlere bölünmüş dosya: her gün ayrı rapor olur
     if (byDay.size > 1) {
       const days = [...byDay.entries()].filter(([d]) => d).sort().map(([d, m]) => ({ day: d, ...finish(mp, [...m.values()], [d, d]) }));
       return { ...finish(mp, items, [dmin, dmax]), byDay: days, source: 'mclub.com.tr' };
     }
+    // Dönem: dosyadaki Tarih. Dosya adı ERP'nin indirme tarihi olabileceği için dönemi uzatmaz;
+    // yalnız elle yazılmış ay adlı tarih ("5 Kasım", "1-24 Kasım") verilmişse o kullanılır.
     let range = dmin ? [dmin, dmin] : null;
-    const fd = fileDate(fileName);
-    if (range && fd && fd[1] > range[0]) range = [range[0], fd[1]];
+    const fd = /\d\s*\.?\s*(oca|şub|sub|mar|nis|may|haz|tem|ağu|agu|eyl|eki|kas|ara)/i.test(String(fileName || '')) ? fileDate(fileName) : null;
+    if (fd) range = fd;
     return { ...finish(mp, items, range), source: 'mclub.com.tr' };
   }
   return null;
