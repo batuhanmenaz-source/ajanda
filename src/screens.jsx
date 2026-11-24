@@ -204,7 +204,7 @@ function ReminderRow({ r, now, onToggle, onOpen, showDay }) {
   );
 }
 
-function CallRow({ c, now, onToggle, onOpen, showDay }) {
+function CallRow({ c, now, onToggle, onOpen, showDay, tagged }) {
   const d = c.due_at ? new Date(c.due_at) : null;
   const late = isLate(c, now);
   return (
@@ -214,6 +214,7 @@ function CallRow({ c, now, onToggle, onOpen, showDay }) {
         <span className={'title' + (c.done ? ' done' : '')}>{c.for_yarim ? c.who + ' ❤️' : c.who}</span>
         <span className="meta">
           {d ? <span className={'time' + (late ? ' late' : '')}>{showDay || late ? whenLabel(d, now) : fmtTime(d)}</span> : null}
+          {tagged ? <span className="tag tt-call">📞 Arama</span> : null}
           {c.topic ? <span>{c.topic}</span> : null}
         </span>
       </button>
@@ -611,6 +612,69 @@ function DoneFold({ items, render }) {
 
 
 // ---------- BUGÜN ----------
+// Bugünün işleri: gecikenler, bugünün saatli işleri (hatırlatma + arama + Google Takvim, saat sırasıyla) ve tarihsiz işler tek kartta
+function TodayTasks({ lateR, lateC, rem, calls, gToday, undated, google, now, actions, scope }) {
+  const open = (a) => a.filter((x) => !x.done);
+  const lateN = lateR.length + lateC.length;
+  const timed = [
+    ...rem.map((r) => ({ t: r.due_at, done: r.done, el: <ReminderRow key={'r' + r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} /> })),
+    ...calls.map((c) => ({ t: c.due_at, done: c.done, el: <CallRow key={'c' + c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} tagged /> }))
+  ].sort((a, b) => String(a.t).localeCompare(String(b.t)));
+  const gAll = (gToday || []).slice().sort((a, b) => (a.allDay ? -1 : 0) - (b.allDay ? -1 : 0) || a.start - b.start);
+  const openN = open(rem).length + open(calls).length;
+  const doneN = rem.length + calls.length - openN;
+  return (
+    <section className="tt">
+      <div className="tt-h">
+        <div className="tt-h-t">
+          <h2>Bugünün işleri</h2>
+          <span>{openN + lateN ? (openN ? openN + ' açık' : '') + (openN && lateN ? ' · ' : '') + (lateN ? lateN + ' geciken' : '') : 'hepsi tamam 🎉'}{doneN ? ' · ' + doneN + ' bitti' : ''}</span>
+        </div>
+        <div className="tt-h-b">
+          <button type="button" className="chip" onClick={() => actions.quickNew('reminder', scope)}>+ Hatırlatma</button>
+          <button type="button" className="chip" onClick={() => actions.quickNew('call', scope)}>+ Arama</button>
+        </div>
+      </div>
+      {lateN ? (
+        <div className="tt-g late">
+          <div className="tt-gh"><span className="late-anchor">Geciken</span><em>{lateN}</em></div>
+          <div className="list late-list">
+            {lateR.map((r) => <ReminderRow key={'lr' + r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />)}
+            {lateC.map((c) => <CallRow key={'lc' + c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} showDay tagged />)}
+          </div>
+        </div>
+      ) : null}
+      <div className="tt-g">
+        <div className="tt-gh"><span>Bugün</span>{timed.length ? <em>{open(rem).length + open(calls).length}</em> : null}</div>
+        <div className="list">
+          {timed.length ? <DoneFold items={timed} render={(x) => x.el} /> : <p className="empty">Bugün için saatli iş yok.</p>}
+        </div>
+      </div>
+      {gAll.length ? (
+        <div className="tt-g">
+          <div className="tt-gh"><span>Takvim</span><em className="g">{gAll.length}</em></div>
+          <div className="list">
+            {gAll.map((e) => (
+              <button type="button" key={e.id} className="tt-ev" onClick={() => actions.openGoogleEvent(e)}>
+                <span className="tt-ev-t">{e.allDay ? 'Tüm gün' : fmtTime(e.start)}</span>
+                <i style={{ background: e.color || SRC_COLORS.Google }} />
+                <span className="tt-ev-n">{e.title}</span>
+                <span className="tt-ev-c">{e.calendar}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : google !== 'ok' && google !== 'off' && google !== 'checking' ? <p className="tt-note">Google Takvim bağlı değil.</p> : null}
+      {undated.length ? (
+        <div className="tt-g">
+          <div className="tt-gh"><span>Tarihsiz</span><em className="m">{undated.length}</em></div>
+          <div className="list">{undated.map((r) => <ReminderRow key={'u' + r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />)}</div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 // Bugün dikkat: farklı alanlardan gelen, bugün ilgilenilmesi gereken birkaç şey tek yerde
 function TodayAttention({ scope, now, lateCount, camps, tasks, salesDigest, actions, goTab }) {
   const today = startOfDay(now);
@@ -775,55 +839,17 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
       campLive={liveCamps} campSoon={campsAll.filter((c) => campaignStatus(c, now).key === 'soon')} lateCount={lateCount} salesDigest={salesDigest}
       hide={healthHidden ? new Set([...hide, 'saglik']) : hide} goTab={goTab} actions={actions} />
     {showSummary && H('ozet') ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
-    <div className="grid-2 today-grid">
+    <div className="grid-2 today-grid tg2">
       <div className="today-col">
-
         <div className="tslot" style={{ order: 1 }}>
-        {lateCount ? (
-          <Section title={<span className="late-anchor">Gecikenler</span>} meta={lateCount + ' iş'} tone="#C92A2A" tint="#FFF5F5">
-            <div className="card list">
-              {lateR.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />)}
-              {lateC.map((c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} showDay />)}
-            </div>
-          </Section>
-        ) : null}
-        </div>
-
-        <div className="tslot" style={{ order: 3 }}>
-        <Section title="Hatırlatmalar" meta={open(rem).length ? open(rem).length + ' açık' : rem.length ? 'hepsi tamam' : ''} tone={SRC_COLORS['Hatırlatma']} onAdd={() => actions.quickNew('reminder', scope)} addLabel="Yeni hatırlatma">
-          <div className="card list">
-            {rem.length ? <DoneFold items={rem} render={(r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />} /> : <p className="empty">Bugün için hatırlatma yok.</p>}
-          </div>
-        </Section>
-        </div>
-
-        <div className="tslot" style={{ order: 4 }}>
-        <Section title="Aranacaklar" meta={open(calls).length ? open(calls).length + ' açık' : calls.length ? 'hepsi tamam' : ''} tone={SRC_COLORS.Arama} onAdd={() => actions.quickNew('call', scope)} addLabel="Yeni arama">
-          <div className="card list">
-            {calls.length ? <DoneFold items={calls} render={(c) => <CallRow key={c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} />} /> : <p className="empty">Bugün aranacak kimse yok.</p>}
-          </div>
-        </Section>
-        </div>
-
-
-        <div className="tslot" style={{ order: 7 }}>
-        {undated.length ? (
-          <Section title="Tarihsiz işler" meta={undated.length + ' iş'} tone="#868E96">
-            <div className="card list">
-              {undated.map((r) => <ReminderRow key={r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} />)}
-            </div>
-          </Section>
-        ) : null}
+          <TodayTasks lateR={lateR} lateC={lateC} rem={rem} calls={calls} gToday={H('takvim') ? gToday : []} undated={undated} google={H('takvim') ? google : 'off'} now={now} actions={actions} scope={scope} />
         </div>
       </div>
-
       <div className="today-col">
         <div className="tslot" style={{ order: 2 }}>
         {missedEl}
         </div>
-
-
-        <div className="tslot" style={{ order: 5 }}>
+        <div className="tslot" style={{ order: 3 }}>
         {scope !== 'ozel' && H('kampanya') ? (
           <Section title={'Kampanyalar' + (campsAll.length ? ' · ' + (liveCamps ? liveCamps + ' aktif' : '') + (liveCamps && campsAll.length > liveCamps ? ', ' : '') + (campsAll.length > liveCamps ? (campsAll.length - liveCamps) + ' yakında' : '') : '')} tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>} onAdd={() => actions.quickNew('campaign', scope)} addLabel="Yeni kampanya">
             {camps.length ? <div className="camp-grid compact">{camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} compact />)}</div> : <div className="card"><p className="empty">Önümüzdeki 30 günde kampanya yok.</p></div>}
@@ -831,26 +857,9 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
           </Section>
         ) : null}
         </div>
-
-        <div className="tslot" style={{ order: 6 }}>
-        {H('takvim') && (gToday.length || (google !== 'ok' && google !== 'off' && google !== 'checking')) ? <Section title="Takvim" meta="Google Takvim" tone={SRC_COLORS.Google}>
-          <div className="card list">
-            {google !== 'ok' && google !== 'off' ? <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Google Takvim bağlı değil.'}</p>
-              : gToday.length ? gToday.map((e) => (
-                <button type="button" key={e.id} className="rowbtn row timeline" onClick={() => actions.openGoogleEvent(e)}>
-                  <span className="tcol">{e.allDay ? 'Tüm gün' : fmtTime(e.start)}</span>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-                    <span style={{ fontSize: 15 }}>{e.title}</span>
-                    <span className="tag" style={{ fontSize: 12, color: 'var(--ink-2)' }}><span className="dot" style={{ background: e.color }} />{e.calendar}</span>
-                  </span>
-                </button>
-              )) : <p className="empty">{google === 'off' ? 'Örnek modda Google Takvim kapalı.' : 'Bugün takviminde etkinlik yok.'}</p>}
-          </div>
-        </Section> : null}
-        </div>
       </div>
     </div>
-    {H('yaklasan') ? <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} max={4} /> : null}
+    {H('yaklasan') ? <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} max={6} lite /> : null}
     {scope !== 'ozel' && H('pazaryeri') ? <MarketplaceStrip data={allData} now={now} actions={actions} /> : null}
     {onEditToday ? <button type="button" className="today-edit" onClick={onEditToday}>⚙︎ Bugün'ü düzenle{hide.size ? ' · ' + hide.size + ' kart gizli' : ''}</button> : null}
     </div>
@@ -901,12 +910,12 @@ function DayItemRow({ e, actions, compact, noSpan }) {
 }
 
 // Bugün sayfasının altındaki "Yaklaşan günler"
-function UpcomingDays({ data, events, google, now, actions, count = 3, onAll, max = 99 }) {
+function UpcomingDays({ data, events, google, now, actions, count = 3, onAll, max = 99, lite }) {
   const today = startOfDay(now);
   const days = Array.from({ length: count }, (_, i) => addDays(today, i + 1));
   return (
     <Section title={'Yaklaşan ' + count + ' gün'} action={onAll ? <button type="button" className="linkbtn" onClick={onAll}>Takvimi aç</button> : null}>
-      <div className="upcoming">
+      <div className={'upcoming' + (lite ? ' lite' : '')}>
         {days.map((d) => {
           // Çok günlü kampanyanın ara günleri ("aktif") her gün tekrar etmesin; yalnız başlangıç/bitiş ve saatli işler
           const items = dayItems(d, { data, events }).filter((e) => !(e.span && e.kind === 'campaign' && !sameDay(e.span.s, d) && !sameDay(e.span.e, d)));
@@ -918,7 +927,11 @@ function UpcomingDays({ data, events, google, now, actions, count = 3, onAll, ma
                 <button type="button" className="iconbtn upday-add" aria-label={fmtLong(d) + ' gününe ekle'} onClick={() => actions.newItemOn(d)}><Icon.Plus width="18" height="18" /></button>
               </div>
               <div className="list">
-                {items.length ? items.slice(0, max).map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact noSpan />)
+                {items.length ? items.slice(0, max).map((e) => (lite
+                  ? <button key={e.key} type="button" className={'ud-i' + (e.done ? ' done' : '')} onClick={() => openDayItem(e, actions)} title={e.title + (e.sub ? ' · ' + e.sub : '')}>
+                      <span className="ud-t">{e.time === 'Tüm gün' ? 'gün boyu' : e.time}</span><i style={{ background: e.color || '#ADB5BD' }} /><span className="ud-n">{e.title}</span>
+                    </button>
+                  : <DayItemRow key={e.key} e={e} actions={actions} compact noSpan />))
                   : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Boş gün'}</p>}
                 {items.length > max ? <button type="button" className="linkbtn upday-more" onClick={onAll}>+{items.length - max} kayıt daha</button> : null}
               </div>
