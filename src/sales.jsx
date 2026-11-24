@@ -340,7 +340,7 @@ const QUICK = [
   ['all', 'Tümü'], ['down', '▼ Düşenler'], ['up', '▲ Artanlar'], ['stopped', 'Satışı duranlar'], ['new', 'Yeni satanlar'], ['stock', 'Stok riski'], ['cancel', 'İptali yüksek']
 ];
 const COLS = [
-  ['code', 'Stok kodu'], ['name', 'Ürün'], ['mp', 'Pzr'], ['aq', 'Adet'], ['bq', 'Önceki'], ['dq', 'Fark'], ['dp', '%'], ['ar', 'Ciro'], ['dr', 'Ciro farkı'], ['s', 'Stok']
+  ['code', 'Stok kodu'], ['name', 'Ürün'], ['mp', 'Pzr'], ['aq', 'Adet'], ['bq', 'Önceki adet'], ['dq', 'Adet farkı'], ['dp', 'Değişim'], ['ar', 'Ciro'], ['dr', 'Ciro farkı'], ['s', 'Stok']
 ];
 const pctTxt = (a, b) => (b ? (a / b - 1) : null);
 const fmtPct = (v) => (v == null ? '' : Math.abs(v) < 0.005 ? '0' : (v > 0 ? '+' : '−') + '%' + (Math.abs(v * 100) < 10 ? Math.abs(v * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : Math.round(Math.abs(v * 100))));
@@ -658,6 +658,7 @@ export function SalesView({ now, actions }) {
                   <h3>Ürünler{mpF ? <span className="sl-fil"> · {mpF} <button type="button" className="linkbtn" aria-label="Pazaryeri süzgecini kaldır" onClick={() => setMpF('')}>✕</button></span> : null}</h3>
                   <span className="hint">{q.trim() ? list.length + ' sonuç' : counts[quick] + ' ürün'}</span>
                 </div>
+                <p className="sl-legend"><b>Adet</b> ve <b>Ciro</b>: {plabel(opt.A[0], opt.A[1])} · <b>Önceki adet</b>: {plabel(opt.B[0], opt.B[1])}{view.scaled ? ' (gün sayısı farklı, günlük ortalamaya çevrildi)' : ''} · <b>Adet farkı</b> = Adet − Önceki adet · <b>Değişim</b> = farkın önceki adede oranı</p>
                 <input className="sl-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Stok kodu, barkod ya da ürün adı" aria-label="Stok kodu, barkod ya da ürün adı ile ara" />
                 {!q.trim() ? (
                   <div className="typechips sl-quick">
