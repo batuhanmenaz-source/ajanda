@@ -254,7 +254,7 @@ export function RevenueMini({ revenue, now, actions, onOpen, target }) {
 
 // ---------- Ekran ----------
 const MPF_KEY = 'ajanda-ciro-mp';
-export function RevenueScreen({ revenue: allRev, loaded, error, target, now, actions, order, campaigns }) {
+export function RevenueScreen({ revenue: allRev, loaded, error, target, now, actions, order, campaigns, onSales }) {
   const today = startOfDay(now);
   // Pazaryeri filtresi: seçilince ekrandaki her şey (günlük bakış, özet, grafik, günler) yalnız o pazaryeri
   const [mpF, setMpFRaw] = useState(() => { try { return localStorage.getItem(MPF_KEY) || ''; } catch { return ''; } });
@@ -369,6 +369,7 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
       </section>
 
       <button type="button" className="btn primary big" onClick={() => actions.openRevenue(toDateInput(isCurrent ? today : new Date(month.getFullYear(), month.getMonth(), dim)))}>+ Ciro gir</button>
+      {onSales ? <button type="button" className="btn big rv-sales" onClick={onSales}>⬆ Pazaryeri Excel raporu yükle<small>Trendyol · Hepsiburada satış raporu</small></button> : null}
       <div className="wl-tools" style={{ marginTop: -8 }}>
         <span className="hint" style={{ flex: '1 1 160px' }}>Excel'e aktar:</span>
         <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'ay')}>⬇ {MONTHS[month.getMonth()]}</button>
