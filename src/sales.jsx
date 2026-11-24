@@ -345,7 +345,7 @@ function mpVerdict(p, mps, cov) {
     else if (upw.length === w.length) out.push(<>Son 7 günde tüm pazaryerlerinde arttı ({w.map((x) => short(x.mp) + ' ' + pctStr(x.d.pct)).join(', ')}).</>);
   }
   // Ana pazaryerinin düştüğü haftalarda diğeri ne yaptı?
-  const main = sh[0].mp, others = sh.slice(1).map((x) => x.mp);
+  const main = sh[0].mp, others = sh.slice(1).map((x) => x.mp).filter((mp) => [1, 2, 3, 4, 5, 6, 7].some((i) => cov[mp]['w' + i] && cov[mp]['w' + i].days && !cov[mp]['w' + i].approx));
   let drops = 0, same = 0, opp = 0;
   for (let i = 0; i < 7; i++) {
     const dm1 = deltaOf(p, 'w' + i, 'w' + (i + 1), [main], cov, 'q');
@@ -354,7 +354,7 @@ function mpVerdict(p, mps, cov) {
     if (!dO || !dO.b) continue;
     drops++; if (dO.pct <= -0.05) same++; else if (dO.pct >= 0.05) opp++;
   }
-  if (drops) out.push(<>Son 8 haftada {main}'un düştüğü <b>{drops} haftanın</b> {same ? <><b>{same}</b>'{same === 1 ? 'inde' : 'sinde'} {others.join(', ')} de düştü</> : null}{same && opp ? ', ' : ''}{opp ? <><b>{opp}</b>'{opp === 1 ? 'inde' : 'sinde'} arttı</> : null}{!same && !opp ? <>hiçbirinde {others.join(', ')} belirgin değişmedi</> : null}.</>);
+  if (drops && others.length) out.push(<>Son 8 haftada {main}'un düştüğü <b>{drops} haftanın</b> {same ? <><b>{same}</b>'{same === 1 ? 'inde' : 'sinde'} {others.join(', ')} de düştü</> : null}{same && opp ? ', ' : ''}{opp ? <><b>{opp}</b>'{opp === 1 ? 'inde' : 'sinde'} arttı</> : null}{!same && !opp ? <>hiçbirinde {others.join(', ')} belirgin değişmedi</> : null}.</>);
   return out;
 }
 
@@ -626,7 +626,12 @@ export function SalesView({ now, actions, prefs }) {
       const { default: readXlsx } = await import('read-excel-file/browser');
       const files = [];
       for (const f of arr) {
-        try { const parsed = parseSales(await readXlsx(f), f.name); files.push({ name: f.name, parsed, own: fileDate(f.name, now) || parsed.range || null }); }
+        try {
+          const parsed = parseSales(await readXlsx(f), f.name);
+          if (parsed.error) files.push({ name: f.name, error: parsed.error });
+          else if (parsed.byDay && parsed.byDay.length > 1) parsed.byDay.forEach((d) => files.push({ name: f.name + ' · ' + dm(d.day), parsed: d, own: [d.day, d.day] }));
+          else files.push({ name: f.name, parsed, own: parsed.range || fileDate(f.name, now) || null });
+        }
         catch (e) { files.push({ name: f.name, error: e && e.message ? e.message : 'Okunamadı' }); }
       }
       setImp(files);

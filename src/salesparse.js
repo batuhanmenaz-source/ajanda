@@ -100,6 +100,8 @@ function parseGeneric(sh) {
 
 // sheets: [{ sheet, data }] → { mp (null = bilinmiyor), items, totals, range }
 export function parseSales(sheets, fileName) {
+  const store = parseStoreReport(sheets, fileName);
+  if (store) return store;
   for (const f of FORMATS) {
     for (const sh of sheets) {
       const rows = sh.data || [];
@@ -124,7 +126,7 @@ function finish(mp, items, range) {
 // Saklanan ürün satırı: yalnız gerekli alanlar, sıfırlar atılır (veri küçük kalsın)
 function compact(x) {
   const o = { k: x.k, n: x.n, q: Math.round(x.q * 100) / 100, r: r2(x.r) };
-  if (x.m && x.m !== x.k) o.m = x.m;
+  if (x.m) o.m = x.m;
   if (x.br) o.br = x.br; if (x.c) o.c = x.c; if (x.b && x.b !== x.k) o.b = x.b;
   for (const f of ['o', 'x', 'i']) if (x[f]) o[f] = Math.round(x[f]);
   if (x.s != null) o.s = Math.round(x.s);
@@ -253,6 +255,55 @@ export function compareProducts(byMp, scaleB = {}, codeOf = (mp, x) => x.m || ''
   return list;
 }
 
+// ---------- Mağaza bazlı ERP raporu (Tarih, Mağaza, Stok Kodu, Marka, Ürün Adı, Adet, Ciro) ----------
+// Yalnız web mağazası satırları alınır ("mclub.com.tr" → MCLUB); fiziksel mağazalar ve diğer kanallar atlanır.
+// Ciro 0 satırlar (numune) sayılmaz. Tüm satırlar aynı tarihliyse dönem: o tarih → dosya adındaki tarih.
+const WEB_STORES = [[/mclub\.?com\.?tr|mclubcomtr/, 'MCLUB']];
+function parseStoreReport(sheets, fileName) {
+  for (const sh of sheets) {
+    const rows = sh.data || [];
+    const hi = rows.findIndex((r, i) => i < 5 && ['magaza', 'stokkodu', 'adet', 'ciro'].every((k) => r.map(head).includes(k)));
+    if (hi < 0) continue;
+    const hd = rows[hi].map(head);
+    const c = (k) => hd.indexOf(k);
+    const iD = c('tarih'), iM = c('magaza'), iK = c('stokkodu'), iB = c('marka'), iN = c('urunadi'), iQ = c('adet'), iR = c('ciro');
+    let mp = null;
+    const byDay = new Map();
+    let dmin = null, dmax = null;
+    rows.slice(hi + 1).forEach((r) => {
+      const store = String(r[iM] || '').toLocaleLowerCase('tr-TR').trim();
+      const hit = WEB_STORES.find(([re]) => re.test(store) || re.test(flat(store)));
+      if (!hit) return;
+      mp = hit[1];
+      const q = num(r[iQ]), rv = num(r[iR]);
+      if (rv <= 0) return; // numune / iade
+      let d = iD >= 0 ? toDate(r[iD]) : null;
+      if (d && r[iD] instanceof Date && d.getUTCHours() === 0) d = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+      const day = d ? ymd(d) : '';
+      if (d) { if (!dmin || day < dmin) dmin = day; if (!dmax || day > dmax) dmax = day; }
+      const code = str(r[iK], 40);
+      const m = byDay.get(day) || new Map();
+      const it = m.get(code) || { k: code, m: code, n: str(r[iN]), br: str(iB >= 0 ? r[iB] : '', 40), q: 0, r: 0 };
+      it.q += q; it.r += rv;
+      m.set(code, it); byDay.set(day, m);
+    });
+    if (!mp) return { mp: null, items: [], totals: totalsOf([]), range: null, error: 'Bu dosyada web mağazası (mclub.com.tr) satırı bulunamadı.' };
+    const all = new Map();
+    byDay.forEach((m) => m.forEach((x) => { const e = all.get(x.k); if (e) { e.q += x.q; e.r += x.r; } else all.set(x.k, { ...x }); }));
+    const items = [...all.values()];
+    // Günlere bölünmüş dosya: her gün ayrı rapor olur
+    if (byDay.size > 1) {
+      const days = [...byDay.entries()].filter(([d]) => d).sort().map(([d, m]) => ({ day: d, ...finish(mp, [...m.values()], [d, d]) }));
+      return { ...finish(mp, items, [dmin, dmax]), byDay: days, source: 'mclub.com.tr' };
+    }
+    let range = dmin ? [dmin, dmin] : null;
+    const fd = fileDate(fileName);
+    if (range && fd && fd[1] > range[0]) range = [range[0], fd[1]];
+    return { ...finish(mp, items, range), source: 'mclub.com.tr' };
+  }
+  return null;
+}
+
 // ---------- Dosya adından dönem ----------
 // "1 Kasım", "01 Kas 2026", "1-7 Kasım", "01.11.2026", "2026-11-01" → ['2026-11-01','2026-11-01']
 // Panelin indirme zaman damgası ("…2026.11.23-18.45.36") dönem sayılmaz.
@@ -266,7 +317,7 @@ export function fileDate(name, today = new Date()) {
   if (m) { const mo = AYLAR.indexOf(m[3]) + 1, y = yearFor(mo, m[4]); const a = mk(y, mo, +m[1]), b = mk(y, mo, +m[2]); if (a && b && a <= b) return [a, b]; }
   m = t.match(/(?:^|[^0-9])(\d{1,2})\s*\.?\s*(oca|sub|mar|nis|may|haz|tem|agu|eyl|eki|kas|ara)[a-z]*\.?(?:\s*(\d{4}))?/);
   if (m) { const mo = AYLAR.indexOf(m[2]) + 1, y = yearFor(mo, m[3]); const a = mk(y, mo, +m[1]); if (a) return [a, a]; }
-  m = t.match(/(?:^|[^0-9])(\d{1,2})[./](\d{1,2})[./](\d{4})(?![0-9]|[-_ ]\d{1,2}[.:]\d{2})/);
+  m = t.match(/(?:^|[^0-9])(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?![0-9]|[-_ ]\d{1,2}[.:]\d{2})/);
   if (m) { const a = mk(+m[3], +m[2], +m[1]); if (a) return [a, a]; }
   m = t.match(/(?:^|[^0-9])(\d{4})[-.](\d{1,2})[-.](\d{1,2})(?![0-9]|[-_ ]\d{1,2}[.:]\d{2})/);
   if (m) { const a = mk(+m[1], +m[2], +m[3]); if (a) return [a, a]; }
