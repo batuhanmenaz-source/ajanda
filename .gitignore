@@ -6,3 +6,6 @@ dev-dist
 .vercel
 .DS_Store
 public/ocr/
+
+# test ekran görüntüleri
+/*.png

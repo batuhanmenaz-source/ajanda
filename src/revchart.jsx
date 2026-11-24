@@ -30,7 +30,7 @@ function laneCampaigns(camps) {
   }).filter((c) => c.lane < 3);
 }
 
-export function DailyRevenueChart({ month, revenue, campaigns, today, target, onEdit }) {
+export function DailyRevenueChart({ month, revenue, campaigns, today, target, onEdit, bare }) {
   const [mode, setMode] = useState(() => { try { return localStorage.getItem('ajanda-rch-mode') || 'total'; } catch { return 'total'; } });
   const setModeS = (v) => { setMode(v); try { localStorage.setItem('ajanda-rch-mode', v); } catch { /* yok say */ } };
   const [sel, setSel] = useState(null);
@@ -95,16 +95,13 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
 
   const tone = (v) => (!ref || v >= ref ? 'hi' : 'lo');
 
-  return (
-    <section className="section">
-      <div className="section-head">
-        <h2>Günlük ciro</h2>
-        <div className="rch-mode" role="tablist" aria-label="Grafik görünümü">
-          <button type="button" role="tab" aria-selected={mode === 'mp'} className={mode === 'mp' ? 'on' : ''} onClick={() => setModeS('mp')}>Pazaryeri</button>
-          <button type="button" role="tab" aria-selected={mode === 'total'} className={mode === 'total' ? 'on' : ''} onClick={() => setModeS('total')}>Toplam</button>
-        </div>
-      </div>
-
+  const modeSw = (
+    <div className="rch-mode" role="tablist" aria-label="Grafik görünümü">
+      <button type="button" role="tab" aria-selected={mode === 'mp'} className={mode === 'mp' ? 'on' : ''} onClick={() => setModeS('mp')}>Pazaryeri</button>
+      <button type="button" role="tab" aria-selected={mode === 'total'} className={mode === 'total' ? 'on' : ''} onClick={() => setModeS('total')}>Toplam</button>
+    </div>
+  );
+  const body = (
       <div className="card rch-card">
         <div className="rch-plot-wrap">
           {/* Tutar ekseni */}
@@ -174,7 +171,7 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
         </div>
 
         {/* Seçili gün dökümü */}
-        {sd && sd.v ? (
+        {bare ? null : sd && sd.v ? (
           <div className="rch-detail">
             <div className="rch-detail-head">
               <div>
@@ -201,6 +198,12 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
           <p className="hint" style={{ margin: 0 }}>{entered.length ? 'Ayrıntı için bir güne dokun.' : 'Bu ay için ciro girilmedi.'}</p>
         )}
       </div>
+  );
+  if (bare) return <div className="rch-bare">{modeSw}{body}</div>;
+  return (
+    <section className="section">
+      <div className="section-head"><h2>Günlük ciro</h2>{modeSw}</div>
+      {body}
     </section>
   );
 }

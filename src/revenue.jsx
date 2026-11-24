@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Sheet } from './ui.jsx';
 import { MARKETPLACES, mpColor } from './constants.js';
-import { DailyRevenueChart } from './revchart.jsx';
+import { MonthRevenueAnalysis } from './revmonth.jsx';
 import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, fmtLong, dayLabel, WEEKDAYS_SHORT } from './dates.js';
 
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -374,7 +374,7 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
         ) : <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start', padding: '4px 0' }} onClick={actions.openTarget}>+ Aylık hedef belirle</button>}
       </section>
 
-      <DailyRevenueChart month={month} revenue={revenue} campaigns={campaigns} today={today} target={target} onEdit={(k) => actions.openRevenue(k)} />
+      <MonthRevenueAnalysis month={month} revenue={revenue} campaigns={campaigns} today={today} target={target} onEdit={(k) => actions.openRevenue(k)} />
 
       {/* Pazaryeri dağılımı */}
       <section className="section">
