@@ -2038,6 +2038,17 @@ button.sl-mprow:hover { background: var(--chip); }
 .sl-file-mp .linkbtn { font-weight: 400; font-size: 12px; }
 .sl-mpchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .sl-mpchips .chip { padding: 4px 10px; font-size: 13px; }
+/* Çok dosya: kısa satırlar */
+.sl-flist { display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow-y: auto; }
+.sl-frow { display: grid; grid-template-columns: 132px minmax(0, 1fr) auto auto 14px; gap: 8px; align-items: center; font-size: 13px; padding: 4px 0; border-top: 1px solid var(--line-2); }
+.sl-frow input[type=date] { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); width: 100%; }
+.sl-frow-p { color: var(--muted); }
+.sl-frow-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.sl-frow-mp { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.sl-frow b { font-variant-numeric: tabular-nums; text-align: right; }
+.sl-frow-w { color: #B35C00; }
+.sl-frow-e { grid-column: 3 / -1; color: var(--danger); font-size: 12px; }
+.sl-frow.bad { background: #FFF6F6; }
 /* Ürün penceresi */
 .sl-ps-name { font-size: 16px; font-weight: 600; line-height: 1.35; }
 .sl-ps-tot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

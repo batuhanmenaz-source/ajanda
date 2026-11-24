@@ -239,3 +239,23 @@ export function compareProducts(byMp, scaleB = {}) {
   list.forEach((p) => { Object.values(p.mps).forEach((m) => { p.a.q += m.a.q; p.a.r += m.a.r; p.b.q += m.b.q; p.b.r += m.b.r; }); });
   return list;
 }
+
+// ---------- Dosya adından dönem ----------
+// "1 Kasım", "01 Kas 2026", "1-7 Kasım", "01.11.2026", "2026-11-01" → ['2026-11-01','2026-11-01']
+// Panelin indirme zaman damgası ("…2026.11.23-18.45.36") dönem sayılmaz.
+const AYLAR = ['oca', 'sub', 'mar', 'nis', 'may', 'haz', 'tem', 'agu', 'eyl', 'eki', 'kas', 'ara'];
+export function fileDate(name, today = new Date()) {
+  const base = String(name || '').replace(/\.[a-z0-9]+$/i, '');
+  const t = ascii(base);
+  const yearFor = (m, y) => (y ? +y : (m - 1 > today.getMonth() ? today.getFullYear() - 1 : today.getFullYear()));
+  const mk = (y, m, d) => { const dt = new Date(y, m - 1, d); return dt.getMonth() === m - 1 && dt.getDate() === d ? ymd(dt) : null; };
+  let m = t.match(/(?:^|[^0-9])(\d{1,2})\s*(?:-|–|ile)\s*(\d{1,2})\s*\.?\s*(oca|sub|mar|nis|may|haz|tem|agu|eyl|eki|kas|ara)[a-z]*\.?(?:\s*(\d{4}))?/);
+  if (m) { const mo = AYLAR.indexOf(m[3]) + 1, y = yearFor(mo, m[4]); const a = mk(y, mo, +m[1]), b = mk(y, mo, +m[2]); if (a && b && a <= b) return [a, b]; }
+  m = t.match(/(?:^|[^0-9])(\d{1,2})\s*\.?\s*(oca|sub|mar|nis|may|haz|tem|agu|eyl|eki|kas|ara)[a-z]*\.?(?:\s*(\d{4}))?/);
+  if (m) { const mo = AYLAR.indexOf(m[2]) + 1, y = yearFor(mo, m[3]); const a = mk(y, mo, +m[1]); if (a) return [a, a]; }
+  m = t.match(/(?:^|[^0-9])(\d{1,2})[./](\d{1,2})[./](\d{4})(?![0-9]|[-_ ]\d{1,2}[.:]\d{2})/);
+  if (m) { const a = mk(+m[3], +m[2], +m[1]); if (a) return [a, a]; }
+  m = t.match(/(?:^|[^0-9])(\d{4})[-.](\d{1,2})[-.](\d{1,2})(?![0-9]|[-_ ]\d{1,2}[.:]\d{2})/);
+  if (m) { const a = mk(+m[1], +m[2], +m[3]); if (a) return [a, a]; }
+  return null;
+}

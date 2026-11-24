@@ -6,7 +6,7 @@ import { supabase, DEMO } from './supabase.js';
 import { MARKETPLACES, mpColor } from './constants.js';
 import { tl, tlShort } from './revenue.jsx';
 import { Sheet } from './ui.jsx';
-import { parseSales, str, coverReports, sumItems, compareProducts, lenOf, shift, ymd } from './salesparse.js';
+import { parseSales, fileDate, str, coverReports, sumItems, compareProducts, lenOf, shift, ymd } from './salesparse.js';
 
 // ---------- Saklama ----------
 const DEMO_KEY = 'ajanda-sales-demo-v1';
@@ -107,83 +107,119 @@ function periodOptions(today, reports) {
 }
 
 // ---------- Yükleme penceresi (birden çok dosya) ----------
-function ImportSheet({ files, reports, now, onClose, onDone, onRevenue }) {
+function ImportSheet({ files: files0, reports, now, onClose, onDone, onRevenue }) {
   const t = ymd(now), y = shift(t, -1);
   const d = new Date(now.getFullYear(), now.getMonth(), 1);
   const ps = [
     ['Bugün', t, t], ['Dün', y, y], ['Son 7 gün', shift(t, -7), y],
     ['Bu ay', ymd(d), t], ['Geçen ay', ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ymd(new Date(d.getFullYear(), d.getMonth(), 0))]
   ];
-  const ok0 = files.filter((f) => f.parsed);
-  const ranges = ok0.map((f) => f.parsed.range).filter(Boolean);
-  const auto = ranges.length && ranges.length === ok0.length && ranges.every((r) => r[0] === ranges[0][0] && r[1] === ranges[0][1]) ? ranges[0] : null;
-  const [a, setA] = useState(auto ? auto[0] : y);
-  const [b, setB] = useState(auto ? auto[1] : y);
+  // Tarihi dosya adından ya da içindeki sipariş tarihlerinden bulunanlar kendi dönemiyle kaydedilir
+  const files = useMemo(() => [...files0].sort((x, z) => String((x.own || [''])[0]).localeCompare(String((z.own || [''])[0])) || x.name.localeCompare(z.name, 'tr')), [files0]);
+  const many = files.length > 3;
+  const [own, setOwn] = useState(() => files.map((f) => f.own || null));
+  const needCommon = files.some((f, i) => f.parsed && !own[i]);
+  const [a, setA] = useState(y);
+  const [b, setB] = useState(y);
   const [mps, setMps] = useState(() => files.map((f) => (f.parsed ? f.parsed.mp : null)));
-  const [toRev, setToRev] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
-  const oneDay = a && a === b && a < t;
+  const per = files.map((f, i) => (own[i] || [a, b]));
+  const days = new Set(files.map((f, i) => (f.parsed && mps[i] && per[i][0] === per[i][1] && per[i][0] < t ? per[i][0] : null)).filter(Boolean));
+  const [toRev, setToRev] = useState(days.size <= 1);
   const ready = files.filter((f, i) => f.parsed && mps[i]).length;
-  const dup = files.map((f, i) => (f.parsed && mps[i] ? reports.find((x) => x.marketplace === mps[i] && x.period_start === a && x.period_end === b) : null));
+  const missingMp = files.some((f, i) => f.parsed && !mps[i]);
+  const dup = files.map((f, i) => (f.parsed && mps[i] ? reports.find((x) => x.marketplace === mps[i] && x.period_start === per[i][0] && x.period_end === per[i][1]) : null));
+  const bad = needCommon && (!a || !b || b < a);
   const save = async () => {
-    setBusy(true); setErr('');
+    setErr('');
     const saved = [];
     try {
+      let n = 0;
       for (let i = 0; i < files.length; i++) {
         const f = files[i]; if (!f.parsed || !mps[i]) continue;
-        const row = await saveReport({ marketplace: mps[i], period_start: a, period_end: b, file_name: str(f.name, 120), totals: f.parsed.totals, items: f.parsed.items }, dup[i] && dup[i].id);
+        n++; setBusy(n + ' / ' + ready);
+        const [pa, pb] = per[i];
+        const row = await saveReport({ marketplace: mps[i], period_start: pa, period_end: pb, file_name: str(f.name, 120), totals: f.parsed.totals, items: f.parsed.items }, dup[i] && dup[i].id);
         saved.push({ row, replaced: dup[i] && dup[i].id });
-        if (oneDay && toRev && onRevenue && f.parsed.totals.r > 0) await onRevenue(a, mps[i], f.parsed.totals.r, f.parsed.totals.o);
+        if (toRev && pa === pb && pa < t && onRevenue && f.parsed.totals.r > 0) await onRevenue(pa, mps[i], f.parsed.totals.r, f.parsed.totals.o);
       }
       onDone(saved);
     } catch (e) {
-      setErr(missingTable(e) ? 'Supabase\'de 29 numaralı SQL çalıştırılmamış (Hesap → Kurulum durumu).' : 'Kaydedilemedi: ' + (e && e.message));
+      setErr(missingTable(e) ? 'Supabase\'de 29 numaralı SQL çalıştırılmamış (Hesap → Kurulum durumu).' : 'Kaydedilemedi: ' + (e && e.message) + (saved.length ? ' (' + saved.length + ' rapor kaydedildi)' : ''));
       if (saved.length) onDone(saved, true);
-    } finally { setBusy(false); }
+    } finally { setBusy(''); }
   };
+  const setMp = (i, v) => setMps((m) => m.map((x, j) => (j === i ? v : x)));
+  const setOwnDay = (i, v) => setOwn((o) => o.map((x, j) => (j === i ? (v ? [v, v] : null) : x)));
+  const total = files.reduce((s, f, i) => s + (f.parsed && mps[i] ? f.parsed.totals.r : 0), 0);
   return (
     <Sheet title={files.length > 1 ? files.length + ' rapor ekle' : 'Satış raporu ekle'} onClose={onClose}>
-      <div className="sl-files">
-        {files.map((f, i) => (
-          <div key={i} className={'sl-file' + (f.parsed ? '' : ' bad')}>
-            <div className="sl-file-top">
-              <span className="sl-file-n">{f.name}</span>
-              {f.parsed ? <b>{tl(f.parsed.totals.r)}</b> : null}
-            </div>
-            {f.parsed ? (
-              <>
-                <span className="hint">{f.parsed.totals.n} ürün · {nf(f.parsed.totals.q)} adet{f.parsed.totals.x ? ' · ' + nf(f.parsed.totals.x) + ' iptal' : ''}</span>
-                {f.parsed.mp && mps[i] === f.parsed.mp ? (
-                  <span className="sl-file-mp"><span className="dot" style={{ background: mpColor(mps[i]) }} />{mps[i]}<button type="button" className="linkbtn" onClick={() => setMps((m) => m.map((x, j) => (j === i ? null : x)))}>değiştir</button></span>
-                ) : (
-                  <div className="sl-mpchips">
-                    {!mps[i] ? <span className="hint" style={{ color: '#B35C00' }}>Hangi pazaryeri?</span> : null}
-                    {MARKETPLACES.map((m) => <button key={m.name} type="button" className={'chip' + (mps[i] === m.name ? ' on' : '')} onClick={() => setMps((v) => v.map((x, j) => (j === i ? m.name : x)))}>{m.name}</button>)}
-                  </div>
-                )}
-                {dup[i] ? <span className="hint" style={{ color: '#B35C00' }}>Bu dönemin {mps[i]} raporu var; yenisiyle değişecek.</span> : null}
-              </>
-            ) : <span className="hint" style={{ color: 'var(--danger)' }}>{f.error}</span>}
-          </div>
-        ))}
-      </div>
-      <div className="field">
-        <label>Hangi dönemin satışları?</label>
-        {auto ? <span className="hint">Dosyadaki sipariş tarihlerinden bulundu: {plabel(auto[0], auto[1])}</span> : null}
-        <div className="typechips">{ps.map(([l, x, z]) => <button key={l} type="button" className={'chip' + (a === x && b === z ? ' on' : '')} onClick={() => { setA(x); setB(z); }}>{l}</button>)}</div>
-        <div className="row2" style={{ marginTop: 8 }}>
-          <input type="date" value={a} max={b || undefined} onChange={(e) => setA(e.target.value)} aria-label="Dönem başı" />
-          <input type="date" value={b} min={a || undefined} onChange={(e) => setB(e.target.value)} aria-label="Dönem sonu" />
+      {missingMp ? (
+        <div className="sl-mpchips">
+          <span className="hint" style={{ color: '#B35C00' }}>{many ? 'Tanınmayan dosyaların pazaryeri:' : 'Hangi pazaryeri?'}</span>
+          {MARKETPLACES.map((m) => <button key={m.name} type="button" className="chip" onClick={() => setMps((v) => v.map((x, j) => (x || !files[j].parsed ? x : m.name)))}>{m.name}</button>)}
         </div>
-        <span className="hint">Panelden raporu indirirken seçtiğin tarih aralığı. Her sabah "Dün" yüklersen dün, 7 gün ve 30 gün kıyasları kendiliğinden oluşur.</span>
-      </div>
-      {oneDay ? (
+      ) : null}
+      {many ? (
+        <div className="sl-flist">
+          <span className="hint">{ready} dosya · toplam {tl(total)}{files.some((f, i) => own[i]) ? ' · tarihler dosya adlarından alındı' : ''}</span>
+          {files.map((f, i) => (
+            <div key={i} className={'sl-frow' + (f.parsed ? '' : ' bad')}>
+              {f.parsed && own[i] && own[i][0] === own[i][1]
+                ? <input type="date" value={own[i][0]} onChange={(e) => setOwnDay(i, e.target.value)} aria-label={f.name + ' tarihi'} />
+                : <span className="sl-frow-p">{own[i] ? plabel(own[i][0], own[i][1]) : f.parsed ? 'aşağıdaki dönem' : ''}</span>}
+              <span className="sl-frow-n" title={f.name}>{f.name}</span>
+              {f.parsed ? (
+                <>
+                  <span className="sl-frow-mp">{mps[i] ? <><span className="dot" style={{ background: mpColor(mps[i]) }} />{short(mps[i])}</> : '?'}</span>
+                  <b>{tlShort(f.parsed.totals.r)}</b>
+                  {dup[i] ? <span className="sl-frow-w" title="Bu tarihin raporu var; yenisiyle değişecek">↻</span> : <span />}
+                </>
+              ) : <span className="sl-frow-e">{f.error}</span>}
+            </div>
+          ))}
+          {dup.some(Boolean) ? <span className="hint">↻ Bu tarihlerin raporu zaten var; yenileriyle değişecek.</span> : null}
+        </div>
+      ) : (
+        <div className="sl-files">
+          {files.map((f, i) => (
+            <div key={i} className={'sl-file' + (f.parsed ? '' : ' bad')}>
+              <div className="sl-file-top">
+                <span className="sl-file-n">{f.name}</span>
+                {f.parsed ? <b>{tl(f.parsed.totals.r)}</b> : null}
+              </div>
+              {f.parsed ? (
+                <>
+                  <span className="hint">{f.parsed.totals.n} ürün · {nf(f.parsed.totals.q)} adet{f.parsed.totals.x ? ' · ' + nf(f.parsed.totals.x) + ' iptal' : ''}{own[i] ? ' · ' + plabel(own[i][0], own[i][1]) + ' (dosyadan)' : ''}</span>
+                  {mps[i] ? (
+                    <span className="sl-file-mp"><span className="dot" style={{ background: mpColor(mps[i]) }} />{mps[i]}<button type="button" className="linkbtn" onClick={() => setMp(i, null)}>değiştir</button></span>
+                  ) : null}
+                  {own[i] ? <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start', fontSize: 12 }} onClick={() => setOwnDay(i, null)}>Tarihi kendim seçeyim</button> : null}
+                  {dup[i] ? <span className="hint" style={{ color: '#B35C00' }}>Bu dönemin {mps[i]} raporu var; yenisiyle değişecek.</span> : null}
+                </>
+              ) : <span className="hint" style={{ color: 'var(--danger)' }}>{f.error}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {needCommon ? (
+        <div className="field">
+          <label>{files.some((f, i) => own[i]) ? 'Tarihi bulunamayanlar hangi dönemin?' : 'Hangi dönemin satışları?'}</label>
+          <div className="typechips">{ps.map(([l, x, z]) => <button key={l} type="button" className={'chip' + (a === x && b === z ? ' on' : '')} onClick={() => { setA(x); setB(z); }}>{l}</button>)}</div>
+          <div className="row2" style={{ marginTop: 8 }}>
+            <input type="date" value={a} max={b || undefined} onChange={(e) => setA(e.target.value)} aria-label="Dönem başı" />
+            <input type="date" value={b} min={a || undefined} onChange={(e) => setB(e.target.value)} aria-label="Dönem sonu" />
+          </div>
+          <span className="hint">Panelden raporu indirirken seçtiğin tarih aralığı. İpucu: dosya adına tarihi yazarsan ("1 Kasım") kendisi anlar.</span>
+        </div>
+      ) : null}
+      {days.size ? (
         <label className="wl-check"><input type="checkbox" checked={toRev} onChange={(e) => setToRev(e.target.checked)} />
-          <span>{dm(a)} cirosuna da işle ({files.map((f, i) => (f.parsed && mps[i] ? short(mps[i]) + ' ' + tlShort(f.parsed.totals.r) : null)).filter(Boolean).join(' · ')})</span></label>
+          <span>{days.size === 1 ? dm([...days][0]) + ' cirosuna da işle' : days.size + ' günün cirosuna da işle'}{days.size > 1 ? ' (o günler için girdiğin ciro varsa bu pazaryerininki değişir)' : ''}</span></label>
       ) : null}
       {err ? <p className="hint" style={{ color: 'var(--danger)', margin: 0 }}>{err}</p> : null}
-      <button type="button" className="btn big primary" disabled={busy || !ready || !a || !b || b < a} onClick={save}>{busy ? 'Kaydediliyor…' : ready > 1 ? ready + ' raporu kaydet' : 'Kaydet'}</button>
+      <button type="button" className="btn big primary" disabled={!!busy || !ready || bad} onClick={save}>{busy ? 'Kaydediliyor… ' + busy : ready > 1 ? ready + ' raporu kaydet' : 'Kaydet'}</button>
     </Sheet>
   );
 }
@@ -382,14 +418,17 @@ export function SalesView({ now, actions }) {
   useEffect(() => { setLimit(20); }, [metric, sort, mpF, q, key]);
 
   const pick = async (fl) => {
-    const arr = [...(fl || [])].slice(0, 12);
+    const arr = [...(fl || [])].slice(0, 62);
     if (!arr.length) return;
     setReading(true); setErr('');
     try {
       const { default: readXlsx } = await import('read-excel-file/browser');
       const files = [];
       for (const f of arr) {
-        try { files.push({ name: f.name, parsed: parseSales(await readXlsx(f), f.name) }); }
+        try {
+          const parsed = parseSales(await readXlsx(f), f.name);
+          files.push({ name: f.name, parsed, own: fileDate(f.name, now) || parsed.range || null });
+        }
         catch (e) { files.push({ name: f.name, error: e && e.message ? e.message : 'Okunamadı' }); }
       }
       setImp(files);
