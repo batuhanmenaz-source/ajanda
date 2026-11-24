@@ -329,13 +329,17 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
         </div>
       ) : null}
       {loaded ? <RevenueGlance key={mpF || 'all'} revenue={revenue} now={now} actions={actions} order={order} /> : null}
-      <div className="section-head" style={{ marginBottom: -8 }}><h2>Aylık görünüm</h2></div>
-      <div className="week-nav">
-        <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
-        <span className="lbl">{MONTHS[month.getMonth()]} {month.getFullYear()}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {!isCurrent ? <button type="button" className="linkbtn" style={{ marginRight: 6 }} onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Bu ay</button> : null}
+      <div className="rv-mhead">
+        <div className="rv-mnav">
+          <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
+          <h2>{MONTHS[month.getMonth()]} {month.getFullYear()}</h2>
           <button type="button" className="iconbtn" aria-label="Sonraki ay" onClick={() => go(1)} disabled={isCurrent}><Icon.Right /></button>
+          {!isCurrent ? <button type="button" className="linkbtn" onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); }}>Bu ay</button> : null}
+        </div>
+        <div className="rv-mact">
+          <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'ay')} title={MONTHS[month.getMonth()] + ' Excel'}>⬇ {MONTHS[month.getMonth()]}</button>
+          <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'yil')} title={month.getFullYear() + ' tüm yıl Excel'}>⬇ {month.getFullYear()}</button>
+          <button type="button" className="btn primary" onClick={() => actions.openRevenue(toDateInput(isCurrent ? today : new Date(month.getFullYear(), month.getMonth(), dim)))}>+ Ciro gir</button>
         </div>
       </div>
 
@@ -370,14 +374,6 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
         ) : <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start', padding: '4px 0' }} onClick={actions.openTarget}>+ Aylık hedef belirle</button>}
       </section>
 
-      <button type="button" className="btn primary big" onClick={() => actions.openRevenue(toDateInput(isCurrent ? today : new Date(month.getFullYear(), month.getMonth(), dim)))}>+ Ciro gir</button>
-      {onSales ? <button type="button" className="btn big rv-sales" onClick={onSales}>📦 Ürün bazında satış raporu<small>Excel yükle · ürün, pazaryeri ve stok kıyası</small></button> : null}
-      <div className="wl-tools" style={{ marginTop: -8 }}>
-        <span className="hint" style={{ flex: '1 1 160px' }}>Excel'e aktar:</span>
-        <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'ay')}>⬇ {MONTHS[month.getMonth()]}</button>
-        <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'yil')}>⬇ {month.getFullYear()} tümü</button>
-      </div>
-
       <DailyRevenueChart month={month} revenue={revenue} campaigns={campaigns} today={today} target={target} onEdit={(k) => actions.openRevenue(k)} />
 
       {/* Pazaryeri dağılımı */}
@@ -390,7 +386,7 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
                 <span className="tag"><span className="dot" style={{ background: mpColor(name) }} />{name}</span>
                 <span className="rv-mp-v">{tl(v)} <span className="muted">· %{allTotal ? Math.round((v / allTotal) * 100) : 0}</span></span>
               </div>
-              <div className="rv-mp-bar"><div style={{ width: (v / mpMax) * 100 + '%' }} /></div>
+              <div className="rv-mp-bar"><div style={{ width: (v / mpMax) * 100 + '%', background: mpColor(name) }} /></div>
             </button>
           )) : <p className="empty">{loaded ? 'Bu ay için ciro girilmedi.' : 'Yükleniyor…'}</p>}
         </div>

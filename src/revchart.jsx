@@ -1,7 +1,7 @@
-// Ciro ekranı: renkli, detaylı günlük ciro grafiği
-// - Çubuklar pazaryeri renkleriyle katmanlı (ya da "Toplam" modunda ortalamaya göre renkli)
-// - Üstte kampanya dönemleri, tutar ekseni, ortalama/hedef çizgisi, 7 günlük trend çizgisi
-// - Bir güne dokununca altında o günün pazaryeri dökümü
+// Ciro ekranı: sade günlük ciro grafiği
+// - Varsayılan "Toplam": tek renk, ortalamanın (ya da günlük hedefin) altındaki günler açık tonda
+// - "Pazaryeri": pazaryeri renkleriyle katmanlı
+// - Tek referans çizgisi (ortalama/hedef), kampanya günleri hafif zemin; bir güne dokununca dökümü
 import { useEffect, useMemo, useState } from 'react';
 import { mpColor } from './constants.js';
 import { toDateInput, addDays, WEEKDAYS_SHORT } from './dates.js';
@@ -31,7 +31,8 @@ function laneCampaigns(camps) {
 }
 
 export function DailyRevenueChart({ month, revenue, campaigns, today, target, onEdit }) {
-  const [mode, setMode] = useState('mp'); // 'mp' pazaryeri | 'total' toplam
+  const [mode, setMode] = useState(() => { try { return localStorage.getItem('ajanda-rch-mode') || 'total'; } catch { return 'total'; } });
+  const setModeS = (v) => { setMode(v); try { localStorage.setItem('ajanda-rch-mode', v); } catch { /* yok say */ } };
   const [sel, setSel] = useState(null);
 
   const y = month.getFullYear(); const mo = month.getMonth();
@@ -69,25 +70,8 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
   const mps = Object.keys(mpTotals).sort((a, b) => mpTotals[b] - mpTotals[a]);
 
   const maxV = niceMax(Math.max(ref * 1.1, ...days.map((x) => x.v)));
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxV);
+  const ticks = [0, 0.5, 1].map((f) => f * maxV);
   const best = entered.reduce((b, x) => (!b || x.v > b.v ? x : b), null);
-
-  // 7 günlük hareketli ortalama (girilmiş günler üzerinden)
-  const lastKey = entered.length ? entered[entered.length - 1].key : '';
-  const trend = days.map((x) => {
-    if (x.future || x.key > lastKey) return null;
-    let s = 0; let n = 0;
-    for (let k = 0; k < 7; k++) {
-      const e = index[toDateInput(addDays(x.d, -k))];
-      if (e && e.total > 0) { s += e.total; n++; }
-    }
-    return n >= 3 ? s / n : null;
-  });
-  const trendPts = trend.map((v, i) => (v == null ? null : [((i + 0.5) / dim) * 100, 100 - (v / maxV) * 100]));
-  const trendPath = trendPts.reduce((acc, p, i) => {
-    if (!p) return acc;
-    return acc + (i > 0 && trendPts[i - 1] ? ' L' : ' M') + p[0].toFixed(2) + ' ' + p[1].toFixed(2);
-  }, '').trim();
 
   // Kampanyalar (bu aya değenler)
   const monthStart = mk + '-01'; const monthEnd = mk + '-' + String(dim).padStart(2, '0');
@@ -99,8 +83,7 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
       const e = c.end_date > monthEnd ? dim : Number(c.end_date.slice(8));
       return { id: c.id, name: c.name, mp: c.marketplace, s, e, color: c.marketplace ? mpColor(c.marketplace) : '#5F3DC4' };
     }));
-  const laneCount = camps.length ? Math.max(...camps.map((c) => c.lane)) + 1 : 0;
-
+  
   // Seçili gün: varsayılan olarak girilmiş son gün
   const defaultSel = entered.length ? entered[entered.length - 1].key : null;
   useEffect(() => { setSel(null); }, [mk]);
@@ -110,26 +93,19 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
   const prevDay = sd ? index[toDateInput(addDays(sd.d, -1))] : null;
   const selCamps = sd ? camps.filter((c) => sd.i + 1 >= c.s && sd.i + 1 <= c.e) : [];
 
-  const tone = (v) => (!ref ? 'mid' : v >= ref * 1.25 ? 'top' : v >= ref ? 'hi' : v >= ref * 0.75 ? 'mid' : 'lo');
+  const tone = (v) => (!ref || v >= ref ? 'hi' : 'lo');
 
   return (
     <section className="section">
       <div className="section-head">
         <h2>Günlük ciro</h2>
         <div className="rch-mode" role="tablist" aria-label="Grafik görünümü">
-          <button type="button" role="tab" aria-selected={mode === 'mp'} className={mode === 'mp' ? 'on' : ''} onClick={() => setMode('mp')}>Pazaryeri</button>
-          <button type="button" role="tab" aria-selected={mode === 'total'} className={mode === 'total' ? 'on' : ''} onClick={() => setMode('total')}>Toplam</button>
+          <button type="button" role="tab" aria-selected={mode === 'mp'} className={mode === 'mp' ? 'on' : ''} onClick={() => setModeS('mp')}>Pazaryeri</button>
+          <button type="button" role="tab" aria-selected={mode === 'total'} className={mode === 'total' ? 'on' : ''} onClick={() => setModeS('total')}>Toplam</button>
         </div>
       </div>
 
       <div className="card rch-card">
-        {/* Üst özet şeridi */}
-        <div className="rch-kpis">
-          <div className="rch-kpi"><span>{refName}</span><b>{tlShort(ref)}</b></div>
-          <div className="rch-kpi best"><span>En iyi gün</span><b>{best ? tlShort(best.v) : '—'}</b>{best ? <em>{best.d.getDate()} {MONTHS[mo].slice(0, 3)} {WEEKDAYS_SHORT[best.d.getDay()]}</em> : null}</div>
-          <div className="rch-kpi"><span>Ortalama üstü</span><b>{entered.filter((x) => x.v >= ref).length} gün</b><em>/ {entered.length}</em></div>
-        </div>
-
         <div className="rch-plot-wrap">
           {/* Tutar ekseni */}
           <div className="rch-yaxis" aria-hidden="true">
@@ -137,25 +113,13 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
           </div>
 
           <div className="rch-main">
-            {/* Kampanya şeritleri */}
-            {laneCount ? (
-              <div className="rch-camps" style={{ height: laneCount * 18 }} aria-label="Kampanyalar">
-                {camps.map((c) => (
-                  <span key={c.id || c.name + c.s} className="rch-camp" title={c.name + (c.mp ? ' · ' + c.mp : '')}
-                    style={{ left: ((c.s - 1) / dim) * 100 + '%', width: ((c.e - c.s + 1) / dim) * 100 + '%', top: c.lane * 18, '--c': c.color }}>
-                    <span>{c.name}</span>
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
             <div className="rch-plot" style={{ '--n': dim }}>
               {/* Izgara */}
               {ticks.map((t, i) => <span key={i} className={'rch-grid' + (i === 0 ? ' base' : '')} style={{ bottom: (t / maxV) * 100 + '%' }} aria-hidden="true" />)}
               {/* Kampanya günleri zemini */}
               {camps.map((c) => (
-                <span key={'bg' + (c.id || c.name + c.s)} className="rch-campbg" aria-hidden="true"
-                  style={{ left: ((c.s - 1) / dim) * 100 + '%', width: ((c.e - c.s + 1) / dim) * 100 + '%', '--c': c.color }} />
+                <span key={'bg' + (c.id || c.name + c.s)} className="rch-campbg" aria-hidden="true" title={c.name}
+                  style={{ left: ((c.s - 1) / dim) * 100 + '%', width: ((c.e - c.s + 1) / dim) * 100 + '%' }} />
               ))}
 
               <div className="rch-cols" role="list" aria-label="Günlük ciro grafiği">
@@ -175,18 +139,10 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
                         </span>
                       ) : (!x.future ? <span className="rch-empty" /> : null)}
                       {on && x.v ? <span className="rch-tip" style={{ bottom: Math.min(92, h) + '%' }}>{tlShort(x.v)}</span> : null}
-                      {best && best.key === x.key && !on ? <span className="rch-star" style={{ bottom: Math.min(94, h) + '%' }} aria-hidden="true">★</span> : null}
                     </button>
                   );
                 })}
               </div>
-
-              {/* 7 günlük trend */}
-              {trendPath ? (
-                <svg className="rch-trend" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                  <path d={trendPath} fill="none" stroke="#E8590C" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-                </svg>
-              ) : null}
 
               {/* Ortalama / hedef çizgisi */}
               {ref > 0 ? (
@@ -211,16 +167,10 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
         <div className="rch-legend">
           {mode === 'mp'
             ? mps.map((n) => <span key={n}><i style={{ background: mpColor(n) }} />{n}</span>)
-            : <>
-                <span><i className="t-top" />çok iyi (+%25)</span>
-                <span><i className="t-hi" />{refName.toLowerCase()} üstü</span>
-                <span><i className="t-mid" />biraz altı</span>
-                <span><i className="t-lo" />düşük (−%25)</span>
-              </>}
-          <span><i className="ln-trend" />7 günlük trend</span>
-          <span><i className="ln-ref" />{refName.toLowerCase()}</span>
-          {laneCount ? <span><i className="campbg" />kampanya</span> : null}
-          <span><i className="we" />hafta sonu</span>
+            : <><span><i className="t-hi" />{refName.toLowerCase()} ve üstü</span><span><i className="t-lo" />{refName.toLowerCase()} altı</span></>}
+          {ref > 0 ? <span><i className="ln-ref" />{refName.toLowerCase()} {tlShort(ref)}</span> : null}
+          {camps.length ? <span><i className="campbg" />kampanya günü</span> : null}
+          {best ? <span className="rch-best">En iyi gün: <b>{best.d.getDate()} {MONTHS[mo].slice(0, 3)} · {tlShort(best.v)}</b></span> : null}
         </div>
 
         {/* Seçili gün dökümü */}

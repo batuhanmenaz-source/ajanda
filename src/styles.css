@@ -2382,3 +2382,23 @@ button.it-row:hover { background: var(--chip); }
 .rg-pick input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; border: 0; }
 .rg-pick:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .sl-bulk { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 0; font-size: 13px; }
+
+/* ---------- Ciro: sade grafik ve ay başlığı ---------- */
+.rv-mhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: -6px; }
+.rv-mnav { display: flex; align-items: center; gap: 4px; }
+.rv-mnav h2 { margin: 0 4px; font-family: var(--display); font-size: 20px; min-width: 130px; text-align: center; }
+.rv-mact { display: flex; gap: 6px; flex-wrap: wrap; }
+.rch-campbg { background: #7048E8; opacity: .06; }
+.rch-stack.t-hi { background: #3B5BDB; }
+.rch-stack.t-lo { background: #A5B4FC; }
+.rch-legend i.t-hi { background: #3B5BDB; } .rch-legend i.t-lo { background: #A5B4FC; }
+.rch-legend i.campbg { background: #7048E8; opacity: .25; }
+.rch-col.we { background: none; }
+.rch-stack { border-radius: 4px 4px 0 0; overflow: hidden; }
+.rch-grid { border-top-color: rgba(0,0,0,.06) !important; }
+.rch-best { margin-left: auto; color: var(--muted); }
+.rch-best b { color: var(--ink); font-weight: 600; }
+.rch-xaxis span.we b { color: var(--muted); font-weight: 400; }
+@media (max-width: 560px) { .rv-mhead { flex-direction: column; align-items: stretch; } .rv-mact { justify-content: flex-end; } .rch-best { margin-left: 0; flex-basis: 100%; } }
+.rch-yaxis span { white-space: nowrap; }
+@media (max-width: 560px) { .rch-yaxis span { font-size: 9.5px; } .rch-ref span { display: none; } }
