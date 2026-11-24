@@ -268,3 +268,43 @@ export async function exportHealth({ start, wk, c, p, tips, h, label, exName }) 
     { name: 'Tavsiyeler', rows: tip, widths: [36, 110] }
   ], 'saglik-raporu-' + toDateInput(start) + '.xlsx');
 }
+
+// ---------- Satış raporu (dönem kıyası) ----------
+export async function exportSales({ A, B, cmpLabel, tot, mpRows, rows, mps, label }) {
+  const SH = { Trendyol: 'TY', Hepsiburada: 'HB' };
+  const Q = (v) => N(Math.round(v || 0));
+  const M = (v) => N(Math.round((v || 0) * 100) / 100, TL);
+  const sh = (mp) => SH[mp] || mp;
+  const pct = (a, b) => (b ? a / b - 1 : 0);
+  const per = (k) => (k[0] === k[1] ? k[0].split('-').reverse().join('.') : k[0].split('-').reverse().join('.') + ' – ' + k[1].split('-').reverse().join('.'));
+  const summary = [
+    [H('Ajanda · Satış raporu'), H(''), H(''), H(''), H('')],
+    [S('Dönem'), S(per(A)), S(''), S(''), S('')],
+    [S('Kıyas (' + cmpLabel + ')'), S(per(B)), S(''), S(''), S('')],
+    [S(''), S(''), S(''), S(''), S('')],
+    [H(''), H('Bu dönem'), H('Kıyas'), H('Fark'), H('Değişim')],
+    [S('Ciro'), M(tot.a.r), M(tot.b.r), M(tot.a.r - tot.b.r), N(pct(tot.a.r, tot.b.r), PCT)],
+    [S('Satış adedi'), Q(tot.a.q), Q(tot.b.q), Q(tot.a.q - tot.b.q), N(pct(tot.a.q, tot.b.q), PCT)],
+    ...(tot.a.o ? [[S('Sipariş'), Q(tot.a.o), Q(tot.b.o), Q(tot.a.o - tot.b.o), N(pct(tot.a.o, tot.b.o), PCT)]] : []),
+    ...(tot.a.x ? [[S('İptal adedi'), Q(tot.a.x), Q(tot.b.x), Q(tot.a.x - tot.b.x), N(pct(tot.a.x, tot.b.x), PCT)]] : []),
+    [S(''), S(''), S(''), S(''), S('')],
+    [H('Pazaryeri'), H('Ciro'), H('Kıyas ciro'), H('Adet'), H('Kıyas adet')],
+    ...mpRows.map((m) => [S(m.mp), M(m.a.r), M(m.b.r), Q(m.a.q), Q(m.b.q)])
+  ];
+  const head = ['Stok kodu', 'Barkod', 'Ürün', 'Marka', 'Adet', 'Kıyas adet', 'Adet farkı', 'Adet %', 'Ciro', 'Kıyas ciro', 'Ciro farkı', 'Ciro %', 'İptal', 'Stok', ...mps.flatMap((mp) => [sh(mp) + ' adet', sh(mp) + ' kıyas'])];
+  const sorted = [...rows].sort((x, y) => y.ar - x.ar);
+  const items = [
+    head.map(H),
+    ...sorted.map((r) => [
+      S(r.p.code), S(r.p.barcode), S(r.p.n), S(r.p.br),
+      Q(r.aq), Q(r.bq), Q(r.aq - r.bq), N(pct(r.aq, r.bq), PCT),
+      M(r.ar), M(r.br), M(r.ar - r.br), N(pct(r.ar, r.br), PCT),
+      Q(r.ax), r.s == null ? S('') : Q(r.s),
+      ...mps.flatMap((mp) => [Q(r.p.mps[mp] ? r.p.mps[mp].a.q : 0), Q(r.p.mps[mp] ? r.p.mps[mp].b.q : 0)])
+    ])
+  ];
+  await save([
+    { name: 'Özet', rows: summary, widths: [26, 18, 18, 16, 14] },
+    { name: 'Ürünler', rows: items, widths: [12, 16, 60, 14, 9, 11, 11, 9, 14, 14, 14, 9, 8, 8, ...mps.flatMap(() => [10, 10])], sticky: 1 }
+  ], 'satis-raporu-' + slug(label) + '.xlsx');
+}

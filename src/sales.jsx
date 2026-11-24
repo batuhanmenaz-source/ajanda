@@ -89,19 +89,19 @@ function periodOptions(today, reports) {
   const t = ymd(today), y = shift(t, -1);
   const d = new Date(today.getFullYear(), today.getMonth(), 1);
   const pm1 = ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), pm2 = ymd(new Date(d.getFullYear(), d.getMonth(), 0));
-  const ppm1 = ymd(new Date(d.getFullYear(), d.getMonth() - 2, 1)), ppm2 = ymd(new Date(d.getFullYear(), d.getMonth() - 1, 0));
   const opts = [];
-  const last = [...reports].sort((x, z) => String(z.created_at).localeCompare(String(x.created_at)))[0];
+  // En son tarihli rapor (yükleme sırası değil, dönem sonu)
+  const last = [...reports].sort((x, z) => z.period_end.localeCompare(x.period_end) || lenOf(x.period_start, x.period_end) - lenOf(z.period_start, z.period_end))[0];
   if (last) {
-    const a = last.period_start, b = last.period_end, n = lenOf(a, b);
-    opts.push({ id: 'son', label: 'Son yüklenen', A: [a, b], B: [shift(a, -n), shift(a, -1)] });
+    const a = last.period_start, b = last.period_end;
+    opts.push({ id: 'son', label: 'Son rapor', A: [a, b] });
   }
   opts.push(
-    { id: 'bugun', label: 'Bugün', A: [t, t], B: [y, y], note: 'Gün bitmedi; dünün tamamıyla kıyaslanıyor.' },
-    { id: 'dun', label: 'Dün', A: [y, y], B: [shift(y, -1), shift(y, -1)] },
-    { id: '7', label: 'Son 7 gün', A: [shift(t, -7), y], B: [shift(t, -14), shift(t, -8)] },
-    { id: '30', label: 'Son 30 gün', A: [shift(t, -30), y], B: [shift(t, -60), shift(t, -31)] },
-    { id: 'ay', label: 'Geçen ay', A: [pm1, pm2], B: [ppm1, ppm2] }
+    { id: 'bugun', label: 'Bugün', A: [t, t], note: 'Gün henüz bitmedi.' },
+    { id: 'dun', label: 'Dün', A: [y, y] },
+    { id: '7', label: 'Son 7 gün', A: [shift(t, -7), y] },
+    { id: '30', label: 'Son 30 gün', A: [shift(t, -30), y] },
+    { id: 'ay', label: 'Geçen ay', A: [pm1, pm2] }
   );
   return opts;
 }
@@ -270,6 +270,7 @@ function ProductSheet({ p, A, B, metric, reports, now, onClose, noB }) {
   return (
     <Sheet title="Ürün" onClose={onClose}>
       <div className="sl-ps-name">{p.n}</div>
+      <div className="sl-ps-codes">{p.code ? <span>Stok kodu <b>{p.code}</b></span> : null}{p.barcode ? <span>Barkod <b>{p.barcode}</b></span> : null}{(p.keys.Hepsiburada || []).length ? <span>HB SKU <b>{p.keys.Hepsiburada[0]}</b></span> : null}</div>
       <span className="hint">{plabel(A[0], A[1])} · kıyas: {plabel(B[0], B[1])}</span>
       <div className="sl-ps-tot">
         <div><span>Adet</span><b>{nf(p.a.q)}</b>{allNo ? null : <small>önce {nf(p.b.q)}</small>}<Delta a={p.a.q} b={p.b.q} showAbs none={allNo} /></div>
@@ -324,22 +325,44 @@ function ProductSheet({ p, A, B, metric, reports, now, onClose, noB }) {
   );
 }
 
-// ---------- Ana görünüm ----------
+// ---------- Ana görünüm: rapor ----------
+const CMP = [['prev', 'Önceki dönem'], ['week', 'Geçen hafta'], ['month', 'Geçen ay']];
+const shiftMonth = (k, n) => { const [y, m, d] = k.split('-').map(Number); const last = new Date(y, m - 1 + n + 1, 0).getDate(); return ymd(new Date(y, m - 1 + n, Math.min(d, last))); };
+function compareRange(opt, mode) {
+  const [a, b] = opt.A; const n = lenOf(a, b);
+  if (mode === 'week' && n <= 7) return [shift(a, -7), shift(b, -7)];
+  if (mode === 'month') return opt.id === 'ay' ? [shiftMonth(a, -1), ymd(new Date(+a.slice(0, 4), +a.slice(5, 7) - 1, 0))] : [shiftMonth(a, -1), shiftMonth(b, -1)];
+  if (opt.id === 'ay') return [shiftMonth(a, -1), shift(a, -1)];
+  return [shift(a, -n), shift(a, -1)];
+}
+const DATIVE = { 'Önceki dönem': 'önceki döneme', 'Geçen hafta': 'geçen haftaya', 'Geçen ay': 'geçen aya' };
+const QUICK = [
+  ['all', 'Tümü'], ['down', '▼ Düşenler'], ['up', '▲ Artanlar'], ['stopped', 'Satışı duranlar'], ['new', 'Yeni satanlar'], ['stock', 'Stok riski'], ['cancel', 'İptali yüksek']
+];
+const COLS = [
+  ['code', 'Stok kodu'], ['name', 'Ürün'], ['mp', 'Pzr'], ['aq', 'Adet'], ['bq', 'Önceki'], ['dq', 'Fark'], ['dp', '%'], ['ar', 'Ciro'], ['dr', 'Ciro farkı'], ['s', 'Stok']
+];
+const pctTxt = (a, b) => (b ? (a / b - 1) : null);
+const fmtPct = (v) => (v == null ? '' : Math.abs(v) < 0.005 ? '0' : (v > 0 ? '+' : '−') + '%' + (Math.abs(v * 100) < 10 ? Math.abs(v * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : Math.round(Math.abs(v * 100))));
+const sign = (v, f) => (Math.abs(v) < 0.5 ? '0' : (v > 0 ? '+' : '−') + f(Math.abs(v)));
+
 export function SalesView({ now, actions }) {
   const [reports, setReports] = useState(null);
   const [err, setErr] = useState('');
   const [optId, setOptId] = useState(null);
-  const [data, setData] = useState(null); // { key, byMp, cov }
+  const [cmp, setCmp] = useState(() => { try { return localStorage.getItem('ajanda-sales-cmp') || 'prev'; } catch { return 'prev'; } });
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [metric, setMetric] = useState(() => { try { return localStorage.getItem('ajanda-sales-metric') || 'q'; } catch { return 'q'; } });
-  const [sort, setSort] = useState('down');
+  const [quick, setQuick] = useState('all');
+  const [sortBy, setSortBy] = useState(null); // { k, dir }
   const [mpF, setMpF] = useState('');
   const [q, setQ] = useState('');
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(50);
   const [prod, setProd] = useState(null);
   const [imp, setImp] = useState(null);
   const [reading, setReading] = useState(false);
   const [showList, setShowList] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -349,14 +372,16 @@ export function SalesView({ now, actions }) {
   const dayKey = now ? now.toDateString() : '';
   const opts = useMemo(() => periodOptions(now, reports || []), [reports, dayKey]);
   const mpsAll = useMemo(() => [...new Set((reports || []).map((r) => r.marketplace))], [reports]);
-  // Varsayılan: kıyası da olan ilk seçenek
-  const opt = useMemo(() => {
+  const opt0 = useMemo(() => {
     if (!reports) return null;
     const chosen = opts.find((o) => o.id === optId);
     if (chosen) return chosen;
-    const has = (o, side) => mpsAll.some((mp) => coverReports(reports, mp, o[side][0], o[side][1]).ids.length);
-    return opts.find((o) => o.id !== 'bugun' && has(o, 'A') && has(o, 'B')) || opts.find((o) => has(o, 'A')) || opts[0];
-  }, [opts, optId, reports, mpsAll]);
+    const has = (r) => mpsAll.some((mp) => coverReports(reports, mp, r[0], r[1]).ids.length);
+    return opts.find((o) => o.id !== 'bugun' && has(o.A) && has(compareRange(o, cmp))) || opts.find((o) => o.id !== 'bugun' && has(o.A)) || opts[0];
+  }, [opts, optId, reports, mpsAll, cmp]);
+  const opt = opt0 ? { ...opt0, B: compareRange(opt0, cmp) } : null;
+  const weekOk = opt && lenOf(opt.A[0], opt.A[1]) <= 7;
+  const cmpLabel = (CMP.find(([k]) => k === (cmp === 'week' && !weekOk ? 'prev' : cmp)) || CMP[0])[1];
 
   const key = opt ? opt.A.join() + '|' + opt.B.join() + '|' + (reports || []).map((r) => r.id).join() : '';
   useEffect(() => {
@@ -380,42 +405,95 @@ export function SalesView({ now, actions }) {
 
   const view = useMemo(() => {
     if (!data || data.key !== key) return null;
-    // Kıyas dönemi farklı sayıda gün kapsıyorsa günlük ortalamaya ölçekle
     const scaleB = {};
     Object.keys(data.byMp).forEach((mp) => { const c = data.cov[mp]; scaleB[mp] = c.B.days && c.A.days && c.A.days !== c.B.days ? c.A.days / c.B.days : 1; });
     const products = compareProducts(data.byMp, scaleB);
     const mpRows = Object.keys(data.byMp).map((mp) => {
-      const t = { a: { q: 0, r: 0 }, b: { q: 0, r: 0 } };
-      data.byMp[mp].A.forEach((x) => { t.a.q += x.q || 0; t.a.r += x.r || 0; });
-      data.byMp[mp].B.forEach((x) => { t.b.q += (x.q || 0) * scaleB[mp]; t.b.r += (x.r || 0) * scaleB[mp]; });
+      const t = { a: { q: 0, r: 0, o: 0, x: 0 }, b: { q: 0, r: 0, o: 0, x: 0 } };
+      data.byMp[mp].A.forEach((x) => { t.a.q += x.q || 0; t.a.r += x.r || 0; t.a.o += x.o || 0; t.a.x += x.x || 0; });
+      data.byMp[mp].B.forEach((x) => { const s = scaleB[mp]; t.b.q += (x.q || 0) * s; t.b.r += (x.r || 0) * s; t.b.o += (x.o || 0) * s; t.b.x += (x.x || 0) * s; });
       return { mp, ...t, cov: data.cov[mp] };
     }).sort((x, z) => z.a.r - x.a.r);
-    const tot = mpRows.reduce((s, m) => ({ a: { q: s.a.q + m.a.q, r: s.a.r + m.a.r }, b: { q: s.b.q + m.b.q, r: s.b.r + m.b.r } }), { a: { q: 0, r: 0 }, b: { q: 0, r: 0 } });
-    const tyDays = (data.cov.Trendyol && data.cov.Trendyol.A.days) || 1;
-    const stock = products.filter((p) => p.mps.Trendyol && p.mps.Trendyol.s != null && p.mps.Trendyol.a.q > 0)
-      .map((p) => ({ p, s: p.mps.Trendyol.s, cover: p.mps.Trendyol.s / (p.mps.Trendyol.a.q / tyDays) }))
-      .filter((z) => z.cover < 21).sort((x, z) => x.cover - z.cover);
+    const add = (s, m) => ({ q: s.q + m.q, r: s.r + m.r, o: s.o + m.o, x: s.x + m.x });
+    const z = { q: 0, r: 0, o: 0, x: 0 };
+    const tot = { a: mpRows.reduce((s, m) => add(s, m.a), z), b: mpRows.reduce((s, m) => add(s, m.b), z) };
     const noB = new Set(mpRows.filter((m) => !m.cov.B.ids.length).map((m) => m.mp));
-    return { products, mpRows, tot, stock, noB, allNoB: noB.size === mpRows.length, scaled: Object.values(scaleB).some((v) => v !== 1) };
+    const daysA = Math.max(1, ...mpRows.map((m) => m.cov.A.days || 0));
+    products.forEach((p) => {
+      p.hasB = Object.keys(p.mps).some((mp) => !noB.has(mp));
+      p.cover = p.s != null && p.a.q > 0 ? p.s / (p.a.q / daysA) : null;
+    });
+    return { products, mpRows, tot, noB, allNoB: noB.size === mpRows.length, scaled: Object.values(scaleB).some((v) => v !== 1) };
   }, [data, key]);
 
-  const list = useMemo(() => {
+  // Satır değerleri (pazaryeri süzgeci uygulanmış)
+  const rowsAll = useMemo(() => {
     if (!view) return [];
-    const m = metric;
-    const val = (p, side) => (mpF ? (p.mps[mpF] ? p.mps[mpF][side][m] : 0) : p[side][m]);
-    let l = view.products.filter((p) => !mpF || p.mps[mpF]);
-    if (q.trim()) {
-      const words = q.toLocaleLowerCase('tr-TR').split(/\s+/).filter(Boolean);
-      l = l.filter((p) => { const n = (p.n + ' ' + (p.br || '')).toLocaleLowerCase('tr-TR'); return words.every((w) => n.includes(w)); });
+    return view.products.filter((p) => !mpF || p.mps[mpF]).map((p) => {
+      const src = mpF ? p.mps[mpF] : p;
+      const a = src.a, b = src.b;
+      const s = mpF ? p.mps[mpF].s : p.s;
+      return { p, aq: a.q, bq: b.q, ar: a.r, br: b.r, ax: a.x || 0, dq: a.q - b.q, dr: a.r - b.r, dp: b.q ? a.q / b.q - 1 : (a.q ? Infinity : 0), s, cover: s != null && a.q > 0 ? s / (a.q / Math.max(1, ...view.mpRows.map((m) => m.cov.A.days || 0))) : null, hasB: mpF ? !view.noB.has(mpF) : p.hasB };
+    });
+  }, [view, mpF]);
+
+  const QF = {
+    all: () => true,
+    down: (r) => r.hasB && r.dq < 0,
+    up: (r) => r.hasB && r.dq > 0,
+    stopped: (r) => r.hasB && r.bq >= 2 && r.aq === 0,
+    new: (r) => r.hasB && r.bq === 0 && r.aq > 0,
+    stock: (r) => r.cover != null && r.cover < 14,
+    cancel: (r) => r.ax >= 3 && r.ax / (r.aq + r.ax) >= 0.15
+  };
+  const DEF_SORT = { all: ['ar', -1], down: ['dq', 1], up: ['dq', -1], stopped: ['bq', -1], new: ['aq', -1], stock: ['cover', 1], cancel: ['ax', -1] };
+  const counts = useMemo(() => Object.fromEntries(QUICK.map(([k]) => [k, rowsAll.filter(QF[k]).length])), [rowsAll]);
+
+  const insights = useMemo(() => {
+    if (!view) return [];
+    const out = [];
+    const T = view.tot;
+    const rp = pctTxt(T.a.r, T.b.r);
+    if (!view.allNoB && rp != null) {
+      const qp = pctTxt(T.a.q, T.b.q);
+      out.push({ tone: rp >= 0 ? 'up' : 'down', text: <>Ciro <b>{tl(T.a.r)}</b>, {DATIVE[cmpLabel] || 'kıyasa'} göre <b>{fmtPct(rp)}</b> ({sign(T.a.r - T.b.r, tlShort)}). Satış adedi {nf(T.a.q)} ({fmtPct(qp)}).</> });
     }
-    const d = (p) => val(p, 'a') - val(p, 'b');
-    if (q.trim() || view.allNoB) l = [...l].sort((x, z) => val(z, 'a') - val(x, 'a'));
-    else if (sort === 'down') l = l.filter((p) => d(p) < 0).sort((x, z) => d(x) - d(z));
-    else if (sort === 'up') l = l.filter((p) => d(p) > 0).sort((x, z) => d(z) - d(x));
-    else l = [...l].sort((x, z) => val(z, 'a') - val(x, 'a'));
-    return l.map((p) => ({ p, a: val(p, 'a'), b: val(p, 'b') }));
-  }, [view, metric, sort, mpF, q]);
-  useEffect(() => { setLimit(20); }, [metric, sort, mpF, q, key]);
+    if (view.mpRows.length > 1 && !view.allNoB) {
+      const ch = view.mpRows.filter((m) => m.b.r > 0 && m.a.r > 0).map((m) => ({ mp: m.mp, v: m.a.r / m.b.r - 1 }));
+      if (ch.length > 1) {
+        const best = ch.reduce((x, y) => (y.v > x.v ? y : x)), worst = ch.reduce((x, y) => (y.v < x.v ? y : x));
+        out.push({ tone: 'info', text: <>En iyi giden pazaryeri <b>{best.mp}</b> ({fmtPct(best.v)}){worst.mp !== best.mp ? <>, en çok düşen <b>{worst.mp}</b> ({fmtPct(worst.v)})</> : null}.</>, mp: worst.v < 0 ? worst.mp : best.mp });
+      }
+    }
+    const nm = (r) => (r.p.code ? r.p.code + ' · ' : '') + r.p.n.slice(0, 48);
+    const down = rowsAll.filter(QF.down).sort((x, y) => x.dq - y.dq).slice(0, 3);
+    if (down.length) out.push({ tone: 'down', text: <>En çok düşenler: {down.map((r, i) => <span key={r.p.id + i}>{i ? ', ' : ''}<b>{nm(r)}</b> ({sign(r.dq, nf)} adet)</span>)}</>, quick: 'down' });
+    const up = rowsAll.filter(QF.up).sort((x, y) => y.dq - x.dq).slice(0, 3);
+    if (up.length) out.push({ tone: 'up', text: <>En çok artanlar: {up.map((r, i) => <span key={r.p.id + i}>{i ? ', ' : ''}<b>{nm(r)}</b> ({sign(r.dq, nf)} adet)</span>)}</>, quick: 'up' });
+    if (counts.stopped) out.push({ tone: 'down', text: <><b>{counts.stopped} ürün</b> önceki dönemde satıp bu dönem hiç satmadı.</>, quick: 'stopped' });
+    if (counts.stock) out.push({ tone: 'warn', text: <><b>{counts.stock} ürünün</b> stoğu bu satış hızıyla 2 haftadan az yetiyor.</>, quick: 'stock' });
+    if (counts.cancel) out.push({ tone: 'warn', text: <><b>{counts.cancel} üründe</b> iptal oranı %15'in üstünde.</>, quick: 'cancel' });
+    if (counts.new) out.push({ tone: 'info', text: <><b>{counts.new} ürün</b> önceki dönemde satmazken bu dönem sattı.</>, quick: 'new' });
+    return out;
+  }, [view, rowsAll, counts, cmpLabel]);
+
+  const list = useMemo(() => {
+    let l = rowsAll;
+    const qq = q.trim().toLocaleLowerCase('tr-TR');
+    if (qq) {
+      const words = qq.split(/\s+/);
+      l = l.filter((r) => {
+        const codes = r.p.codes.map((c) => String(c).toLocaleLowerCase('tr-TR'));
+        if (words.length === 1 && codes.some((c) => c === qq || c.startsWith(qq))) return true;
+        const n = (r.p.n + ' ' + (r.p.br || '') + ' ' + codes.join(' ')).toLocaleLowerCase('tr-TR');
+        return words.every((w) => n.includes(w));
+      });
+    } else l = l.filter(QF[quick]);
+    const [k, dir] = sortBy ? [sortBy.k, sortBy.dir] : DEF_SORT[qq ? 'all' : quick];
+    const val = (r) => (k === 'code' ? String(r.p.code || r.p.barcode || '') : k === 'name' ? r.p.n : k === 'mp' ? Object.keys(r.p.mps).length : k === 'dp' ? (Number.isFinite(r.dp) ? r.dp : 1e9) : (r[k] == null ? (dir > 0 ? 1e12 : -1e12) : r[k]));
+    return [...l].sort((x, y) => { const a = val(x), b = val(y); return (typeof a === 'string' ? a.localeCompare(b, 'tr', { numeric: true }) : a - b) * dir; });
+  }, [rowsAll, quick, sortBy, q]);
+  useEffect(() => { setLimit(50); }, [quick, sortBy, mpF, q, key]);
 
   const pick = async (fl) => {
     const arr = [...(fl || [])].slice(0, 62);
@@ -428,8 +506,7 @@ export function SalesView({ now, actions }) {
         try {
           const parsed = parseSales(await readXlsx(f), f.name);
           files.push({ name: f.name, parsed, own: fileDate(f.name, now) || parsed.range || null });
-        }
-        catch (e) { files.push({ name: f.name, error: e && e.message ? e.message : 'Okunamadı' }); }
+        } catch (e) { files.push({ name: f.name, error: e && e.message ? e.message : 'Okunamadı' }); }
       }
       setImp(files);
     } catch (e) { setErr(e.message || 'Dosya okunamadı.'); }
@@ -438,18 +515,50 @@ export function SalesView({ now, actions }) {
   const toRevenue = async (day, mp, amount, orders) => {
     if (actions && actions.saveRevenue) await actions.saveRevenue(day, [{ marketplace: mp, amount: Math.round(amount * 100) / 100, orders: orders ? Math.round(orders) : null }], { keepOpen: true });
   };
-  const setMetricS = (v) => { setMetric(v); try { localStorage.setItem('ajanda-sales-metric', v); } catch { /* yok say */ } };
-  const money = metric === 'r';
-  const fmtV = (v) => (money ? tlShort(v) : nf(v));
+  const setCmpS = (v) => { setCmp(v); try { localStorage.setItem('ajanda-sales-cmp', v); } catch { /* yok say */ } };
+  const clickSort = (k) => setSortBy((s) => {
+    const [dk, dd] = DEF_SORT[quick];
+    const cur = s || { k: dk, dir: dd };
+    return cur.k === k ? { k, dir: -cur.dir } : { k, dir: k === 'code' || k === 'name' || k === 'cover' ? 1 : -1 };
+  });
+  const sortCur = sortBy || { k: DEF_SORT[q.trim() ? 'all' : quick][0], dir: DEF_SORT[q.trim() ? 'all' : quick][1] };
+  const doExport = async () => {
+    if (!view) return;
+    setExporting(true);
+    try {
+      const { exportSales } = await import('./excel.js');
+      await exportSales({ A: opt.A, B: opt.B, cmpLabel, tot: view.tot, mpRows: view.mpRows, rows: rowsAll, mps: view.mpRows.map((m) => m.mp), label: plabel(opt.A[0], opt.A[1]) });
+    } catch (e) { setErr('Excel oluşturulamadı: ' + (e && e.message)); } finally { setExporting(false); }
+  };
+
+  // Rapor takvimi: son 35 günde hangi günlerin raporu var
+  const coverage = useMemo(() => {
+    if (!reports || !reports.length) return null;
+    const t = ymd(now);
+    const days = Array.from({ length: 35 }, (_, i) => shift(t, i - 35));
+    return { days, rows: mpsAll.map((mp) => { const own = reports.filter((r) => r.marketplace === mp); return { mp, on: days.map((d) => own.some((r) => r.period_start <= d && r.period_end >= d)) }; }) };
+  }, [reports, dayKey, mpsAll]);
+
+  const T = view && view.tot;
+  const showB = view && !view.allNoB;
+  const kpi = (label, a, b, f, extra) => (
+    <div className="sl-kpi">
+      <span>{label}</span><b>{f(a)}</b>
+      {showB ? <small>önce {f(b)} <Delta a={a} b={b} money={f === tlShort} invert={extra === 'invert'} /></small> : null}
+    </div>
+  );
 
   return (
     <div className="sl">
       <div className="sl-top">
         <div>
-          <h2 className="sl-h">Satış raporları</h2>
-          <span className="hint">Pazaryeri satış Excel'lerini yükle; ürünlerin hangi pazaryerinde arttığını ya da düştüğünü gör.</span>
+          <h2 className="sl-h">Satış raporu</h2>
+          <span className="hint">Pazaryeri satış Excel'lerinden dönem kıyası: ne arttı, ne düştü, nerede.</span>
         </div>
-        <button type="button" className="btn primary" onClick={() => fileRef.current && fileRef.current.click()} disabled={reading}>{reading ? 'Okunuyor…' : '⬆ Excel yükle'}</button>
+        <div className="sl-top-b">
+          {view && view.mpRows.length ? <button type="button" className="btn" onClick={doExport} disabled={exporting}>{exporting ? 'Hazırlanıyor…' : '⬇ Excel'}</button> : null}
+          <button type="button" className="btn primary" onClick={() => fileRef.current && fileRef.current.click()} disabled={reading}>{reading ? 'Okunuyor…' : '⬆ Excel yükle'}</button>
+        </div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => pick(e.target.files)} />
       </div>
       {err ? <div className="card" style={{ padding: 12, color: 'var(--danger)', fontSize: 14 }}>{err}</div> : null}
@@ -457,111 +566,162 @@ export function SalesView({ now, actions }) {
       {reports && !reports.length ? (
         <div className="card sl-empty">
           <b>Henüz rapor yok</b>
-          <span>Panelden satış raporunu Excel olarak indir ve buraya yükle. Birden çok pazaryerinin dosyasını aynı anda seçebilirsin.</span>
+          <span>Panelden satış raporunu Excel olarak indir ve yükle. Gün gün indirdiysen dosya adına tarihi yaz ("1 Kasım"), hepsini birlikte seç.</span>
           <span>Trendyol (ürün bazlı satış raporu) ve Hepsiburada (satış raporu) doğrudan tanınır; diğer pazaryerlerinde ürün adı, adet ve tutar sütunu olan Excel'ler okunur.</span>
         </div>
       ) : null}
 
       {reports && reports.length && opt ? (
         <>
-          <div className="sl-periods">
-            <div className="typechips" role="tablist" aria-label="Dönem">
-              {opts.map((o) => <button key={o.id} type="button" role="tab" aria-selected={opt.id === o.id} className={'chip' + (opt.id === o.id ? ' on' : '')} onClick={() => setOptId(o.id)}>{o.label}</button>)}
+          <div className="card sl-ctrl">
+            <div className="sl-ctrl-r">
+              <span className="sl-ctrl-l">Dönem</span>
+              <div className="typechips" role="tablist" aria-label="Dönem">
+                {opts.map((o) => <button key={o.id} type="button" role="tab" aria-selected={opt.id === o.id} className={'chip' + (opt.id === o.id ? ' on' : '')} onClick={() => { setOptId(o.id); setSortBy(null); }}>{o.label}</button>)}
+              </div>
             </div>
-            <span className="hint">{plabel(opt.A[0], opt.A[1])} <b>⇄</b> {plabel(opt.B[0], opt.B[1])}{opt.note ? ' · ' + opt.note : ''}{view && view.scaled ? ' · Gün sayısı farklı dönemler günlük ortalamayla kıyaslandı.' : ''}</span>
+            <div className="sl-ctrl-r">
+              <span className="sl-ctrl-l">Kıyas</span>
+              <div className="typechips" role="tablist" aria-label="Kıyas">
+                {CMP.filter(([k]) => k !== 'week' || weekOk).map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={(cmp === 'week' && !weekOk ? 'prev' : cmp) === k} className={'chip' + ((cmp === 'week' && !weekOk ? 'prev' : cmp) === k ? ' on' : '')} onClick={() => setCmpS(k)}>{l}</button>)}
+              </div>
+            </div>
+            {mpsAll.length > 1 ? (
+              <div className="sl-ctrl-r">
+                <span className="sl-ctrl-l">Pazaryeri</span>
+                <div className="typechips">
+                  <button type="button" className={'chip' + (!mpF ? ' on' : '')} onClick={() => setMpF('')}>Tümü</button>
+                  {mpsAll.map((mp) => <button key={mp} type="button" className={'chip' + (mpF === mp ? ' on' : '')} onClick={() => setMpF(mp)}><span className="dot" style={{ background: mpColor(mp) }} /> {mp}</button>)}
+                </div>
+              </div>
+            ) : null}
+            <span className="hint sl-ctrl-h"><b>{plabel(opt.A[0], opt.A[1])}</b> ile <b>{plabel(opt.B[0], opt.B[1])}</b> kıyaslanıyor{opt.note ? ' · ' + opt.note : ''}{view && view.scaled ? ' · gün sayısı farklı dönemler günlük ortalamayla kıyaslandı' : ''}</span>
           </div>
 
           {!view ? <p className="hint">{loading ? 'Yükleniyor…' : ''}</p> : !view.mpRows.length ? (
-            <div className="card sl-empty"><b>Bu dönem için rapor yok</b><span>{plabel(opt.A[0], opt.A[1])} dönemini kapsayan bir rapor yükle ya da başka bir dönem seç.</span></div>
+            <div className="card sl-empty"><b>Bu dönemin raporu yok</b><span>{plabel(opt.A[0], opt.A[1])} için rapor yükle ya da başka dönem seç. Aşağıdaki rapor takviminde hangi günlerin yüklü olduğunu görebilirsin.</span></div>
           ) : (
             <>
-              <section className="card sl-card">
-                <div className="sl-card-h"><h3>Pazaryerleri</h3><span className="hint">dokun → ürünleri süz</span></div>
-                <div className="sl-mprow head"><span /><span>Ciro</span><span>Adet</span></div>
-                {view.mpRows.map((m) => {
-                  const c = m.cov;
-                  const warn = !c.A.ids.length ? 'bu dönem raporu yok' : !c.B.ids.length ? 'kıyas raporu yok' : c.A.days < c.A.total ? c.A.days + '/' + c.A.total + ' gün' : c.A.approx ? 'yakın dönem ' + plabel(c.A.period[0], c.A.period[1]) : '';
-                  return (
-                    <button key={m.mp} type="button" className={'sl-mprow' + (mpF === m.mp ? ' on' : '')} onClick={() => setMpF(mpF === m.mp ? '' : m.mp)}>
-                      <span className="sl-mpn"><span className="dot" style={{ background: mpColor(m.mp) }} />{m.mp}{warn ? <small>{warn}</small> : null}</span>
-                      <span><b>{tlShort(m.a.r)}</b><Delta a={m.a.r} b={m.b.r} money none={!c.B.ids.length} /></span>
-                      <span><b>{nf(m.a.q)}</b><Delta a={m.a.q} b={m.b.q} none={!c.B.ids.length} /></span>
-                    </button>
-                  );
-                })}
-                {view.mpRows.length > 1 ? (
-                  <div className="sl-mprow total"><span className="sl-mpn">Toplam</span><span><b>{tlShort(view.tot.a.r)}</b><Delta a={view.tot.a.r} b={view.tot.b.r} money none={view.allNoB} /></span><span><b>{nf(view.tot.a.q)}</b><Delta a={view.tot.a.q} b={view.tot.b.q} none={view.allNoB} /></span></div>
+              <div className="sl-kpis">
+                {kpi('Ciro', T.a.r, T.b.r, tlShort)}
+                {kpi('Satış adedi', T.a.q, T.b.q, nf)}
+                {T.a.o ? kpi('Sipariş', T.a.o, T.b.o, nf) : null}
+                {T.a.o ? kpi('Sepet ortalaması', T.a.r / T.a.o, T.b.o ? T.b.r / T.b.o : 0, tlShort) : null}
+                {T.a.x ? (
+                  <div className="sl-kpi"><span>İptal oranı</span><b>%{((T.a.x / (T.a.q + T.a.x || 1)) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</b>
+                    {showB && T.b.q ? <small>önce %{((T.b.x / (T.b.q + T.b.x || 1)) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</small> : <small>{nf(T.a.x)} adet</small>}</div>
                 ) : null}
-              </section>
+              </div>
 
-              <section className="card sl-card">
+              {view.allNoB ? <div className="card sl-note">Kıyas dönemi ({plabel(opt.B[0], opt.B[1])}) için rapor yok. Artış ve düşüşleri görmek için o dönemin raporunu da yükle ya da başka bir kıyas seç.</div> : null}
+
+              {insights.length ? (
+                <section className="card sl-card sl-ins">
+                  <h3>Özet</h3>
+                  <ul>
+                    {insights.map((x, i) => (
+                      <li key={i} className={'t-' + x.tone}>
+                        <span>{x.text}</span>
+                        {x.quick ? <button type="button" className="linkbtn" onClick={() => { setQ(''); setQuick(x.quick); setSortBy(null); document.getElementById('sl-table') && document.getElementById('sl-table').scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Listele</button> : null}
+                        {x.mp ? <button type="button" className="linkbtn" onClick={() => setMpF(x.mp)}>Süz</button> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              {view.mpRows.length > 1 && !mpF ? (
+                <section className="card sl-card">
+                  <h3>Pazaryerleri</h3>
+                  <div className="sl-mpt">
+                    <div className="sl-mpt-r head"><span>Pazaryeri</span><span>Ciro</span><span>Fark</span><span>Adet</span><span>Fark</span><span>Pay</span></div>
+                    {view.mpRows.map((m) => {
+                      const c = m.cov; const nb = !c.B.ids.length;
+                      const warn = !c.A.ids.length ? 'bu dönem raporu yok' : nb ? 'kıyas raporu yok' : c.A.days < c.A.total ? c.A.days + '/' + c.A.total + ' gün' : c.A.approx ? 'yakın dönem' : '';
+                      return (
+                        <button key={m.mp} type="button" className="sl-mpt-r" onClick={() => setMpF(m.mp)}>
+                          <span className="sl-mpn"><span className="dot" style={{ background: mpColor(m.mp) }} />{m.mp}{warn ? <small>{warn}</small> : null}</span>
+                          <span>{tlShort(m.a.r)}</span>
+                          <span><Delta a={m.a.r} b={m.b.r} money none={nb} /></span>
+                          <span>{nf(m.a.q)}</span>
+                          <span><Delta a={m.a.q} b={m.b.q} none={nb} /></span>
+                          <span className="sl-share"><i style={{ width: (T.a.r ? (m.a.r / T.a.r) * 100 : 0) + '%', background: mpColor(m.mp) }} />%{T.a.r ? Math.round((m.a.r / T.a.r) * 100) : 0}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+
+              <section className="card sl-card" id="sl-table">
                 <div className="sl-card-h">
                   <h3>Ürünler{mpF ? <span className="sl-fil"> · {mpF} <button type="button" className="linkbtn" aria-label="Pazaryeri süzgecini kaldır" onClick={() => setMpF('')}>✕</button></span> : null}</h3>
-                  <div className="sl-seg" role="tablist" aria-label="Ölçü">
-                    <button type="button" role="tab" aria-selected={metric === 'q'} className={metric === 'q' ? 'on' : ''} onClick={() => setMetricS('q')}>Adet</button>
-                    <button type="button" role="tab" aria-selected={metric === 'r'} className={metric === 'r' ? 'on' : ''} onClick={() => setMetricS('r')}>Ciro</button>
-                  </div>
+                  <span className="hint">{q.trim() ? list.length + ' sonuç' : counts[quick] + ' ürün'}</span>
                 </div>
-                <input className="sl-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ürün ara (ör. power block)" aria-label="Ürün ara" />
-                {view.allNoB ? <p className="hint" style={{ margin: 0 }}>Kıyas dönemi ({plabel(opt.B[0], opt.B[1])}) için rapor yok; artan/düşen görmek için o dönemin raporunu da yükle.</p> : null}
-                {!q.trim() && !view.allNoB ? (
-                  <div className="typechips">
-                    {[['down', '▼ Düşenler'], ['up', '▲ Artanlar'], ['top', 'En çok satan']].map(([k, l]) => <button key={k} type="button" className={'chip' + (sort === k ? ' on' : '')} onClick={() => setSort(k)}>{l}</button>)}
+                <input className="sl-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Stok kodu, barkod ya da ürün adı" aria-label="Stok kodu, barkod ya da ürün adı ile ara" />
+                {!q.trim() ? (
+                  <div className="typechips sl-quick">
+                    {QUICK.map(([k, l]) => (counts[k] || k === 'all' || k === quick ? <button key={k} type="button" className={'chip' + (quick === k ? ' on' : '')} onClick={() => { setQuick(k); setSortBy(null); }}>{l} <span className="sl-cnt">{counts[k]}</span></button> : null))}
                   </div>
                 ) : null}
-                {!list.length ? <p className="hint" style={{ margin: 0 }}>{q.trim() || view.allNoB ? 'Bu aramayla ürün bulunamadı.' : sort === 'down' ? 'Düşen ürün yok.' : sort === 'up' ? 'Artan ürün yok.' : 'Ürün yok.'}</p> : null}
-                <div className="sl-plist">
-                  {list.slice(0, limit).map(({ p, a, b }) => {
-                    const pNoB = Object.keys(p.mps).every((mp) => view.noB.has(mp));
-                    const mps = Object.entries(p.mps).filter(([mp]) => !mpF || mp === mpF)
-                      .sort((x, z) => z[1].a[metric] + z[1].b[metric] - x[1].a[metric] - x[1].b[metric]);
-                    return (
-                      <button key={p.id + '|' + p.n} type="button" className="sl-prow" onClick={() => setProd(p)}>
-                        <span className="sl-pn">{p.n}</span>
-                        <span className="sl-pv"><b>{fmtV(a)}</b>{pNoB ? null : <small>önce {fmtV(b)}</small>}<Delta a={a} b={b} money={money} none={pNoB} /></span>
-                        {!mpF ? (
-                          <span className="sl-pmps">
-                            {mps.map(([mp, m]) => (
-                              <span key={mp} className="sl-pmp"><span className="dot" style={{ background: mpColor(mp) }} />{short(mp)} {fmtV(m.a[metric])} {view.noB.has(mp) ? null : <Delta a={m.a[metric]} b={m.b[metric]} money={money} />}</span>
-                            ))}
-                          </span>
-                        ) : null}
+                <div className="sl-tbl" role="table" aria-label="Ürün raporu">
+                  <div className="sl-tr head" role="row">
+                    {COLS.map(([k, l]) => (
+                      <button key={k} type="button" role="columnheader" className={'c-' + k + (sortCur.k === k ? ' on' : '')} aria-sort={sortCur.k === k ? (sortCur.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick={() => clickSort(k)}>
+                        {l}{sortCur.k === k ? (sortCur.dir > 0 ? ' ↑' : ' ↓') : ''}
                       </button>
-                    );
-                  })}
-                </div>
-                {list.length > limit ? <button type="button" className="btn" onClick={() => setLimit((l) => l + 30)}>Daha fazla göster ({list.length - limit})</button> : null}
-              </section>
-
-              {view.stock.length ? (
-                <details className="card sl-card sl-stock">
-                  <summary><b>⚠️ Stok azalıyor · {view.stock.length} ürün</b><span className="hint">Trendyol stoğu bu satış hızıyla 3 haftadan az yetecek</span></summary>
-                  {view.stock.slice(0, 30).map((z) => (
-                    <div key={z.p.id + '|' + z.p.n} className="sl-row">
-                      <span className="sl-n" title={z.p.n}>{z.p.n}</span>
-                      <span className={'sl-v' + (z.cover < 7 ? ' hot' : '')}>{z.s <= 0 ? 'Stok bitti' : z.cover < 1 ? '1 günden az' : '~' + Math.round(z.cover) + ' gün'}<small> · stok {nf(z.s)}</small></span>
-                    </div>
+                    ))}
+                  </div>
+                  {list.slice(0, limit).map((r) => (
+                    <button key={r.p.id + '|' + r.p.n} type="button" role="row" className="sl-tr" onClick={() => setProd(r.p)}>
+                      <span className="c-code">{r.p.code || r.p.barcode || '—'}</span>
+                      <span className="c-name" title={r.p.n}>{r.p.n}</span>
+                      <span className="c-mp">{Object.keys(r.p.mps).filter((mp) => !mpF || mp === mpF).map((mp) => <span key={mp} className="dot" title={mp} style={{ background: mpColor(mp) }} />)}</span>
+                      <span className="c-aq"><b>{nf(r.aq)}</b></span>
+                      <span className="c-bq">{r.hasB ? nf(r.bq) : '—'}</span>
+                      <span className={'c-dq ' + (r.hasB && Math.abs(r.dq) >= 0.5 ? (r.dq > 0 ? 'up' : 'down') : '')}>{r.hasB ? sign(r.dq, nf) : ''}</span>
+                      <span className={'c-dp ' + (r.hasB && Math.abs(r.dq) >= 0.5 ? (r.dq > 0 ? 'up' : 'down') : '')}>{!r.hasB ? '' : !r.bq ? (r.aq ? 'yeni' : '') : !r.aq ? '−%100' : fmtPct(r.aq / r.bq - 1)}</span>
+                      <span className="c-ar">{tlShort(r.ar)}</span>
+                      <span className={'c-dr ' + (r.hasB && Math.abs(r.dr) >= 1 ? (r.dr > 0 ? 'up' : 'down') : '')}>{r.hasB ? sign(r.dr, tlShort) : ''}</span>
+                      <span className={'c-s' + (r.cover != null && r.cover < 7 ? ' hot' : '')}>{r.s == null ? '' : nf(r.s)}</span>
+                    </button>
                   ))}
-                </details>
-              ) : null}
+                </div>
+                {!list.length ? <p className="hint" style={{ margin: 0 }}>{q.trim() ? 'Bu kodla ya da adla ürün bulunamadı.' : 'Bu listede ürün yok.'}</p> : null}
+                {list.length > limit ? <button type="button" className="btn" onClick={() => setLimit((l) => l + 100)}>Daha fazla göster ({list.length - limit})</button> : null}
+              </section>
             </>
           )}
 
-          <details className="card sl-card sl-replist" onToggle={(e) => setShowList(e.currentTarget.open)}>
-            <summary><b>Yüklenen raporlar · {reports.length}</b></summary>
-            {showList ? reports.slice(0, 120).map((r) => (
-              <div key={r.id} className="sl-rrow">
-                <span className="dot" style={{ background: mpColor(r.marketplace) }} />
-                <span className="sl-rmp">{r.marketplace}</span>
-                <span className="sl-rp">{plabel(r.period_start, r.period_end)}</span>
-                <span className="sl-rv">{tlShort((r.totals || {}).r || 0)}</span>
-                <button type="button" className="linkbtn" style={{ color: 'var(--danger)' }} aria-label={r.marketplace + ' ' + plabel(r.period_start, r.period_end) + ' raporunu sil'} onClick={async () => {
-                  if (!window.confirm(r.marketplace + ' ' + plabel(r.period_start, r.period_end) + ' raporu silinsin mi?')) return;
-                  try { await deleteReport(r.id); setReports((x) => x.filter((z) => z.id !== r.id)); } catch (e) { setErr(String(e && e.message)); }
-                }}>Sil</button>
+          {coverage ? (
+            <section className="card sl-card">
+              <div className="sl-card-h"><h3>Rapor takvimi</h3><span className="hint">son 35 gün · dolu = rapor var</span></div>
+              <div className="sl-cov">
+                {coverage.rows.map((r) => (
+                  <div key={r.mp} className="sl-cov-r">
+                    <span className="sl-cov-mp">{short(r.mp)}</span>
+                    <span className="sl-cov-days">{r.on.map((on, i) => <i key={i} className={on ? 'on' : ''} style={on ? { background: mpColor(r.mp) } : null} title={dm(coverage.days[i]) + (on ? '' : ' · rapor yok')} />)}</span>
+                  </div>
+                ))}
+                <div className="sl-cov-r foot"><span /><span className="sl-cov-days lbl"><em>{dm(coverage.days[0])}</em><em>{dm(coverage.days[coverage.days.length - 1])}</em></span></div>
               </div>
-            )) : null}
-          </details>
+              <details className="sl-replist" onToggle={(e) => setShowList(e.currentTarget.open)}>
+                <summary>Yüklenen raporlar ({reports.length})</summary>
+                {showList ? reports.slice(0, 200).map((r) => (
+                  <div key={r.id} className="sl-rrow">
+                    <span className="dot" style={{ background: mpColor(r.marketplace) }} />
+                    <span className="sl-rmp">{r.marketplace}</span>
+                    <span className="sl-rp">{plabel(r.period_start, r.period_end)}</span>
+                    <span className="sl-rv">{tlShort((r.totals || {}).r || 0)}</span>
+                    <button type="button" className="linkbtn" style={{ color: 'var(--danger)' }} aria-label={r.marketplace + ' ' + plabel(r.period_start, r.period_end) + ' raporunu sil'} onClick={async () => {
+                      if (!window.confirm(r.marketplace + ' ' + plabel(r.period_start, r.period_end) + ' raporu silinsin mi?')) return;
+                      try { await deleteReport(r.id); setReports((x) => x.filter((z2) => z2.id !== r.id)); } catch (e) { setErr(String(e && e.message)); }
+                    }}>Sil</button>
+                  </div>
+                )) : null}
+              </details>
+            </section>
+          ) : null}
         </>
       ) : !reports && !err ? <p className="hint">Yükleniyor…</p> : null}
 
@@ -569,12 +729,12 @@ export function SalesView({ now, actions }) {
         <ImportSheet files={imp} reports={reports || []} now={now} onClose={() => setImp(null)} onRevenue={toRevenue}
           onDone={(saved, keepOpen) => {
             const gone = new Set(saved.map((s) => s.replaced).filter(Boolean));
-            setReports((r) => [...saved.map((s) => s.row), ...(r || []).filter((x) => !gone.has(x.id))].sort((x, z) => z.period_end.localeCompare(x.period_end)));
+            setReports((r) => [...saved.map((s) => s.row), ...(r || []).filter((x) => !gone.has(x.id))].sort((x, z2) => z2.period_end.localeCompare(x.period_end)));
             setOptId('son');
             if (!keepOpen) setImp(null);
           }} />
       ) : null}
-      {prod && opt ? <ProductSheet noB={view ? view.noB : new Set()} p={prod} A={opt.A} B={opt.B} metric={metric} reports={reports || []} now={now} onClose={() => setProd(null)} /> : null}
+      {prod && opt ? <ProductSheet noB={view ? view.noB : new Set()} p={prod} A={opt.A} B={opt.B} metric="q" reports={reports || []} now={now} onClose={() => setProd(null)} /> : null}
     </div>
   );
 }

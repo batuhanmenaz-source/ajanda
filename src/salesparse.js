@@ -26,7 +26,7 @@ const FORMATS = [
   {
     mp: 'Trendyol', need: ['barkod', 'netciro', 'netsatisadedi'],
     row: (g) => ({
-      k: str(g('barkod'), 40), n: str(g('urunadi')), br: str(g('marka'), 40), c: str(g('kategori'), 50),
+      k: str(g('barkod'), 40), m: str(g('modelkodu') || g('saticistokkodu') || g('stokkodu'), 40), n: str(g('urunadi')), br: str(g('marka'), 40), c: str(g('kategori'), 50),
       o: num(g('brutsiparisadedi')), q: num(g('netsatisadedi')), x: num(g('iptaladedi')), i: num(g('iadeadedi')),
       g: num(g('brutciro')), d: num(g('indirimtutari')), r: num(g('netciro')), f: num(g('toplamkomisyontutari')),
       s: g('guncelstok') === '' || g('guncelstok') == null ? null : num(g('guncelstok'))
@@ -35,7 +35,7 @@ const FORMATS = [
   {
     mp: 'Hepsiburada', need: ['toplamsatistutari', 'toplamsatisadedi', 'sku'],
     row: (g) => ({
-      k: str(g('sku'), 40), n: str(g('urunadi')), br: str(g('marka'), 40), c: str(g('altkategori') || g('kategori'), 50),
+      k: str(g('sku'), 40), m: str(g('saticisku'), 40), n: str(g('urunadi')), br: str(g('marka'), 40), c: str(g('altkategori') || g('kategori'), 50),
       q: num(g('toplamsatisadedi')), r: num(g('toplamsatistutari')), f: num(g('komisyontutari'))
     })
   }
@@ -87,7 +87,7 @@ function parseGeneric(sh) {
       const st = c.status >= 0 ? ascii(r[c.status]) : '';
       const cancel = /iptal|cancel/.test(st), ret = /iade|return|refund/.test(st);
       if (c.date >= 0) { const d = toDate(r[c.date]); if (d) { if (!dmin || d < dmin) dmin = d; if (!dmax || d > dmax) dmax = d; } }
-      const it = by.get(k) || { k, n: name, br: c.brand >= 0 ? str(r[c.brand], 40) : '', c: c.cat >= 0 ? str(r[c.cat], 50) : '', b: bc || undefined, q: 0, r: 0, x: 0, i: 0 };
+      const it = by.get(k) || { k, m: bc && sku ? sku : (bc ? '' : sku), n: name, br: c.brand >= 0 ? str(r[c.brand], 40) : '', c: c.cat >= 0 ? str(r[c.cat], 50) : '', b: bc || undefined, q: 0, r: 0, x: 0, i: 0 };
       if (cancel) it.x += q; else if (ret) it.i += q; else { it.q += q; it.r += amt; }
       by.set(k, it);
     }
@@ -124,6 +124,7 @@ function finish(mp, items, range) {
 // Saklanan ürün satırı: yalnız gerekli alanlar, sıfırlar atılır (veri küçük kalsın)
 function compact(x) {
   const o = { k: x.k, n: x.n, q: Math.round(x.q * 100) / 100, r: r2(x.r) };
+  if (x.m && x.m !== x.k) o.m = x.m;
   if (x.br) o.br = x.br; if (x.c) o.c = x.c; if (x.b && x.b !== x.k) o.b = x.b;
   for (const f of ['o', 'x', 'i']) if (x[f]) o[f] = Math.round(x[f]);
   if (x.s != null) o.s = Math.round(x.s);
@@ -192,6 +193,15 @@ export function groupProducts(entries) {
     if (!code) return;
     if (bc.has(code)) union(bc.get(code), i); else bc.set(code, i);
   });
+  // Stok kodu: her pazaryerinde tek ürüne aitse (varyantlar ortak kod taşıyabilir) eşleştir
+  const codes = new Map();
+  entries.forEach((e, i) => { if (!e.m) return; const c = String(e.m).trim().toUpperCase(); const l = codes.get(c) || []; l.push(i); codes.set(c, l); });
+  codes.forEach((l) => {
+    if (l.length < 2) return;
+    const mpsIn = l.map((i) => entries[i].mp);
+    if (new Set(mpsIn).size !== mpsIn.length) return;
+    l.slice(1).forEach((i) => union(l[0], i));
+  });
   const named = entries.map((e, i) => ({ i, mp: e.mp, s: nameKey(e.n, e.br) })).filter((x) => x.s.length >= 25).sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
   for (let p = 0; p < named.length; p++) {
     const cur = named[p];
@@ -216,27 +226,33 @@ export function compareProducts(byMp, scaleB = {}) {
     [A, B].forEach((m) => m && m.forEach((x) => {
       const key = mp + '|' + x.k;
       if (idx.has(key)) { const e = entries[idx.get(key)]; if ((x.n || '').length > (e.n || '').length) e.n = x.n; return; }
-      idx.set(key, entries.length); entries.push({ mp, k: x.k, n: x.n, br: x.br, b: x.b, c: x.c });
+      idx.set(key, entries.length); entries.push({ mp, k: x.k, m: x.m, n: x.n, br: x.br, b: x.b, c: x.c });
     }));
   });
   const g = groupProducts(entries);
   const out = new Map();
   entries.forEach((e, i) => {
     const gid = g[i];
-    const p = out.get(gid) || { id: e.k, n: e.n, br: e.br, c: e.c, keys: {}, mps: {}, a: { q: 0, r: 0 }, b: { q: 0, r: 0 } };
+    const p = out.get(gid) || { id: e.k, n: e.n, br: e.br, c: e.c, code: '', barcode: '', codes: [], keys: {}, mps: {}, a: { q: 0, r: 0 }, b: { q: 0, r: 0 } };
     (p.keys[e.mp] = p.keys[e.mp] || []).push(e.k);
+    if (e.m && !p.code) p.code = e.m;
+    const bcd = e.b || (isBarcode(e.k) ? e.k : null); if (bcd && !p.barcode) p.barcode = bcd;
+    p.codes.push(e.k); if (e.m) p.codes.push(e.m);
     if ((e.n || '').length > (p.n || '').length && !/\($/.test(e.n)) p.n = e.n;
     const { A, B } = byMp[e.mp];
     const xa = A && A.get(e.k), xb = B && B.get(e.k);
     const sc = scaleB[e.mp] == null ? 1 : scaleB[e.mp];
-    const m = p.mps[e.mp] || { a: { q: 0, r: 0 }, b: { q: 0, r: 0 }, s: null };
-    if (xa) { m.a.q += xa.q || 0; m.a.r += xa.r || 0; if (xa.s != null) m.s = (m.s || 0) + xa.s; }
-    if (xb) { m.b.q += (xb.q || 0) * sc; m.b.r += (xb.r || 0) * sc; }
+    const m = p.mps[e.mp] || { a: { q: 0, r: 0, x: 0 }, b: { q: 0, r: 0, x: 0 }, s: null };
+    if (xa) { m.a.q += xa.q || 0; m.a.r += xa.r || 0; m.a.x += xa.x || 0; if (xa.s != null) m.s = (m.s || 0) + xa.s; }
+    if (xb) { m.b.q += (xb.q || 0) * sc; m.b.r += (xb.r || 0) * sc; m.b.x += (xb.x || 0) * sc; }
     p.mps[e.mp] = m;
     out.set(gid, p);
   });
   const list = [...out.values()];
-  list.forEach((p) => { Object.values(p.mps).forEach((m) => { p.a.q += m.a.q; p.a.r += m.a.r; p.b.q += m.b.q; p.b.r += m.b.r; }); });
+  list.forEach((p) => {
+    p.a.x = 0; p.b.x = 0; p.s = null;
+    Object.values(p.mps).forEach((m) => { p.a.q += m.a.q; p.a.r += m.a.r; p.a.x += m.a.x; p.b.q += m.b.q; p.b.r += m.b.r; p.b.x += m.b.x; if (m.s != null) p.s = (p.s || 0) + m.s; });
+  });
   return list;
 }
 
