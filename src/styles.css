@@ -2296,3 +2296,22 @@ button.it-row:hover { background: var(--chip); }
 .rch-mini span { display: inline-flex; align-items: center; gap: 5px; }
 .rch-mini i { width: 8px; height: 8px; border-radius: 50%; }
 .rch-mini b { font-variant-numeric: tabular-nums; }
+/* Ajanda satırı ekleri, seçili gün, özet kutuları */
+.ag-r { display: flex; flex-direction: column; }
+.ag-t small { font-weight: 500; color: var(--muted); font-size: 11px; }
+.ag-n em { font-style: normal; color: var(--muted); font-size: 12px; }
+.ag-sub { margin: 0 0 4px 70px; border-left: 2px solid var(--line); padding-left: 6px; }
+.ag-sub .ag-i { padding: 4px 8px; }
+.ag-sub .ag-n { font-size: 13.5px; }
+.cal-sel { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
+.cal-sel .cal-addrow { padding: 0 12px; }
+.cal-sel .cal-add .chip { font-size: 12.5px; padding: 4px 10px; }
+.cs-active { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 12px 6px; border-bottom: 1px solid var(--line-2); }
+.cs-k { font-size: 12px; font-weight: 600; color: var(--muted); margin-right: 2px; }
+.cs-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--c) 35%, white); background: color-mix(in srgb, var(--c) 9%, white); color: var(--ink); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; box-shadow: inset 3px 0 0 var(--c); }
+.cs-chip small { font-weight: 500; color: var(--muted); font-size: 11.5px; }
+.cs-items { padding: 0 6px; }
+.cs-items .empty { padding: 6px 8px; margin: 0; }
+@media (min-width: 900px) { .wd-tiles.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.att-ok { box-shadow: inset 4px 0 0 #2B8A3E; padding: 12px 16px; font-size: 14px; color: var(--ink-2); }
+@media (max-width: 760px) { .ag-sub { margin-left: 58px; } }

@@ -1,4 +1,5 @@
 // Renkli özet kutuları: İş → Özet ve sekmelerin üst şeridi
+import { useState } from 'react';
 const pctTxt = (v) => (v == null ? '' : (v >= 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(v * 100)) + '%');
 
 export function Tile({ tone, label, value, unit, sub, delta, warn, onClick, children, invert }) {
@@ -24,3 +25,26 @@ export function StatStrip({ items }) {
   );
 }
 
+
+// "Dikkat" kutusu: farklı alanlardan, bugün bakılması gereken birkaç şey (Bugün, İş özeti, Özel özeti)
+// items: [{ k, tone: 'red'|'amber'|'blue', icon, text, go }]
+export function AttentionBox({ items, title = 'Bugün dikkat', narrowMax = 4, max = 6, empty }) {
+  const [all, setAll] = useState(false);
+  if (!items.length) return empty ? <div className="att att-ok"><span>{empty}</span></div> : null;
+  const narrow = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
+  const lim = all ? 99 : narrow ? narrowMax : max;
+  const shown = items.slice(0, lim);
+  return (
+    <section className="att" aria-label={title}>
+      <div className="att-h"><span>{title}</span><em>{items.length}</em></div>
+      <div className="att-l">
+        {shown.map((x) => (
+          <button key={x.k} type="button" className={'att-i t-' + (x.tone || 'amber')} onClick={x.go}>
+            <i aria-hidden="true">{x.icon}</i><span>{x.text}</span><b aria-hidden="true">›</b>
+          </button>
+        ))}
+      </div>
+      {items.length > shown.length ? <button type="button" className="linkbtn att-more" onClick={() => setAll(true)}>+{items.length - shown.length} madde daha</button> : null}
+    </section>
+  );
+}

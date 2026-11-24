@@ -1,13 +1,12 @@
 // İş → Özet: işin tamamına tek bakış (ciro, kampanya, influencer, bekleyen, mail, geciken)
 import { useMemo } from 'react';
-import { SalesDigestCard } from './salesdigest.jsx';
 import { mpColor, SRC_COLORS } from './constants.js';
 import { WEEKDAYS, MONTHS, startOfDay, addDays, toDateInput, fromDateInput, daysBetween, fmtShort, fmtTime } from './dates.js';
 import { tl, tlShort, glanceDefaultDay } from './revenue.jsx';
 import { campaignStatus, campaignWhen } from './screens.jsx';
 import { adStart, adStatus, adWindow, adFee, adRev, adWho, dur } from './ads.jsx';
 import { inScope } from './scope.js';
-import { Tile } from './statstrip.jsx';
+import { Tile, AttentionBox } from './statstrip.jsx';
 
 const pctTxt = (v) => (v == null ? '' : (v >= 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(v * 100)) + '%');
 const dlt = (a, b) => (b > 0 ? a / b - 1 : null);
@@ -97,6 +96,25 @@ export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, se
 
   const go = (t) => () => setSeg(t);
 
+  // ---- Dikkat: bugün bakılması gerekenler (tek liste)
+  const att = [];
+  late.slice(0, 3).forEach((r) => att.push({ k: 'l' + r.id, tone: 'red', icon: '⏰', text: <><b>{r.title}</b> · {daysBetween(startOfDay(new Date(r.due_at)), today) ? daysBetween(startOfDay(new Date(r.due_at)), today) + ' gün gecikti' : 'bugün ' + fmtTime(new Date(r.due_at)) + ' geçti'}</>, go: () => actions.openReminder(r) }));
+  if (late.length > 3) att.push({ k: 'lm', tone: 'red', icon: '⏰', text: <><b>{late.length - 3} geciken iş daha</b></>, go: () => actions.openReminder(late[3]) });
+  soon.forEach(({ c }) => {
+    const p = prep(c.id); const inD = daysBetween(today, fromDateInput(c.start_date));
+    if (inD <= 2 && p.all && p.done < p.all) att.push({ k: 'c' + c.id, tone: 'amber', icon: '📣', text: <><b>{c.name}</b> {inD <= 0 ? 'bugün' : inD === 1 ? 'yarın' : inD + ' gün sonra'} başlıyor · hazırlık <b>{p.done}/{p.all}</b>{p.next ? ' · sıradaki: ' + (p.next.label || '') : ''}</>, go: () => actions.openCampaign(c) });
+  });
+  live.filter(({ c }) => c.end_date === todayKey).forEach(({ c }) => att.push({ k: 'e' + c.id, tone: 'amber', icon: '🏁', text: <><b>{c.name}</b> bugün bitiyor{c.marketplace ? ' · ' + c.marketplace : ''}</>, go: () => actions.openCampaign(c) }));
+  adsLive.filter((c) => { const w = adWindow(c, now); return w.e - now < 86400000; }).forEach((c) => att.push({ k: 'a' + c.id, tone: 'blue', icon: '🎬', text: <><b>{c.handle || c.title || adWho(c, data.contacts)}</b> reklamı {dur(adWindow(c, now).e - now)} sonra bitiyor{adRev(c) ? '' : ' · cirosunu girmeyi unutma'}</>, go: () => actions.openCollab(c) }));
+  const codesEnd = (data.inf_codes || []).filter((c) => c.end_at && new Date(c.end_at) >= now && new Date(c.end_at) < addDays(today, 2));
+  if (codesEnd.length) att.push({ k: 'codes', tone: 'blue', icon: '🏷️', text: <><b>{codesEnd.length} indirim kodu</b> {codesEnd.every((c) => new Date(c.end_at) < addDays(today, 1)) ? 'bugün' : 'yarın'} bitiyor: {codesEnd.slice(0, 4).map((c) => c.code).join(', ')}{codesEnd.length > 4 ? '…' : ''}</>, go: go('influencer') });
+  const sd = salesDigest;
+  if (sd && sd.day && daysBetween(fromDateInput(sd.day), today) <= 5) (sd.alerts || []).forEach((a, i) => att.push({ k: 's' + i, tone: a.t === 'drop' ? 'amber' : 'red', icon: a.t === 'stock' ? '📦' : a.t === 'stop' ? '⛔' : '📉', text: <><b>{a.x.charAt(0).toLocaleUpperCase('tr-TR') + a.x.slice(1)}</b> · {a.n}</>, go: go('satislar') }));
+  fups.filter((f) => daysBetween(fromDateInput(f.since), today) >= 14).slice(0, 2).forEach((f) => att.push({ k: 'f' + f.id, tone: 'amber', icon: '⏳', text: <><b>{f.title}</b> {daysBetween(fromDateInput(f.since), today)} gündür bekliyor{f.party ? ' · ' + f.party : ''}</>, go: () => (actions.openFollowup ? actions.openFollowup(f) : setSeg('bekleyenler')) }));
+  const oldMail = waiting.filter((x) => x.days >= 5);
+  if (oldMail.length) att.push({ k: 'mail', tone: 'blue', icon: '✉️', text: <><b>{oldMail.length} mail</b> 5+ gündür cevap bekliyor</>, go: go('mailler') });
+  const sdOk = sd && sd.day && daysBetween(fromDateInput(sd.day), today) <= 5;
+
   return (
     <div className="wd">
       {/* Başlık */}
@@ -112,10 +130,10 @@ export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, se
         </div>
       </div>
 
-      <SalesDigestCard digest={salesDigest} now={now} onOpen={() => setSeg('satislar')} />
+      <AttentionBox items={att} title="Dikkat" empty="Bugün işte dikkat gerektiren bir şey yok ✓" />
 
-      {/* Özet kutuları */}
-      <div className="wd-tiles">
+      {/* Rakamlar */}
+      <div className="wd-tiles n4">
         <Tile tone="#2F4AC0" label={MONTHS[today.getMonth()] + ' cirosu'} value={tlShort(monthTotal)} delta={dlt(monthTotal, prevSame)}
           sub={prevSame ? 'geçen ayın ilk ' + daysIn + ' gününe göre' : 'bu ay ' + monthKeys.length + ' gün girildi'} onClick={go('ciro')}>
           {target ? (
@@ -126,13 +144,13 @@ export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, se
           ) : null}
         </Tile>
         <Tile tone="#7048E8" label={lastDay === toDateInput(addDays(today, -1)) ? 'Dünkü ciro' : 'Son girilen ciro'} value={ld ? tlShort(ld.total) : '—'}
-          delta={ld && ldWk ? dlt(ld.total, ldWk.total) : null} sub={ld ? fmtShort(fromDateInput(lastDay)) + ' · geçen haftaya göre' : 'henüz girilmedi'} onClick={go('ciro')} />
-        <Tile tone={SRC_COLORS.Kampanya} label="Kampanyalar" value={live.length} unit="aktif"
-          sub={(soon.length ? soon.length + ' yaklaşan' : 'yaklaşan yok') + (prepMissing ? ' · ' + prepMissing + ' hazırlık eksik' : '')} warn={prepMissing > 0 && soon.some((x) => daysBetween(today, fromDateInput(x.c.start_date)) <= 3)} onClick={go('kampanya')} />
-        <Tile tone="#0C8599" label="Influencer" value={adsLive.length} unit="yayında"
-          sub={(adsSoon.length ? adsSoon.length + ' bu hafta başlıyor' : 'bu hafta yeni yok') + (adSpend ? ' · bu ay ' + tlShort(adSpend) : '')} onClick={go('influencer')} />
-        <Tile tone="#E67700" label="Bekleyenler" value={fups.length} unit="iş" sub={fups.length ? 'en eskisi ' + oldest + ' gün' : 'bekleyen yok'} warn={oldest >= 14} onClick={go('bekleyenler')} />
-        <Tile tone="#1971C2" label="Mailler" value={flagged.length} unit="bayraklı" sub={waiting.length ? waiting.length + ' mail cevap bekliyor' : m.configured === false ? 'mail bağlı değil' : 'cevap bekleyen yok'} onClick={go('mailler')} />
+          delta={ld && ldWk ? dlt(ld.total, ldWk.total) : null} sub={ld ? fmtShort(fromDateInput(lastDay)) + ' · geçen haftanın aynı gününe göre' : 'henüz girilmedi'} onClick={go('ciro')} />
+        {sdOk ? (
+          <Tile tone="#D9480F" label={'Satış raporu · ' + fmtShort(fromDateInput(sd.day))} value={tlShort(sd.r)} delta={sd.d1} warn={(sd.alerts || []).length > 0} onClick={go('satislar')}
+            sub={(sd.ww != null ? '7 gün ' + pctTxt(sd.ww) : '') + ((sd.alerts || []).length ? ' · ' + sd.alerts.length + ' hero uyarısı' : ' · hero ürünler yolunda')} />
+        ) : <Tile tone="#D9480F" label="Satış raporu" value="—" sub="dünün raporunu yükle" onClick={go('satislar')} />}
+        <Tile tone="#0C8599" label={MONTHS[today.getMonth()] + ' reklam getirisi'} value={adSpend && adRevenue ? (adRevenue / adSpend).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + 'x' : '—'} onClick={go('influencer')}
+          sub={adSpend ? tlShort(adSpend) + ' bütçe' + (adRevenue ? ' → ' + tlShort(adRevenue) + ' ciro' : ' · ciro girilmedi') : 'bu ay reklam yok'} />
       </div>
 
       <div className="wd-grid">

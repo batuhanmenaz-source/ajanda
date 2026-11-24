@@ -4,7 +4,7 @@ import { WEEKDAYS, MONTHS, startOfDay, addDays, toDateInput, daysBetween, fmtSho
 import { tl, tlShort } from './revenue.jsx';
 import { catOf, budgetStatus, fixedDue, fixedPaid } from './money.js';
 import { specialUpcoming, specialLabel, SPECIAL_ICON } from './special.js';
-import { Tile } from './statstrip.jsx';
+import { Tile, AttentionBox } from './statstrip.jsx';
 import { HabitsCard } from './life.jsx';
 import { weekStartOf, weekKeys, periodStats, healthTips, hm, ymdLocal, AZM_GOAL, goalsOf, SPORTS } from './health.jsx';
 
@@ -88,6 +88,17 @@ export function PersonalDashboard({ data, now, actions, budgets, yarimHidden, se
     hs = { g, sp: SPORTS.find((x) => x[0] === g.sport) || SPORTS[0], c, p, night, avgSleep7, stepsToday: h.steps[T], last7k, tip: tips.find((x) => x.tone === 'warn') || tips[0], exWeek: (h.exercise || []).filter((e) => wk.cur.includes(e.day)) };
   }
 
+  // ---- Dikkat: bugün bakılacaklar
+  const att = [];
+  fixed.filter((x) => x.d <= t).forEach(({ f, d }) => att.push({ k: 'fx' + f.id, tone: d < t ? 'red' : 'amber', icon: catOf(f.category).emoji, text: <><b>{f.title || catOf(f.category).label}</b> {tl(f.amount)} · {d < t ? daysBetween(d, t) + ' gün gecikti' : 'bugün ödenecek'}</>, go: () => actions.openFixed(f) }));
+  bs.filter((b) => b.ratio >= 0.9).forEach((b) => att.push({ k: 'b' + b.cat, tone: b.ratio >= 1 ? 'red' : 'amber', icon: catOf(b.cat).emoji, text: <><b>{catOf(b.cat).label}</b> bütçesinin %{Math.round(b.ratio * 100)}'i harcandı · {tlShort(b.spent)} / {tlShort(b.limit)}</>, go: go('cuzdan') }));
+  specials.filter((x) => x.inDays <= 7).forEach(({ s: sp, date, inDays }) => att.push({ k: 'sp' + sp.id, tone: 'blue', icon: SPECIAL_ICON[sp.kind] || '⭐', text: <><b>{specialLabel(sp, date)}</b> {inDays ? inDays + ' gün sonra' : 'bugün 🎉'}</>, go: () => actions.openSpecial(sp) }));
+  if (hs && hs.g.perWeek) {
+    const left = hs.g.perWeek - hs.c.sportCount;
+    const daysLeft = 7 - ((t.getDay() + 6) % 7);
+    if (left > 0 && left >= daysLeft - 1) att.push({ k: 'sport', tone: 'amber', icon: hs.sp[2], text: <><b>{hs.sp[1]}</b> bu hafta {hs.c.sportCount}/{hs.g.perWeek} · hedefe {left} seans kaldı, {daysLeft} gün var</>, go: go('saglik') });
+  }
+
   return (
     <div className="wd">
       <div className="wd-hero pd-hero">
@@ -103,26 +114,21 @@ export function PersonalDashboard({ data, now, actions, budgets, yarimHidden, se
         </div>
       </div>
 
-      <div className="wd-tiles">
+      <AttentionBox items={att} title="Dikkat" empty="Bugün özel tarafta dikkat gerektiren bir şey yok ✓" />
+
+      <div className="wd-tiles n4">
         <Tile tone="#E8590C" label={MONTHS[t.getMonth()] + ' harcaması'} value={tlShort(spent)} delta={dlt(spent, spentPrev)} invert onClick={go('cuzdan')}
-          sub={'günde ort. ' + tlShort(dailyAvg) + (spentPrev ? ' · geçen ayın aynı dönemine göre' : '')} />
+          sub={'günde ort. ' + tlShort(dailyAvg) + ' · son 7 gün ' + tlShort(s7) + (p7 ? ' (' + (s7 >= p7 ? '▲' : '▼') + Math.abs(Math.round((s7 / p7 - 1) * 100)) + '%)' : '')} />
         <Tile tone={inc - spent >= 0 ? '#2B8A3E' : '#E03131'} label="Bu ay kalan" value={inc ? tlShort(inc - spent) : '—'} onClick={go('cuzdan')}
           sub={inc ? 'gelir ' + tlShort(inc) + (fixedLeft ? ' · ' + tlShort(fixedLeft) + ' sabit gider bekliyor' : '') : 'gelir girilmedi'} />
-        <Tile tone="#1971C2" label="Son 7 gün" value={tlShort(s7)} delta={dlt(s7, p7)} invert sub="önceki 7 güne göre" onClick={go('cuzdan')} />
-        <Tile tone={worst && worst.ratio >= 1 ? '#E03131' : worst && worst.ratio >= 0.8 ? '#F08C00' : '#0C8599'} warn={worst && worst.ratio >= 1} label="Bütçe" onClick={go('cuzdan')}
-          value={worst ? '%' + Math.round(worst.ratio * 100) : '—'} sub={worst ? catOf(worst.cat).emoji + ' ' + catOf(worst.cat).label + ' · ' + tlShort(worst.spent) + ' / ' + tlShort(worst.limit) : 'bütçe belirlenmedi'} />
-        <Tile tone="#7048E8" label="Alışkanlıklar" value={habits.length ? doneToday + '/' + habits.length : '—'} unit={habits.length ? 'bugün' : ''} onClick={go('aliskanlik')}
-          sub={habits.length ? 'son 7 günde %' + Math.round(weekRate * 100) + ' tamamlandı' : 'alışkanlık eklenmedi'} />
         {hs ? (
           <Tile tone={hs.night && hs.night.asleep < hs.g.sleep * 60 - 15 ? '#F08C00' : '#7048E8'} label="Dün gece uyku" value={hs.night ? hm(hs.night.asleep) : '—'} onClick={go('saglik')}
             delta={hs.night && hs.avgSleep7 ? hs.night.asleep / hs.avgSleep7 - 1 : null} sub={hs.avgSleep7 ? '7 gün ort. ' + hm(hs.avgSleep7) : ''} />
-        ) : null}
+        ) : <Tile tone="#868E96" label="Sağlık" value="—" sub={h && h.connected === false ? 'Google Health bağlı değil · bağla' : 'veri yok'} onClick={go('saglik')} />}
         {hs ? (
           <Tile tone="#1098AD" label={hs.sp[2] + ' ' + hs.sp[1] + ' · bu hafta'} value={hs.c.sportCount + '/' + hs.g.perWeek} unit="seans" onClick={go('saglik')}
             sub={(hs.c.azm != null ? Math.round(hs.c.azm) + '/' + AZM_GOAL + ' aktif dk' : '') + (hs.stepsToday != null ? ' · bugün ' + hs.stepsToday.toLocaleString('tr-TR') + ' adım' : '')} />
-        ) : h && h.connected === false ? <Tile tone="#868E96" label="Sağlık" value="—" sub="Google Health bağlı değil · bağla" onClick={go('saglik')} /> : null}
-        <Tile tone="#D4A000" label="Özel günler" value={specials[0] ? (specials[0].inDays || 'Bugün') : '—'} unit={specials[0] && specials[0].inDays ? 'gün' : ''} onClick={go('ozelgun')}
-          sub={specials[0] ? (SPECIAL_ICON[specials[0].s.kind] || '⭐') + ' ' + specials[0].s.title + (specials.length > 1 ? ' · 60 günde ' + specials.length + ' gün' : '') : '60 gün içinde yok'} />
+        ) : <Tile tone="#7048E8" label="Alışkanlıklar" value={habits.length ? doneToday + '/' + habits.length : '—'} unit={habits.length ? 'bugün' : ''} onClick={go('aliskanlik')} sub={habits.length ? 'son 7 günde %' + Math.round(weekRate * 100) : 'alışkanlık eklenmedi'} />}
       </div>
 
       <div className="wd-grid">

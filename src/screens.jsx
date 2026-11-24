@@ -11,7 +11,7 @@ import {
   findContact, CampaignResult, WeeklySummary, weeklySummaryVisible, HabitsCard, ContactsView
 } from './life.jsx';
 import { SCOPES, scopeData } from './scope.js';
-import { StatStrip } from './statstrip.jsx';
+import { StatStrip, AttentionBox } from './statstrip.jsx';
 import { codeStatus } from './codes.jsx';
 import { TodayTiles } from './todaytiles.jsx';
 import { WeatherCard } from './weather.jsx';
@@ -678,8 +678,6 @@ function TodayTasks({ lateR, lateC, rem, calls, gToday, undated, google, now, ac
 // Bugün dikkat: farklı alanlardan gelen, bugün ilgilenilmesi gereken birkaç şey tek yerde
 function TodayAttention({ scope, now, lateCount, camps, tasks, salesDigest, actions, goTab }) {
   const today = startOfDay(now);
-  const [all, setAll] = useState(false);
-  const narrow = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
   const items = [];
   const scrollTo = (sel) => () => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   if (lateCount) items.push({ k: 'late', tone: 'red', icon: '⏰', text: <><b>{lateCount} geciken iş</b> seni bekliyor</>, go: scrollTo('.late-anchor') });
@@ -697,22 +695,7 @@ function TodayAttention({ scope, now, lateCount, camps, tasks, salesDigest, acti
       (sd.alerts || []).forEach((a, i) => items.push({ k: 's' + i, tone: a.t === 'drop' ? 'amber' : 'red', icon: a.t === 'stock' ? '📦' : a.t === 'stop' ? '⛔' : '📉', text: <><b>{a.x.charAt(0).toLocaleUpperCase('tr-TR') + a.x.slice(1)}</b> · {a.n}</>, go: () => goTab('satislar') }));
     }
   }
-  if (!items.length) return null;
-  const lim = all ? 99 : narrow ? 4 : 6;
-  const shown = items.slice(0, lim);
-  return (
-    <section className="att" aria-label="Bugün dikkat">
-      <div className="att-h"><span>Bugün dikkat</span><em>{items.length}</em></div>
-      <div className="att-l">
-        {shown.map((x) => (
-          <button key={x.k} type="button" className={'att-i t-' + x.tone} onClick={x.go}>
-            <i aria-hidden="true">{x.icon}</i><span>{x.text}</span><b aria-hidden="true">›</b>
-          </button>
-        ))}
-      </div>
-      {items.length > shown.length ? <button type="button" className="linkbtn att-more" onClick={() => setAll(true)}>+{items.length - shown.length} madde daha</button> : null}
-    </section>
-  );
+  return <AttentionBox items={items} />;
 }
 
 export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health, salesDigest, healthHidden, hide = new Set(), onEditToday }) {
@@ -1077,15 +1060,32 @@ function MonthView({ data, events, google, now, actions, month, setMonth, sel, s
 }
 
 function SelectedDay({ d, items, now, actions, google }) {
+  const active = items.filter((e) => midSpan(e, d));
+  const rest = items.filter((e) => !midSpan(e, d));
   return (
-    <div className="card list cal-sel">
+    <div className="card cal-sel">
       <div className="upday-head">
         <span className="upday-name">{dayLabel(d, now)}</span>
         <span className="upday-date">{fmtLong(d)}</span>
       </div>
       <div className="cal-addrow"><DayAdd d={d} actions={actions} /></div>
-      {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} />)
-        : <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : 'Bu gün için kayıt yok.'}</p>}
+      {active.length ? (
+        <div className="cs-active">
+          <span className="cs-k">Devam eden</span>
+          {active.map((e) => {
+            const s0 = startOfDay(e.span.s), e0 = startOfDay(e.span.e);
+            return (
+              <button key={e.key} type="button" className="cs-chip" style={{ '--c': dotColor(e) }} onClick={() => openDayItem(e, actions)}>
+                {e.item.name}<small>{daysBetween(s0, d) + 1}/{daysBetween(s0, e0) + 1}. gün</small>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      <div className="ag-items cs-items">
+        {rest.length ? <AgendaRows items={rest} actions={actions} />
+          : <p className="empty">{google === 'checking' ? 'Google Takvim yükleniyor…' : active.length ? 'Başka kayıt yok.' : 'Bu gün için kayıt yok.'}</p>}
+      </div>
     </div>
   );
 }
@@ -1138,13 +1138,44 @@ function WeekView({ data, events, google, now, actions, day, setDay, pass }) {
   );
 }
 
-// Sade ajanda: gün başlığı + tek satırlık kayıtlar (Liste ve Hafta görünümü)
+// Sade ajanda: gün başlığı + tek satırlık kayıtlar (Liste, Hafta, seçili gün)
 const midSpan = (e, d) => e.span && e.kind === 'campaign' && !sameDay(e.span.s, d) && !sameDay(e.span.e, d);
+const dotColor = (e) => (e.item && e.item.marketplace && (e.kind === 'campaign' || e.kind === 'collab') ? mpColor(e.item.marketplace) : e.color);
+// Aynı gün başlayan/biten 3+ indirim kodu tek satırda toplanır
+function groupCodes(items) {
+  const out = [], groups = {};
+  items.forEach((e) => {
+    if (e.kind === 'code') { const t = /bitiyor/.test(e.title) ? 'bitiyor' : 'başlıyor'; (groups[t] = groups[t] || []).push(e); } else out.push(e);
+  });
+  Object.entries(groups).forEach(([t, l]) => {
+    if (l.length < 3) { out.push(...l); return; }
+    const codes = l.map((e) => (e.item && e.item.code) || '').filter(Boolean);
+    out.push({ key: 'cg' + t + l[0].key, time: l.map((e) => e.time).sort()[0], title: '🏷️ ' + l.length + ' indirim kodu ' + t, sub: codes.slice(0, 5).join(', ') + (codes.length > 5 ? '…' : ''), color: l[0].color, kind: 'codegroup', children: l });
+  });
+  return out.sort((x, y) => (x.time === 'Tüm gün' ? -1 : y.time === 'Tüm gün' ? 1 : String(x.time).replace('–', '').localeCompare(String(y.time).replace('–', ''))));
+}
+function AgendaRows({ items, actions }) {
+  const [open, setOpen] = useState({});
+  return groupCodes(items).map((e) => (
+    <div key={e.key} className="ag-r">
+      <button type="button" className={'ag-i' + (e.done ? ' done' : '')} aria-expanded={e.children ? !!open[e.key] : undefined}
+        onClick={() => (e.children ? setOpen({ ...open, [e.key]: !open[e.key] }) : openDayItem(e, actions))}>
+        <span className="ag-t">{e.time === 'Tüm gün' ? 'gün boyu' : String(e.time).startsWith('–') ? <>{e.time.slice(1)}<small> bitiş</small></> : e.time}</span>
+        <i style={{ background: dotColor(e) }} />
+        <span className="ag-n">{e.title}{e.children ? <em> {open[e.key] ? '▴' : '▾'}</em> : null}</span>
+        {e.sub ? <span className="ag-s">{e.sub}</span> : null}
+      </button>
+      {e.children && open[e.key] ? (
+        <div className="ag-sub">{e.children.map((c) => <button key={c.key} type="button" className="ag-i" onClick={() => openDayItem(c, actions)}><span className="ag-t">{c.time}</span><i style={{ background: c.color }} /><span className="ag-n">{c.title}</span>{c.sub ? <span className="ag-s">{c.sub}</span> : null}</button>)}</div>
+      ) : null}
+    </div>
+  ));
+}
 function AgendaDays({ days, now, actions, google }) {
   const today = startOfDay(now);
   return (
     <>
-        {days.map(({ d, items }) => (
+      {days.map(({ d, items }) => (
         <div key={d.toISOString()} className={'ag-day' + (sameDay(d, today) ? ' today' : '') + (d.getDay() === 0 || d.getDay() === 6 ? ' we' : '')}>
           <div className="ag-dh">
             <b>{d.getDate()}</b>
@@ -1152,14 +1183,7 @@ function AgendaDays({ days, now, actions, google }) {
             <button type="button" className="iconbtn" aria-label={fmtLong(d) + ' gününe ekle'} onClick={() => actions.newItemOn(d)}><Icon.Plus width="16" height="16" /></button>
           </div>
           <div className="ag-items">
-            {items.length ? items.map((e) => (
-              <button key={e.key} type="button" className={'ag-i' + (e.done ? ' done' : '')} onClick={() => openDayItem(e, actions)}>
-                <span className="ag-t">{e.time === 'Tüm gün' ? 'gün boyu' : e.time}</span>
-                <i style={{ background: e.item && e.item.marketplace && (e.kind === 'campaign' || e.kind === 'collab') ? mpColor(e.item.marketplace) : e.color }} />
-                <span className="ag-n">{e.title}</span>
-                {e.sub ? <span className="ag-s">{e.sub}</span> : null}
-              </button>
-            )) : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Kayıt yok'}</p>}
+            {items.length ? <AgendaRows items={items} actions={actions} /> : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Kayıt yok'}</p>}
           </div>
         </div>
       ))}
@@ -1172,7 +1196,7 @@ function ListView({ data, events, google, now, actions, pass }) {
   const today = startOfDay(now);
   // Çok günlü kampanyanın ara günleri ("aktif") her gün tekrar etmesin
   const days = Array.from({ length: span }, (_, i) => addDays(today, i))
-    .map((d) => ({ d, items: dayItems(d, { data, events }).filter(pass).filter((e) => !(e.span && e.kind === 'campaign' && !sameDay(e.span.s, d) && !sameDay(e.span.e, d))) }))
+    .map((d) => ({ d, items: dayItems(d, { data, events }).filter(pass).filter((e) => !midSpan(e, d)) }))
     .filter((x, i) => i === 0 || x.items.length);
   const end = addDays(today, span - 1);
   return (
