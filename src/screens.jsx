@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SalesDigestCard } from './salesdigest.jsx';
 import { Icon } from './Icons.jsx';
 import { Mp, Check, Section, Progress, Sheet } from './ui.jsx';
 import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START, YARIM_STARTS } from './constants.js';
@@ -238,10 +237,23 @@ export function openDayItem(e, actions) {
   else if (e.kind === 'code' && actions.openCode) actions.openCode(e.item);
 }
 
-function CampaignMini({ c, tasks, onOpen, result }) {
+function CampaignMini({ c, tasks, onOpen, result, compact }) {
   const isEvent = c.kind === 'etkinlik';
   const ts = tasksOf(tasks, c.id);
   const st = campaignStatus(c);
+  if (compact) {
+    const done = ts.filter((t) => t.done).length;
+    return (
+      <button type="button" className="card camp-c" style={{ '--mp': mpColor(c.marketplace) }} onClick={() => onOpen(c)}>
+        <span className="camp-c-top">
+          <span className="camp-c-n">{c.name}</span>
+          <span className={'badge' + (st.key === 'live' ? ' live' : '')}>{st.label}</span>
+        </span>
+        <span className="camp-c-m"><span className="dot" style={{ background: mpColor(c.marketplace) }} />{c.marketplace || 'Genel'} · {campaignWhen(c)}{ts.length ? <span className={'camp-c-p' + (done < ts.length && st.key !== 'live' ? ' todo' : '')}> · hazırlık {done}/{ts.length}</span> : null}</span>
+        <CampTimeBar c={c} st={st} />
+      </button>
+    );
+  }
   return (
     <div className="card camp">
       <div className="camp-head">
@@ -599,6 +611,46 @@ function DoneFold({ items, render }) {
 
 
 // ---------- BUGÜN ----------
+// Bugün dikkat: farklı alanlardan gelen, bugün ilgilenilmesi gereken birkaç şey tek yerde
+function TodayAttention({ scope, now, lateCount, camps, tasks, salesDigest, actions, goTab }) {
+  const today = startOfDay(now);
+  const [all, setAll] = useState(false);
+  const narrow = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
+  const items = [];
+  const scrollTo = (sel) => () => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  if (lateCount) items.push({ k: 'late', tone: 'red', icon: '⏰', text: <><b>{lateCount} geciken iş</b> seni bekliyor</>, go: scrollTo('.late-anchor') });
+  if (scope !== 'ozel') {
+    (camps || []).forEach((c) => {
+      const st = campaignStatus(c, now);
+      const sd = fromDateInput(c.start_date), ed = fromDateInput(c.end_date);
+      const ts = tasksOf(tasks, c.id); const done = ts.filter((t) => t.done).length;
+      const inD = daysBetween(today, sd);
+      if (st.key === 'soon' && inD <= 2 && ts.length && done < ts.length) items.push({ k: 'c' + c.id, tone: 'amber', icon: '📣', text: <><b>{c.name}</b> {inD <= 0 ? 'bugün' : inD === 1 ? 'yarın' : inD + ' gün sonra'} başlıyor · hazırlık <b>{done}/{ts.length}</b></>, go: () => actions.openCampaign(c) });
+      else if (st.key === 'live' && sameDay(ed, today)) items.push({ k: 'e' + c.id, tone: 'amber', icon: '🏁', text: <><b>{c.name}</b> bugün bitiyor{c.marketplace ? ' · ' + c.marketplace : ''}</>, go: () => actions.openCampaign(c) });
+    });
+    const sd = salesDigest;
+    if (sd && sd.day && daysBetween(fromDateInput(sd.day), today) <= 5) {
+      (sd.alerts || []).forEach((a, i) => items.push({ k: 's' + i, tone: a.t === 'drop' ? 'amber' : 'red', icon: a.t === 'stock' ? '📦' : a.t === 'stop' ? '⛔' : '📉', text: <><b>{a.x.charAt(0).toLocaleUpperCase('tr-TR') + a.x.slice(1)}</b> · {a.n}</>, go: () => goTab('satislar') }));
+    }
+  }
+  if (!items.length) return null;
+  const lim = all ? 99 : narrow ? 4 : 6;
+  const shown = items.slice(0, lim);
+  return (
+    <section className="att" aria-label="Bugün dikkat">
+      <div className="att-h"><span>Bugün dikkat</span><em>{items.length}</em></div>
+      <div className="att-l">
+        {shown.map((x) => (
+          <button key={x.k} type="button" className={'att-i t-' + x.tone} onClick={x.go}>
+            <i aria-hidden="true">{x.icon}</i><span>{x.text}</span><b aria-hidden="true">›</b>
+          </button>
+        ))}
+      </div>
+      {items.length > shown.length ? <button type="button" className="linkbtn att-more" onClick={() => setAll(true)}>+{items.length - shown.length} madde daha</button> : null}
+    </section>
+  );
+}
+
 export function TodayScreen({ data: rawData, events, google, now, actions, goTab, love, yarimHidden, month, setMonth, revenue, scope = 'tum', setScope, budgets, revReady, revTarget, mail, health, salesDigest, healthHidden, hide = new Set(), onEditToday }) {
   const H = (k) => !hide.has(k);
   const allData = scopeData(rawData, scope);
@@ -718,10 +770,10 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </section>
         {yarimHidden || scope === 'is' ? null : <YarimTile data={allData} now={now} actions={actions} love={love} />}
     </div>
+    <TodayAttention scope={scope} now={now} lateCount={lateCount} camps={campsAll} tasks={data.campaign_tasks} salesDigest={H('satis') ? salesDigest : null} actions={actions} goTab={goTab} />
     <TodayTiles scope={scope} data={rawData} now={now} revenue={revenue} revReady={revReady} mail={mail} health={health} budgets={budgets}
-      campLive={liveCamps} campSoon={campsAll.filter((c) => campaignStatus(c, now).key === 'soon')} lateCount={lateCount}
+      campLive={liveCamps} campSoon={campsAll.filter((c) => campaignStatus(c, now).key === 'soon')} lateCount={lateCount} salesDigest={salesDigest}
       hide={healthHidden ? new Set([...hide, 'saglik']) : hide} goTab={goTab} actions={actions} />
-    {scope !== 'ozel' && H('satis') ? <SalesDigestCard digest={salesDigest} now={now} onOpen={() => goTab('satislar')} /> : null}
     {showSummary && H('ozet') ? <WeeklySummary data={rawData} revenue={revenue} now={now} actions={actions} onHide={hideSummary} budgets={budgets} scope={scope} /> : null}
     <div className="grid-2 today-grid">
       <div className="today-col">
@@ -774,7 +826,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         <div className="tslot" style={{ order: 5 }}>
         {scope !== 'ozel' && H('kampanya') ? (
           <Section title={'Kampanyalar' + (campsAll.length ? ' · ' + (liveCamps ? liveCamps + ' aktif' : '') + (liveCamps && campsAll.length > liveCamps ? ', ' : '') + (campsAll.length > liveCamps ? (campsAll.length - liveCamps) + ' yakında' : '') : '')} tone={SRC_COLORS.Kampanya} action={<button type="button" className="linkbtn" onClick={() => goTab('kampanya')}>Tümü</button>} onAdd={() => actions.quickNew('campaign', scope)} addLabel="Yeni kampanya">
-            {camps.length ? <div className="camp-grid">{camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} />)}</div> : <div className="card"><p className="empty">Önümüzdeki 30 günde kampanya yok.</p></div>}
+            {camps.length ? <div className="camp-grid compact">{camps.map((c) => <CampaignMini key={c.id} c={c} tasks={data.campaign_tasks} onOpen={actions.openCampaign} compact />)}</div> : <div className="card"><p className="empty">Önümüzdeki 30 günde kampanya yok.</p></div>}
             {campsAll.length > camps.length ? <button type="button" className="linkbtn" style={{ alignSelf: 'center', padding: '4px 0' }} onClick={() => goTab('kampanya')}>+{campsAll.length - camps.length} kampanya daha</button> : null}
           </Section>
         ) : null}
@@ -798,7 +850,7 @@ export function TodayScreen({ data: rawData, events, google, now, actions, goTab
         </div>
       </div>
     </div>
-    {H('yaklasan') ? <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} /> : null}
+    {H('yaklasan') ? <UpcomingDays data={allData} events={events} google={google} now={now} actions={actions} onAll={() => goTab('takvim')} max={4} /> : null}
     {scope !== 'ozel' && H('pazaryeri') ? <MarketplaceStrip data={allData} now={now} actions={actions} /> : null}
     {onEditToday ? <button type="button" className="today-edit" onClick={onEditToday}>⚙︎ Bugün'ü düzenle{hide.size ? ' · ' + hide.size + ' kart gizli' : ''}</button> : null}
     </div>
@@ -849,7 +901,7 @@ function DayItemRow({ e, actions, compact, noSpan }) {
 }
 
 // Bugün sayfasının altındaki "Yaklaşan günler"
-function UpcomingDays({ data, events, google, now, actions, count = 3, onAll }) {
+function UpcomingDays({ data, events, google, now, actions, count = 3, onAll, max = 99 }) {
   const today = startOfDay(now);
   const days = Array.from({ length: count }, (_, i) => addDays(today, i + 1));
   return (
@@ -866,8 +918,9 @@ function UpcomingDays({ data, events, google, now, actions, count = 3, onAll }) 
                 <button type="button" className="iconbtn upday-add" aria-label={fmtLong(d) + ' gününe ekle'} onClick={() => actions.newItemOn(d)}><Icon.Plus width="18" height="18" /></button>
               </div>
               <div className="list">
-                {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact noSpan />)
+                {items.length ? items.slice(0, max).map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact noSpan />)
                   : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Boş gün'}</p>}
+                {items.length > max ? <button type="button" className="linkbtn upday-more" onClick={onAll}>+{items.length - max} kayıt daha</button> : null}
               </div>
             </div>
           );

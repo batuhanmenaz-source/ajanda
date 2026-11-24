@@ -2164,3 +2164,41 @@ button.it-row:hover { background: var(--chip); }
 .sl-cat-pr.head { border-top: 0; font-size: 12px; color: var(--muted); }
 .rv-sales { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-top: -8px; }
 .rv-sales small { font-size: 12px; font-weight: 400; color: var(--muted); }
+
+/* ---------- Bugün: dikkat kutusu, kompakt kampanyalar ---------- */
+.att { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 6px; box-shadow: inset 4px 0 0 #E8590C; }
+.att-h { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+.att-h em { font-style: normal; font-size: 12px; font-weight: 700; color: #fff; background: #E8590C; border-radius: 10px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.att-l { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 14px; }
+.att-i { display: flex; align-items: center; gap: 10px; min-width: 0; border: 0; background: none; font: inherit; font-size: 14px; color: inherit; text-align: left; padding: 8px 6px; border-radius: 10px; cursor: pointer; border-top: 1px solid var(--line-2); }
+.att-i:hover { background: var(--chip); }
+.att-i > i { font-style: normal; flex: none; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; font-size: 15px; background: #FFF4E6; }
+.att-i.t-red > i { background: #FFF0F0; }
+.att-i > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-i.t-red > span b { color: #C92A2A; }
+.att-i.t-amber > span b { color: #B35C00; }
+.att-i > b { flex: none; color: var(--muted); font-weight: 400; font-size: 18px; }
+.att-more { font-size: 13px; padding: 4px 6px; align-self: flex-start; }
+@media (max-width: 760px) { .att-l { grid-template-columns: minmax(0, 1fr); } .att-i > span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } }
+@media (min-width: 761px) { .att-i:nth-child(-n+2) { border-top: 0; } }
+@media (max-width: 760px) { .att-i:first-child { border-top: 0; } }
+.camp-grid.compact { display: flex; flex-direction: column; gap: 8px; }
+.camp-c { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; border-left: 4px solid var(--mp, #5F3DC4); width: 100%; }
+.camp-c:hover { border-color: var(--accent); border-left-color: var(--mp, #5F3DC4); }
+.camp-c-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.camp-c-n { font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.camp-c-m { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ink-2); flex-wrap: wrap; }
+.camp-c-p.todo { color: #B35C00; font-weight: 600; }
+.camp-c .ctb-lbl { font-size: 12px; }
+.upday-more { align-self: flex-start; font-size: 13px; padding: 6px 12px; }
+@media (min-width: 1100px) { .td-tiles.n7, .td-tiles.n8 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .td-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .td-tiles .wd-tile { min-height: 0; padding: 9px 10px; }
+  .td-tiles .wd-tile-v { font-size: 18px; }
+  .td-tiles .wd-tile-s { display: none; }
+  .td-tiles .wd-tile-k { font-size: 11.5px; }
+  .td-tiles .wd-tile.has-d .wd-tile-k { padding-right: 0; }
+  .td-tiles .wd-tile-v small { font-size: 11px; }
+  .td-tiles .wd-delta { position: static; align-self: flex-start; margin-top: 2px; font-size: 11px; }
+}

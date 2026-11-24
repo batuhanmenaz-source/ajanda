@@ -12,7 +12,7 @@ import { goalsOf, sportOf, isSport, isoDay } from './health.jsx';
 
 const sumDay = (rows, k) => rows.filter((r) => r.day === k).reduce((s, r) => s + Number(r.amount), 0);
 
-export function TodayTiles({ scope, data, now, revenue, revReady, mail, health, budgets, campLive = 0, campSoon = [], lateCount, hide, goTab, actions }) {
+export function TodayTiles({ scope, data, now, revenue, revReady, mail, health, budgets, campLive = 0, campSoon = [], lateCount, hide, goTab, actions, salesDigest }) {
   const H = (k) => !hide.has(k);
   const t0 = startOfDay(now);
   const T = toDateInput(t0);
@@ -30,6 +30,18 @@ export function TodayTiles({ scope, data, now, revenue, revReady, mail, health, 
       ? <Tile key="ciro" tone="#1971C2" label="Dünkü ciro" value={tlShort(y)} delta={w ? y / w - 1 : null} onClick={() => goTab('ciro')}
           sub={(top ? top[0] + ' ' + tlShort(top[1]) : '') + (Object.keys(by).length > 1 ? ' · ' + Object.keys(by).length + ' pazaryeri' : '') } />
       : <Tile key="ciro" tone="#1971C2" warn label="Dünkü ciro" value="—" sub="Girilmedi · dokun, gir" onClick={() => actions.openRevenue(Y)} />);
+  }
+
+  // ---- Satış raporu özeti (Satış raporu sayfası açıldığında kaydedilen küçük özet; burada indirme yok)
+  const sd = salesDigest;
+  if (scope !== 'ozel' && H('satis') && sd && sd.day) {
+    const age = daysBetween(fromDateInput(sd.day), t0);
+    if (age <= 5) {
+      const pc = (v) => (v == null ? '' : (v >= 0 ? '+' : '−') + '%' + Math.round(Math.abs(v * 100)));
+      const nA = (sd.alerts || []).length;
+      tiles.push(<Tile key="satis" tone="#D9480F" label={'Satış raporu · ' + (age === 1 ? 'dün' : fmtShort(fromDateInput(sd.day)))} value={tlShort(sd.r)} delta={sd.d1} onClick={() => goTab('satislar')} warn={nA > 0}
+        sub={(sd.ww != null ? '7 gün ' + pc(sd.ww) : '') + (nA ? (sd.ww != null ? ' · ' : '') + nA + ' hero uyarısı' : sd.ww != null ? '' : 'hero ürünlerde sorun yok')} />);
+    }
   }
 
   // ---- Kampanyalar (yalnız İş; Tümü'de kartlar aşağıda)
