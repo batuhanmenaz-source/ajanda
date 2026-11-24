@@ -451,6 +451,14 @@ export function ContactsView({ data, actions }) {
   const list = [...(data.contacts || [])]
     .filter((c) => !ql || (c.name + ' ' + (c.company || '') + ' ' + (c.handle || '')).toLocaleLowerCase('tr-TR').includes(ql) || (qd.length >= 3 && normalizePhone(c.phone).includes(qd)))
     .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  // Kişiyle ilgili aramalar (isim ya da numara eşleşmesi): açık olanlar ve son aranma
+  const callsOf = (c) => {
+    const ph = normalizePhone(c.phone || '');
+    const nm = (c.name || '').toLocaleLowerCase('tr-TR');
+    return (data.calls || []).filter((x) => (ph && x.phone && normalizePhone(x.phone).endsWith(ph.slice(-10))) || (nm && (x.who || '').toLocaleLowerCase('tr-TR') === nm));
+  };
+  const ago = (iso) => { const d = Math.round((Date.now() - new Date(iso)) / 864e5); return d <= 0 ? 'bugün' : d === 1 ? 'dün' : d + ' gün önce'; };
+  const plan = (c) => { const t = new Date(); t.setMinutes(0, 0, 0); t.setHours(t.getHours() + 1); actions.openCall({ who: c.name, phone: c.phone || '', due_at: t.toISOString() }); };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -468,8 +476,14 @@ export function ContactsView({ data, actions }) {
                 {c.is_influencer ? <span className="tag infl-tag">Influencer{c.handle ? ' · ' + c.handle : ''}</span> : null}
                 {c.company ? <span>{c.company}</span> : null}
                 {c.phone ? <span>{prettyPhone(c.phone)}</span> : null}
+                {(() => {
+                  const cs = callsOf(c); const op = cs.filter((x) => !x.done).length;
+                  const last = cs.filter((x) => x.done && x.due_at).sort((a, b) => b.due_at.localeCompare(a.due_at))[0];
+                  return <>{op ? <span className="tag ct-open">📞 {op} açık arama</span> : null}{last ? <span className="ct-last">son arama {ago(last.due_at)}</span> : null}</>;
+                })()}
               </span>
             </button>
+            <button type="button" className="missed-btn" onClick={() => plan(c)} aria-label={c.name + ' için arama planla'} title="Arama planla"><span aria-hidden="true" style={{ fontSize: 16 }}>＋</span></button>
             {c.phone ? <a className="missed-btn" href={waLink(c.phone)} target="_blank" rel="noopener noreferrer" aria-label={c.name + ' WhatsApp'}><WaIcon /></a> : null}
             {c.phone ? <a className="missed-btn call" href={'tel:+' + normalizePhone(c.phone)} aria-label={c.name + ' ara'}><Icon.Phone width="18" height="18" /></a> : null}
           </div>

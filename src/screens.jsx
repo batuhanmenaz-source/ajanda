@@ -184,7 +184,7 @@ export function dayItems(day, { data, events }) {
   });
 }
 
-function ReminderRow({ r, now, onToggle, onOpen, showDay }) {
+function ReminderRow({ r, now, onToggle, onOpen, showDay, onLater }) {
   const d = r.due_at ? new Date(r.due_at) : null;
   const late = isLate(r, now);
   return (
@@ -200,11 +200,12 @@ function ReminderRow({ r, now, onToggle, onOpen, showDay }) {
         </span>
       </button>
       {r.location ? <a className="missed-btn" href={mapsLink(r.location, r.location_geo)} {...mapsTarget()} aria-label={r.location + ' haritada aç'}><PinIcon /></a> : null}
+      {onLater && !r.done ? <button type="button" className="cl-btn row-later" onClick={() => onLater(r)} title="Yarın aynı saate al">Yarına</button> : null}
     </div>
   );
 }
 
-function CallRow({ c, now, onToggle, onOpen, showDay, tagged }) {
+function CallRow({ c, now, onToggle, onOpen, showDay, tagged, onLater }) {
   const d = c.due_at ? new Date(c.due_at) : null;
   const late = isLate(c, now);
   return (
@@ -218,6 +219,7 @@ function CallRow({ c, now, onToggle, onOpen, showDay, tagged }) {
           {c.topic ? <span>{c.topic}</span> : null}
         </span>
       </button>
+      {onLater && !c.done ? <button type="button" className="cl-btn row-later" onClick={() => onLater(c)} title="Yarın aynı saate al">Yarına</button> : null}
       {c.phone ? <a className="callicon" href={'tel:' + c.phone.replace(/\s/g, '')} aria-label={c.who + ' ara'}><Icon.Phone width="18" height="18" /></a> : null}
     </div>
   );
@@ -639,8 +641,8 @@ function TodayTasks({ lateR, lateC, rem, calls, gToday, undated, google, now, ac
         <div className="tt-g late">
           <div className="tt-gh"><span className="late-anchor">Geciken</span><em>{lateN}</em></div>
           <div className="list late-list">
-            {lateR.map((r) => <ReminderRow key={'lr' + r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay />)}
-            {lateC.map((c) => <CallRow key={'lc' + c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} showDay tagged />)}
+            {lateR.map((r) => <ReminderRow key={'lr' + r.id} r={r} now={now} onToggle={actions.toggleReminder} onOpen={actions.openReminder} showDay onLater={actions.postponeReminder} />)}
+            {lateC.map((c) => <CallRow key={'lc' + c.id} c={c} now={now} onToggle={actions.toggleCall} onOpen={actions.openCall} showDay tagged onLater={actions.postponeCall} />)}
           </div>
         </div>
       ) : null}
@@ -1475,53 +1477,84 @@ export function CallsScreen(props) {
   const [seg, setSegState] = useState(() => { try { return sessionStorage.getItem('ajanda-calls-seg') || 'arama'; } catch { return 'arama'; } });
   const setSeg = (v) => { setSegState(v); try { sessionStorage.setItem('ajanda-calls-seg', v); } catch { /* yok say */ } };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div className="seg" role="group" aria-label="Görünüm" style={{ maxWidth: 360 }}>
-        <button type="button" className={seg !== 'rehber' ? 'on' : ''} onClick={() => setSeg('arama')}>Aramalar</button>
-        <button type="button" className={seg === 'rehber' ? 'on' : ''} onClick={() => setSeg('rehber')}>Rehber</button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 980 }}>
+      <div className="sr-seg cl-tabs" role="tablist" aria-label="Görünüm">
+        <button type="button" role="tab" aria-selected={seg !== 'rehber'} className={seg !== 'rehber' ? 'on' : ''} onClick={() => setSeg('arama')}>Aramalar</button>
+        <button type="button" role="tab" aria-selected={seg === 'rehber'} className={seg === 'rehber' ? 'on' : ''} onClick={() => setSeg('rehber')}>Rehber{(props.data.contacts || []).length ? ' · ' + props.data.contacts.length : ''}</button>
       </div>
       {seg === 'rehber' ? <ContactsView data={props.data} actions={props.actions} /> : <CallsList {...props} />}
     </div>
   );
 }
 
+// Aramalar: cevapsız çağrılar + tek listede gruplu aranacaklar (geciken, bugün, yarın, bu hafta, sonra, tarihsiz) + geçmiş
 function CallsList({ data, now, actions, missedConfigured }) {
-  const open = data.calls.filter((c) => !c.done).sort((a, b) => (a.due_at || '9').localeCompare(b.due_at || '9'));
-  const done = data.calls.filter((c) => c.done).sort((a, b) => (b.due_at || '').localeCompare(a.due_at || '')).slice(0, 20);
-  const card = (c) => {
+  const [q, setQ] = useState('');
+  const [showDone, setShowDone] = useState(false);
+  const today = startOfDay(now);
+  const qq = q.trim().toLocaleLowerCase('tr-TR');
+  const match = (c) => !qq || [c.who, c.topic, c.phone].filter(Boolean).join(' ').toLocaleLowerCase('tr-TR').includes(qq);
+  const calls = data.calls.filter(match);
+  const open = calls.filter((c) => !c.done).sort((a, b) => (a.due_at || '9').localeCompare(b.due_at || '9'));
+  const done = calls.filter((c) => c.done).sort((a, b) => String(b.updated_at || b.due_at || '').localeCompare(String(a.updated_at || a.due_at || ''))).slice(0, 30);
+  const wEnd = addDays(today, 7 - ((today.getDay() + 6) % 7));
+  const grp = (c) => {
+    if (!c.due_at) return 'none';
+    const d = new Date(c.due_at);
+    if (d < today) return 'late';
+    if (sameDay(d, today)) return d < now ? 'late' : 'today';
+    if (sameDay(d, addDays(today, 1))) return 'tom';
+    if (d < wEnd) return 'week';
+    return 'later';
+  };
+  const GROUPS = [['late', 'Geciken', 'red'], ['today', 'Bugün', 'blue'], ['tom', 'Yarın', 'blue'], ['week', 'Bu hafta', 'gray'], ['later', 'Daha sonra', 'gray'], ['none', 'Tarihsiz', 'gray']];
+  const byG = Object.fromEntries(GROUPS.map(([k]) => [k, open.filter((c) => grp(c) === k)]));
+  const missedN = (data.missed_calls || []).filter((m) => !m.handled).length;
+  const row = (c) => {
     const d = c.due_at ? new Date(c.due_at) : null;
     const late = isLate(c, now);
+    const tel = c.phone ? 'tel:' + c.phone.replace(/\s/g, '') : null;
     return (
-      <div key={c.id} className="card callcard">
-        <div className="who">
-          {c.phone ? <a className="callicon" href={'tel:' + c.phone.replace(/\s/g, '')} aria-label={c.who + ' ara'} style={{ width: 40, height: 40, borderRadius: 20 }}><Icon.Phone width="18" height="18" /></a>
-            : <span className="callicon" style={{ width: 40, height: 40, borderRadius: 20 }}><Icon.Phone width="18" height="18" /></span>}
-          <button type="button" style={{ border: 0, background: 'transparent', padding: 0, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 auto' }} onClick={() => actions.openCall(c)}>
-            <span style={{ fontSize: 15, fontWeight: 600, textDecoration: c.done ? 'line-through' : 'none', color: c.done ? 'var(--muted)' : 'inherit' }}>{c.who}{c.for_yarim ? ' ❤️' : ''}</span>
-            <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{c.topic || 'Konu yok'}{c.phone ? ' · ' + c.phone : ''}</span>
-          </button>
-        </div>
-        <div className="foot">
-          <span style={{ fontSize: 13, fontWeight: 600, color: late ? 'var(--danger)' : 'var(--ink-2)' }}>{d ? whenLabel(d, now) + (late ? ' · gecikti' : '') : 'Tarihsiz'}</span>
-          <button type="button" className={'btn' + (c.done ? ' ok' : '')} onClick={() => actions.toggleCall(c)}>{c.done ? 'Arandı ✓' : 'Arandı olarak işaretle'}</button>
-        </div>
+      <div key={c.id} className={'cl-row' + (c.done ? ' done' : '')}>
+        {tel ? <a className="cl-call" href={tel} aria-label={c.who + ' ara'}><Icon.Phone width="18" height="18" /></a> : <span className="cl-call none" aria-hidden="true"><Icon.Phone width="18" height="18" /></span>}
+        <button type="button" className="cl-main" onClick={() => actions.openCall(c)}>
+          <b>{c.who}{c.for_yarim ? ' ❤️' : ''}</b>
+          <span>{c.topic || 'Konu yok'}{c.phone ? <em> · {c.phone}</em> : null}</span>
+        </button>
+        <span className={'cl-when' + (late ? ' late' : '')}>{d ? (c.done ? whenLabel(d, now) : sameDay(d, today) ? fmtTime(d) : whenLabel(d, now)) : ''}</span>
+        {!c.done ? <button type="button" className="cl-btn" onClick={() => actions.postponeCall(c)} title="Yarın aynı saatte">Yarına</button> : null}
+        <button type="button" className={'cl-btn ok' + (c.done ? ' on' : '')} onClick={() => actions.toggleCall(c)} aria-pressed={!!c.done}>{c.done ? '✓ Arandı' : 'Arandı'}</button>
       </div>
     );
   };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <MissedCallsSection missed={data.missed_calls} now={now} actions={actions} showEmpty configured={missedConfigured} contacts={data.contacts} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Aranacaklar</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="btn" onClick={actions.openMissedSetup}>Telefon bağlantısı</button>
-          <button type="button" className="btn primary" onClick={() => actions.newCall()}>+ Arama ekle</button>
+    <div className="cl">
+      <div className="cl-top">
+        <input className="sr-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Kişi, konu ya da numara ara" aria-label="Aramalarda ara" />
+        <button type="button" className="btn primary" onClick={() => actions.newCall()}>+ Arama ekle</button>
+      </div>
+      <MissedCallsSection missed={data.missed_calls} now={now} actions={actions} showEmpty={!missedConfigured} configured={missedConfigured} contacts={data.contacts} />
+      <section className="tt cl-list">
+        <div className="tt-h">
+          <div className="tt-h-t">
+            <h2>Aranacaklar</h2>
+            <span>{open.length ? open.length + ' kişi' + (byG.late.length ? ' · ' + byG.late.length + ' geciken' : '') + (byG.today.length ? ' · ' + byG.today.length + ' bugün' : '') : 'aranacak kimse yok 🎉'}{missedN ? ' · ' + missedN + ' cevapsız çağrı yukarıda' : ''}</span>
+          </div>
         </div>
-      </div>
-      <div className="notes-grid">
-        {open.length ? open.map(card) : <div className="card"><p className="empty">Aranacak kimse yok.</p></div>}
-      </div>
-      {done.length ? <Section title="Arananlar"><div className="notes-grid">{done.map(card)}</div></Section> : null}
+        {GROUPS.filter(([k]) => byG[k].length).map(([k, l, tone]) => (
+          <div key={k} className={'tt-g cl-g t-' + tone + (k === 'late' ? ' late' : '')}>
+            <div className="tt-gh"><span>{l}</span><em>{byG[k].length}</em></div>
+            <div className="list">{byG[k].map(row)}</div>
+          </div>
+        ))}
+        {!open.length ? <p className="tt-note">{qq ? 'Bu aramayla eşleşen açık arama yok.' : 'Yeni bir arama eklemek için “+ Arama ekle”.'}</p> : null}
+        {done.length ? (
+          <div className="tt-g">
+            <button type="button" className="cl-hist" onClick={() => setShowDone(!showDone)} aria-expanded={showDone}>Arananlar · son {done.length} {showDone ? '▴' : '▾'}</button>
+            {showDone ? <div className="list">{done.map(row)}</div> : null}
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }

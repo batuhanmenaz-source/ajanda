@@ -9,6 +9,7 @@ export const Icon = {
   Home: (p) => (<svg width="22" height="22" viewBox="0 0 24 24" {...base} {...p}><path d="M4 11l8-7 8 7" /><path d="M6 10v10h12V10" /><path d="M10 20v-5h4v5" /></svg>),
   Phone: (p) => (<svg width="22" height="22" viewBox="0 0 24 24" {...base} {...p}><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>),
   Plus: (p) => (<svg width="26" height="26" viewBox="0 0 24 24" {...base} strokeWidth="2.4" {...p}><path d="M12 5v14M5 12h14" /></svg>),
+  Search: (p) => (<svg width="20" height="20" viewBox="0 0 24 24" {...base} {...p}><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></svg>),
   Close: (p) => (<svg width="20" height="20" viewBox="0 0 24 24" {...base} strokeWidth="2.2" {...p}><path d="M6 6l12 12M18 6L6 18" /></svg>),
   Check: (p) => (<svg width="12" height="12" viewBox="0 0 24 24" {...base} stroke="#fff" strokeWidth="3.2" {...p}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>),
   Left: (p) => (<svg width="20" height="20" viewBox="0 0 24 24" {...base} {...p}><path d="M15 18l-6-6 6-6" /></svg>),

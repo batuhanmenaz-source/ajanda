@@ -25,6 +25,7 @@ import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, su
 import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
+import { SearchSheet } from './search.jsx';
 import { useHealth, connectHealth, disconnectHealth, SportSheet, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote, syncCode } from './sync.js';
 
@@ -61,6 +62,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const goTab = (t) => {
     if (t === 'ozet' || t === 'kampanya' || t === 'ciro' || t === 'notlar' || t === 'influencer' || t === 'bekleyenler' || t === 'raporlar' || t === 'mailler' || t === 'satislar') { setSheet(null); setIsSeg(t); setTab('is'); }
     else if (t === 'yarim') { setOzelSeg('yarim'); setTab('ozel'); }
+    else if (t === 'ozelozet') { setSheet(null); setOzelSeg('ozet'); setTab('ozel'); }
     else if (t === 'cuzdan' || t === 'saglik' || t === 'listeler' || t === 'aliskanlik' || t === 'ozelgun' || t === 'gunluk') { setOzelSeg(t); setTab('ozel'); }
     else setTab(t);
   };
@@ -936,8 +938,19 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     else setSheet({ kind: 'item', item: { kind: p.type === 'Arama' ? 'call' : 'reminder', title: p.from ? (p.type === 'Arama' ? p.from : (p.title && !p.title.includes(p.from) ? p.from + ': ' + p.title : p.title)) : p.title, ...(p.type === 'Arama' && p.from ? { topic: p.title } : {}), marketplace: p.mp, due_at: p.date ? p.date.toISOString() : null, for_yarim: !!p.yarim, repeat_rule: p.repeat || '', ...(scope === 'ozel' && !p.yarim && !p.mp ? { scope: 'ozel' } : {}) } });
   };
 
+  // Ertele: aynı saatte yarına (geçmiş tarihli ise yarın aynı saat)
+  const postpone = async (table, item) => {
+    const base = item.due_at ? new Date(item.due_at) : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0);
+    const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, base.getHours(), base.getMinutes());
+    const row = await saveItem(table, { id: item.id, due_at: t.toISOString() }, true);
+    if (row) say((table === 'calls' ? item.who : item.title) + ' yarına alındı');
+  };
   const actions = {
     saveSalesPrefs,
+    postponeCall: (c) => postpone('calls', c),
+    postponeReminder: (r) => postpone('reminders', r),
+    openSearch: () => setSheet({ kind: 'search' }),
+    goTab,
     saveRevenue,
     toggleReminder: (r) => toggle('reminders', r),
     toggleCall: (c) => toggle('calls', c),
@@ -1133,6 +1146,18 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     off: { text: 'Örnek mod', color: '#B8B5AD' }
   }[google];
 
+  // Klavye kısayolları: Ctrl/⌘+K ya da / → ara, N → hızlı ekle (yazı alanındayken çalışmaz)
+  useEffect(() => {
+    const onKey = (e) => {
+      const el = e.target; const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setSheet({ kind: 'search' }); return; }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey || sheet) return;
+      if (e.key === '/') { e.preventDefault(); setSheet({ kind: 'search' }); }
+      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setSheet({ kind: 'quick' }); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sheet]);
   const mpCounts = marketplaceCounts(viewData, now);
 
   return (
@@ -1140,6 +1165,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       <aside className="sidebar">
         <div className="brand"><span className="logo"><Icon.Calendar width="18" height="18" /></span>Ajanda</div>
         <button type="button" className="btn primary big" onClick={() => setSheet({ kind: 'quick' })}>+ Hızlı ekle</button>
+        <button type="button" className="side-search" onClick={() => setSheet({ kind: 'search' })}><Icon.Search width="17" height="17" /><span>Ara</span><kbd>Ctrl K</kbd></button>
         <nav className="sidenav" aria-label="Ana menü">
           {TABS.map((t) => (
             <button key={t.id} type="button" className={tab === t.id ? 'on' : ''} onClick={() => navTo(t.id)} aria-current={tab === t.id ? 'page' : undefined}>
@@ -1168,6 +1194,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
             <h1>{head[0]}</h1>
           </div>
           <div className="topbar-r">
+            <button type="button" className="iconbtn top-search" aria-label="Ara" onClick={() => setSheet({ kind: 'search' })}><Icon.Search /></button>
             {tab === 'bugun' && scope !== 'is' && !loading ? <HabitDots data={data} now={now} actions={actions} /> : null}
             <button type="button" className={'pill' + (google === 'needs_login' ? ' warn' : '')} onClick={() => setSheet({ kind: 'account' })} aria-label={'Hesap ve bağlantı: ' + gPill.text}>
               <span className="dot" style={{ background: gPill.color }} />{gPill.text}
@@ -1212,6 +1239,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       </nav>
 
       {sheet && sheet.kind === 'quick' && <QuickAdd onClose={() => setSheet(null)} onSave={quickSave} onDetail={quickDetail} defaultYarim={!!sheet.yarim} yarimHidden={yarimHidden} shared={sheet.shared} autoVoice={!!sheet.voice} autoPaste={!!sheet.paste} />}
+      {sheet && sheet.kind === 'search' && <SearchSheet data={viewData} actions={actions} onClose={() => setSheet(null)} />}
       {sheet && sheet.kind === 'item' && <ItemSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveItem} onDelete={deleteItem} yarimHidden={yarimHidden} contacts={data.contacts} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'special' && <SpecialDateSheet initial={sheet.item} yarimHidden={yarimHidden} YarimToggle={YarimToggle} alertDefaults={alertDefs} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('special_dates', f, 'Özel gün kaydedildi')} onDelete={(x) => deleteRow('special_dates', x, '"' + x.title + '" silinsin mi?')} />}
