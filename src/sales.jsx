@@ -6,7 +6,7 @@ import { supabase, DEMO } from './supabase.js';
 import { MARKETPLACES, mpColor } from './constants.js';
 import { tl, tlShort } from './revenue.jsx';
 import { Sheet } from './ui.jsx';
-import { parseSales, fileDate, str, coverReports, sumItems, compareProducts, lenOf, shift, ymd } from './salesparse.js';
+import { parseSales, fileDate, readCatalog, buildCatalog, codeKey, str, coverReports, sumItems, compareProducts, lenOf, shift, ymd } from './salesparse.js';
 
 // ---------- Saklama ----------
 const DEMO_KEY = 'ajanda-sales-demo-v1';
@@ -55,6 +55,24 @@ async function deleteReport(id) {
   if (DEMO) { demoSet(demoAll().filter((x) => x.id !== id)); return; }
   const { error } = await supabase.from('sales_reports').delete().eq('id', id);
   if (error) throw error;
+}
+
+// Ürün listesi (barkod → stok kodu): kişi başına tek satır
+const CAT_DEMO = 'ajanda-catalog-demo-v1';
+const missingCat = (e) => /product_catalog/.test(String(e && e.message));
+async function loadCatalog() {
+  if (DEMO) { try { return JSON.parse(localStorage.getItem(CAT_DEMO) || 'null'); } catch { return null; } }
+  const { data, error } = await supabase.from('product_catalog').select('items, file_name, updated_at').maybeSingle();
+  if (error) { if (missingCat(error)) return { missing: true }; throw error; }
+  return data;
+}
+async function saveCatalog(items, fileName) {
+  const row = { items, file_name: str(fileName, 120), updated_at: new Date().toISOString() };
+  if (DEMO) { try { localStorage.setItem(CAT_DEMO, JSON.stringify(row)); } catch { /* yok say */ } return row; }
+  const { data: u } = await supabase.auth.getUser();
+  const { error } = await supabase.from('product_catalog').upsert({ user_id: u.user.id, ...row });
+  if (error) throw error;
+  return row;
 }
 
 // ---------- Yardımcılar ----------
@@ -325,6 +343,70 @@ function ProductSheet({ p, A, B, metric, reports, now, onClose, noB }) {
   );
 }
 
+// ---------- Ürün listesi penceresi ----------
+function CatalogSheet({ catalog, onClose, onSaved }) {
+  const [file, setFile] = useState(null); // { name, heads, rows, guess }
+  const [bc, setBc] = useState(-1);
+  const [code, setCode] = useState(-1);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const ref = useRef(null);
+  const pickFile = async (f) => {
+    if (!f) return;
+    setBusy(true); setErr('');
+    try {
+      const { default: readXlsx } = await import('read-excel-file/browser');
+      const c = readCatalog(await readXlsx(f));
+      setFile({ name: f.name, ...c }); setBc(c.guess.bc); setCode(c.guess.code);
+    } catch (e) { setErr(e.message || 'Dosya okunamadı.'); }
+    finally { setBusy(false); if (ref.current) ref.current.value = ''; }
+  };
+  const items = useMemo(() => (file && bc >= 0 && code >= 0 && bc !== code ? buildCatalog(file.rows, bc, code) : []), [file, bc, code]);
+  const save = async () => {
+    setBusy(true); setErr('');
+    try { onSaved(await saveCatalog(items, file.name)); }
+    catch (e) { setErr(missingCat(e) ? 'Supabase\'de 30 numaralı SQL çalıştırılmamış (Hesap → Kurulum durumu → Kopyala).' : 'Kaydedilemedi: ' + (e && e.message)); }
+    finally { setBusy(false); }
+  };
+  const sel = (v, set, label) => (
+    <label className="sl-cat-sel"><span>{label}</span>
+      <select value={v} onChange={(e) => set(Number(e.target.value))}>
+        <option value={-1}>Seç…</option>
+        {file.heads.map((h, i) => <option key={i} value={i}>{h || 'Sütun ' + (i + 1)}</option>)}
+      </select>
+    </label>
+  );
+  const has = catalog && catalog.items && catalog.items.length;
+  return (
+    <Sheet title="Ürün listesi" onClose={onClose}>
+      <p className="hint" style={{ margin: 0 }}>Trendyol satış raporunda stok kodu yok. Barkod ve stok kodu sütunu olan ürün listeni bir kez yükle; Trendyol ürünleri barkoddan stok koduna bağlanır. Hepsiburada'da stok kodu raporun kendisindeki "SaticiSKU" sütunundan alınır.</p>
+      {has ? <div className="sl-cat-now"><b>{nf(catalog.items.length)} ürün</b> eşli · {catalog.file_name || 'liste'}{catalog.updated_at ? ' · ' + dm(catalog.updated_at.slice(0, 10)) : ''}<span className="hint">Yeni ürün eklendikçe güncel listeyi tekrar yükle; eskisinin yerine geçer.</span></div> : null}
+      {!file ? (
+        <button type="button" className="btn big primary" onClick={() => ref.current && ref.current.click()} disabled={busy}>{busy ? 'Okunuyor…' : has ? '⬆ Güncel listeyi yükle' : '⬆ Ürün listesini yükle'}</button>
+      ) : (
+        <>
+          <span className="hint">{file.name} · {nf(file.rows.length)} satır</span>
+          <div className="sl-cat-cols">{sel(bc, setBc, 'Barkod sütunu')}{sel(code, setCode, 'Stok kodu sütunu')}</div>
+          {items.length ? (
+            <div className="sl-cat-prev">
+              <div className="sl-cat-pr head"><span>Barkod</span><span>Stok kodu</span></div>
+              {items.slice(0, 4).map(([b, c]) => <div key={b} className="sl-cat-pr"><span>{b}</span><b>{c}</b></div>)}
+              <span className="hint">{nf(items.length)} barkod–stok kodu eşi bulundu.</span>
+            </div>
+          ) : <p className="hint" style={{ margin: 0, color: '#B35C00' }}>Barkod ve stok kodu sütunlarını seç.</p>}
+          <div className="row2">
+            <button type="button" className="btn big" onClick={() => setFile(null)} disabled={busy}>Başka dosya</button>
+            <button type="button" className="btn big primary" onClick={save} disabled={busy || !items.length}>{busy ? 'Kaydediliyor…' : 'Kaydet'}</button>
+          </div>
+        </>
+      )}
+      {err ? <p className="hint" style={{ color: 'var(--danger)', margin: 0 }}>{err}</p> : null}
+      <input ref={ref} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => pickFile(e.target.files && e.target.files[0])} />
+      <p className="hint" style={{ margin: 0 }}>Yalnız barkod ve stok kodu saklanır; dosyadaki diğer sütunlar okunmaz.</p>
+    </Sheet>
+  );
+}
+
 // ---------- Ana görünüm: rapor ----------
 const CMP = [['prev', 'Önceki dönem'], ['week', 'Geçen hafta'], ['month', 'Geçen ay']];
 const shiftMonth = (k, n) => { const [y, m, d] = k.split('-').map(Number); const last = new Date(y, m - 1 + n + 1, 0).getDate(); return ymd(new Date(y, m - 1 + n, Math.min(d, last))); };
@@ -363,9 +445,12 @@ export function SalesView({ now, actions }) {
   const [reading, setReading] = useState(false);
   const [showList, setShowList] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [catalog, setCatalog] = useState(null);
+  const [catOpen, setCatOpen] = useState(false);
   const fileRef = useRef(null);
 
   useEffect(() => {
+    loadCatalog().then(setCatalog).catch(() => setCatalog(null));
     listReports().then(setReports).catch((e) => setErr(missingTable(e) ? 'Satış raporları için Supabase\'de 29 numaralı SQL\'i çalıştır (Hesap → Kurulum durumu → Kopyala).' : String(e && e.message)));
   }, []);
 
@@ -403,11 +488,21 @@ export function SalesView({ now, actions }) {
     return () => { alive = false; };
   }, [key]);
 
+  const cat = useMemo(() => {
+    const bc = new Map(), byCode = new Map();
+    ((catalog && catalog.items) || []).forEach(([b, c]) => { bc.set(String(b), c); if (!byCode.has(codeKey(c))) byCode.set(codeKey(c), String(b)); });
+    return { bc, byCode, n: bc.size };
+  }, [catalog]);
+  // Stok kodu: ürün listesinde barkodu varsa oradan; yoksa raporun kendi stok kodu sütunu (HB SaticiSKU)
+  const codeOf = (mp, x) => cat.bc.get(String(x.b || x.k)) || (mp === 'Trendyol' ? '' : x.m) || '';
+  const barcodeOf = (c) => cat.byCode.get(codeKey(c)) || '';
+
   const view = useMemo(() => {
     if (!data || data.key !== key) return null;
     const scaleB = {};
     Object.keys(data.byMp).forEach((mp) => { const c = data.cov[mp]; scaleB[mp] = c.B.days && c.A.days && c.A.days !== c.B.days ? c.A.days / c.B.days : 1; });
-    const products = compareProducts(data.byMp, scaleB);
+    const products = compareProducts(data.byMp, scaleB, codeOf, barcodeOf);
+    const noCode = products.filter((p) => !p.code).length;
     const mpRows = Object.keys(data.byMp).map((mp) => {
       const t = { a: { q: 0, r: 0, o: 0, x: 0 }, b: { q: 0, r: 0, o: 0, x: 0 } };
       data.byMp[mp].A.forEach((x) => { t.a.q += x.q || 0; t.a.r += x.r || 0; t.a.o += x.o || 0; t.a.x += x.x || 0; });
@@ -423,8 +518,8 @@ export function SalesView({ now, actions }) {
       p.hasB = Object.keys(p.mps).some((mp) => !noB.has(mp));
       p.cover = p.s != null && p.a.q > 0 ? p.s / (p.a.q / daysA) : null;
     });
-    return { products, mpRows, tot, noB, allNoB: noB.size === mpRows.length, scaled: Object.values(scaleB).some((v) => v !== 1) };
-  }, [data, key]);
+    return { products, noCode, mpRows, tot, noB, allNoB: noB.size === mpRows.length, scaled: Object.values(scaleB).some((v) => v !== 1) };
+  }, [data, key, cat]);
 
   // Satır değerleri (pazaryeri süzgeci uygulanmış)
   const rowsAll = useMemo(() => {
@@ -556,6 +651,7 @@ export function SalesView({ now, actions }) {
           <span className="hint">Pazaryeri satış Excel'lerinden dönem kıyası: ne arttı, ne düştü, nerede.</span>
         </div>
         <div className="sl-top-b">
+          <button type="button" className="btn" onClick={() => setCatOpen(true)}>Ürün listesi{cat.n ? '' : ' ⚠︎'}</button>
           {view && view.mpRows.length ? <button type="button" className="btn" onClick={doExport} disabled={exporting}>{exporting ? 'Hazırlanıyor…' : '⬇ Excel'}</button> : null}
           <button type="button" className="btn primary" onClick={() => fileRef.current && fileRef.current.click()} disabled={reading}>{reading ? 'Okunuyor…' : '⬆ Excel yükle'}</button>
         </div>
@@ -658,6 +754,12 @@ export function SalesView({ now, actions }) {
                   <h3>Ürünler{mpF ? <span className="sl-fil"> · {mpF} <button type="button" className="linkbtn" aria-label="Pazaryeri süzgecini kaldır" onClick={() => setMpF('')}>✕</button></span> : null}</h3>
                   <span className="hint">{q.trim() ? list.length + ' sonuç' : counts[quick] + ' ürün'}</span>
                 </div>
+                {view.noCode ? (
+                  <div className="sl-cat-hint">
+                    <span>{nf(view.noCode)} ürünün stok kodu yok{cat.n ? ' (ürün listesinde barkodu bulunamadı)' : ''}. {cat.n ? 'Güncel ürün listesini yükle.' : 'Trendyol ürünlerini stok koduna bağlamak için barkod–stok kodu listeni bir kez yükle.'}</span>
+                    <button type="button" className="linkbtn" onClick={() => setCatOpen(true)}>{cat.n ? 'Güncelle' : 'Ürün listesi yükle'}</button>
+                  </div>
+                ) : null}
                 <p className="sl-legend"><b>Adet</b> ve <b>Ciro</b>: {plabel(opt.A[0], opt.A[1])} · <b>Önceki adet</b>: {plabel(opt.B[0], opt.B[1])}{view.scaled ? ' (gün sayısı farklı, günlük ortalamaya çevrildi)' : ''} · <b>Adet farkı</b> = Adet − Önceki adet · <b>Değişim</b> = farkın önceki adede oranı</p>
                 <input className="sl-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Stok kodu, barkod ya da ürün adı" aria-label="Stok kodu, barkod ya da ürün adı ile ara" />
                 {!q.trim() ? (
@@ -735,6 +837,7 @@ export function SalesView({ now, actions }) {
             if (!keepOpen) setImp(null);
           }} />
       ) : null}
+      {catOpen ? <CatalogSheet catalog={catalog} onClose={() => setCatOpen(false)} onSaved={(row) => { setCatalog(row); setCatOpen(false); }} /> : null}
       {prod && opt ? <ProductSheet noB={view ? view.noB : new Set()} p={prod} A={opt.A} B={opt.B} metric="q" reports={reports || []} now={now} onClose={() => setProd(null)} /> : null}
     </div>
   );

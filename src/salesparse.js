@@ -26,7 +26,7 @@ const FORMATS = [
   {
     mp: 'Trendyol', need: ['barkod', 'netciro', 'netsatisadedi'],
     row: (g) => ({
-      k: str(g('barkod'), 40), m: str(g('modelkodu') || g('saticistokkodu') || g('stokkodu'), 40), n: str(g('urunadi')), br: str(g('marka'), 40), c: str(g('kategori'), 50),
+      k: str(g('barkod'), 40), m: str(g('saticistokkodu') || g('stokkodu'), 40), n: str(g('urunadi')), br: str(g('marka'), 40), c: str(g('kategori'), 50),
       o: num(g('brutsiparisadedi')), q: num(g('netsatisadedi')), x: num(g('iptaladedi')), i: num(g('iadeadedi')),
       g: num(g('brutciro')), d: num(g('indirimtutari')), r: num(g('netciro')), f: num(g('toplamkomisyontutari')),
       s: g('guncelstok') === '' || g('guncelstok') == null ? null : num(g('guncelstok'))
@@ -48,7 +48,7 @@ const SYN = {
   amount: ['netciro', 'ciro', 'toplamsatistutari', 'satistutari', 'urunsatistutari', 'toplamtutar', 'faturatutari', 'tutar', 'toplam', 'total', 'gelir', 'revenue', 'orderedproductsales', 'itemtotal'],
   price: ['birimfiyat', 'birimsatisfiyati', 'satisfiyati', 'fiyat', 'unitprice', 'itemprice', 'price'],
   barcode: ['barkod', 'barcode', 'urunbarkodu', 'ean', 'gtin'],
-  sku: ['saticisku', 'saticistokkodu', 'stokkodu', 'merchantsku', 'sellersku', 'sku', 'urunkodu', 'modelkodu', 'asin'],
+  sku: ['saticisku', 'saticistokkodu', 'stokkodu', 'merchantsku', 'sellersku', 'sku', 'urunkodu', 'asin'],
   brand: ['marka', 'brand'],
   cat: ['kategori', 'category', 'altkategori'],
   status: ['siparisdurumu', 'durum', 'status', 'orderstatus', 'kalemdurumu'],
@@ -182,6 +182,7 @@ export function sumItems(lists) {
 // 1) aynı barkod  2) ad (marka öneki atılmış) biri diğerinin başı ise ve o pazaryerinde tek aday varsa.
 // HB adları kısaltılmış geldiği için "baş" eşleşmesi kullanılır; aynı başa sahip birden çok varyant varsa eşleştirilmez.
 export const nameKey = (n, br) => { let t = flat(n); const b = flat(br); if (b && t.startsWith(b)) t = t.slice(b.length); return t; };
+export const codeKey = (c) => String(c).trim().toLocaleUpperCase('tr-TR');
 export function groupProducts(entries) {
   // entries: [{ mp, k, n, br, b }]
   const parent = entries.map((_, i) => i);
@@ -193,21 +194,17 @@ export function groupProducts(entries) {
     if (!code) return;
     if (bc.has(code)) union(bc.get(code), i); else bc.set(code, i);
   });
-  // Stok kodu: her pazaryerinde tek ürüne aitse (varyantlar ortak kod taşıyabilir) eşleştir
+  // Stok kodu (ürün listesinden ya da HB SaticiSKU): aynı kod = aynı ürün
   const codes = new Map();
-  entries.forEach((e, i) => { if (!e.m) return; const c = String(e.m).trim().toUpperCase(); const l = codes.get(c) || []; l.push(i); codes.set(c, l); });
-  codes.forEach((l) => {
-    if (l.length < 2) return;
-    const mpsIn = l.map((i) => entries[i].mp);
-    if (new Set(mpsIn).size !== mpsIn.length) return;
-    l.slice(1).forEach((i) => union(l[0], i));
-  });
+  entries.forEach((e, i) => { if (!e.m) return; const c = codeKey(e.m); if (codes.has(c)) union(codes.get(c), i); else codes.set(c, i); });
   const named = entries.map((e, i) => ({ i, mp: e.mp, s: nameKey(e.n, e.br) })).filter((x) => x.s.length >= 25).sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
   for (let p = 0; p < named.length; p++) {
     const cur = named[p];
     const per = new Map();
     for (let q = p + 1; q < named.length && named[q].s.startsWith(cur.s); q++) {
       const o = named[q]; if (o.mp === cur.mp) continue;
+      const ca = entries[cur.i].m, cb = entries[o.i].m;
+      if (ca && cb && codeKey(ca) !== codeKey(cb)) continue;
       const set = per.get(o.mp) || new Set(); set.add(find(o.i)); per.set(o.mp, set);
       if (set.size === 1) set.first = o.i;
     }
@@ -218,7 +215,7 @@ export function groupProducts(entries) {
 
 // A ve B dönemlerinin pazaryeri bazında toplanmış ürünlerinden ürün listesi:
 // [{ id, n, br, c, mps: { [mp]: { a:{q,r}, b:{q,r}, s } }, a:{q,r}, b:{q,r} }]
-export function compareProducts(byMp, scaleB = {}) {
+export function compareProducts(byMp, scaleB = {}, codeOf = (mp, x) => x.m || '', barcodeOf = () => '') {
   // byMp: { [mp]: { A: Map, B: Map } }
   const entries = [];
   const idx = new Map();
@@ -226,7 +223,7 @@ export function compareProducts(byMp, scaleB = {}) {
     [A, B].forEach((m) => m && m.forEach((x) => {
       const key = mp + '|' + x.k;
       if (idx.has(key)) { const e = entries[idx.get(key)]; if ((x.n || '').length > (e.n || '').length) e.n = x.n; return; }
-      idx.set(key, entries.length); entries.push({ mp, k: x.k, m: x.m, n: x.n, br: x.br, b: x.b, c: x.c });
+      idx.set(key, entries.length); entries.push({ mp, k: x.k, m: codeOf(mp, x), n: x.n, br: x.br, b: x.b, c: x.c });
     }));
   });
   const g = groupProducts(entries);
@@ -236,7 +233,7 @@ export function compareProducts(byMp, scaleB = {}) {
     const p = out.get(gid) || { id: e.k, n: e.n, br: e.br, c: e.c, code: '', barcode: '', codes: [], keys: {}, mps: {}, a: { q: 0, r: 0 }, b: { q: 0, r: 0 } };
     (p.keys[e.mp] = p.keys[e.mp] || []).push(e.k);
     if (e.m && !p.code) p.code = e.m;
-    const bcd = e.b || (isBarcode(e.k) ? e.k : null); if (bcd && !p.barcode) p.barcode = bcd;
+    const bcd = e.b || (isBarcode(e.k) ? e.k : null) || (e.m ? barcodeOf(e.m) : ''); if (bcd && !p.barcode) p.barcode = bcd;
     p.codes.push(e.k); if (e.m) p.codes.push(e.m);
     if ((e.n || '').length > (p.n || '').length && !/\($/.test(e.n)) p.n = e.n;
     const { A, B } = byMp[e.mp];
@@ -274,4 +271,43 @@ export function fileDate(name, today = new Date()) {
   m = t.match(/(?:^|[^0-9])(\d{4})[-.](\d{1,2})[-.](\d{1,2})(?![0-9]|[-_ ]\d{1,2}[.:]\d{2})/);
   if (m) { const a = mk(+m[1], +m[2], +m[3]); if (a) return [a, a]; }
   return null;
+}
+
+// ---------- Ürün listesi (barkod → stok kodu) ----------
+const BC_SYN = ['barkod', 'barcode', 'urunbarkodu', 'ean', 'gtin', 'barkodno'];
+const CODE_SYN = ['stokkodu', 'saticistokkodu', 'saticisku', 'urunstokkodu', 'stokkod', 'malzemekodu', 'urunkodu', 'sku', 'merchantsku', 'sellersku', 'kod', 'stokno'];
+const NAME_SYN = ['urunadi', 'urunismi', 'urun', 'aciklama', 'productname', 'malzemeadi', 'stokadi'];
+// sheets → { sheet, heads: [başlıklar], rows: [[...]], guess: { bc, code, name } } (ilk uygun sayfa)
+export function readCatalog(sheets) {
+  for (const sh of sheets) {
+    const rows = sh.data || [];
+    for (let hi = 0; hi < Math.min(rows.length, 10); hi++) {
+      const raw = rows[hi].map((x) => String(x == null ? '' : x).trim());
+      if (raw.filter(Boolean).length < 2) continue;
+      const hd = raw.map(head);
+      const body = rows.slice(hi + 1).filter((r) => r.some((x) => x != null && String(x).trim() !== ''));
+      if (!body.length) continue;
+      let bc = findCol(hd, BC_SYN), code = findCol(hd, CODE_SYN), name = findCol(hd, NAME_SYN);
+      // Barkod sütunu adıyla bulunamazsa: değerlerinin çoğu 8–14 haneli sayı olan sütun
+      if (bc < 0) {
+        let best = -1, bestN = 0;
+        raw.forEach((_, i) => { const n = body.slice(0, 200).filter((r) => isBarcode(String(r[i] == null ? '' : r[i]).trim())).length; if (n > bestN) { best = i; bestN = n; } });
+        if (bestN >= Math.min(5, body.length)) bc = best;
+      }
+      if (code === bc) code = -1;
+      return { sheet: sh.sheet, heads: raw, rows: body, guess: { bc, code, name } };
+    }
+  }
+  throw new Error('Dosyada başlık satırı bulunamadı.');
+}
+const cell = (v) => {
+  if (v == null) return '';
+  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : String(v);
+  return String(v).trim();
+};
+// Seçilen sütunlardan eşleme: [[barkod, stokKodu], ...] (tekrarsız, boşlar atılır)
+export function buildCatalog(rows, bc, code) {
+  const m = new Map();
+  rows.forEach((r) => { const b = cell(r[bc]).replace(/\s/g, ''), c = cell(r[code]); if (b && c) m.set(b, c.slice(0, 40)); });
+  return [...m.entries()];
 }

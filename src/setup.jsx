@@ -33,7 +33,8 @@ const CHECKS = [
   ['26_saglik_hedef', 'Sağlık hedefleri', 'app_settings', 'health_goals'],
   ['27_tekrarli_etkinlik', 'Tekrarlı etkinlik', 'campaigns', 'repeat_rule'],
   ['28_kod_bildirim', 'Kod bitiş bildirimi', 'inf_codes', 'google_event_id'],
-  ['29_satis_raporlari', 'Satış raporları (Excel)', 'sales_reports', 'id']
+  ['29_satis_raporlari', 'Satış raporları (Excel)', 'sales_reports', 'id'],
+  ['30_urun_listesi', 'Ürün listesi (barkod–stok kodu)', 'product_catalog', 'user_id']
 ];
 // SQL dosyaları yalnız bu ekran açılınca ve "Kopyala"ya basınca yüklenir
 const SQL_FILES = import.meta.glob('../supabase/*.sql', { query: '?raw', import: 'default' });
