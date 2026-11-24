@@ -886,7 +886,7 @@ function BackupSection({ demo, backup, onBackupNow, onDownload, onRestore, onRec
 }
 
 // ---------- Hesap ----------
-export function AccountSheet({ email, google, demo, onSetup, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, onAlertDefaults, onMailSetup, healthConnected, onHealthConnect, onHealthDisconnect, healthHidden, onToggleHealth, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
+export function AccountSheet({ email, google, demo, onSetup, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, onAlertDefaults, onMailSetup, healthConnected, onHealthConnect, onHealthDisconnect, healthHidden, onToggleHealth, onEditToday, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
   const gText = { ok: 'Bağlı', checking: 'Kontrol ediliyor…', needs_login: 'Yeniden bağlanmalı', error: 'Ulaşılamıyor', off: 'Örnek modda kapalı' }[google] || google;
   return (
     <Sheet title="Hesap" onClose={onClose}>
@@ -903,7 +903,7 @@ export function AccountSheet({ email, google, demo, onSetup, onClose, onReconnec
         {!demo && onHealthConnect ? (healthConnected
           ? <button type="button" className="btn big" onClick={() => { if (window.confirm('Google Health bağlantısı kaldırılsın mı?')) onHealthDisconnect(); }}>❤️ Google Health bağlı · bağlantıyı kaldır</button>
           : <button type="button" className="btn big" onClick={onHealthConnect}>❤️ Google Health (Fitbit Air) bağla</button>) : null}
-        {healthConnected && onToggleHealth ? <button type="button" className="btn big" onClick={onToggleHealth} aria-pressed={!healthHidden}>{healthHidden ? 'Sağlık şeridini Bugün\'de göster' : 'Sağlık şeridini Bugün\'de gizle'}</button> : null}
+        {onEditToday ? <button type="button" className="btn big" onClick={onEditToday}>⚙︎ Bugün sayfasında görünecek kutular</button> : null}
         <button type="button" className="btn big" onClick={onMissedSetup}>Telefon bağlantısı (MacroDroid: cevapsız çağrı, arama, bildirim özeti)</button>
         <button type="button" className="btn big" onClick={onToggleYarim} aria-pressed={!yarimHidden}>{yarimHidden ? 'Yarim alanını göster' : 'Yarim alanını bu cihazda gizle'}</button>
         <button type="button" className="btn big" onClick={onRefresh}>Verileri yenile</button>

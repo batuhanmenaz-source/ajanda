@@ -1286,7 +1286,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <AccountSheet email={email} onSetup={() => setSheet({ kind: 'setup' })} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })}
           healthConnected={!!(healthState.health && healthState.health.connected)} onHealthConnect={async () => { const r = await connectHealth(); if (r && r.error) say(r.error); }}
           onHealthDisconnect={async () => { await disconnectHealth(); healthState.reload(); say('Google Health bağlantısı kaldırıldı'); }}
-          healthHidden={healthHidden} onToggleHealth={toggleHealthHidden} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
+          healthHidden={healthHidden} onToggleHealth={toggleHealthHidden} onEditToday={() => setSheet({ kind: 'todayEdit' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
           backup={backup} onBackupNow={() => runDriveBackup(false)} onDownload={downloadBackup} onRestore={restoreBackup}
           onRefresh={() => { setSheet(null); loadedRange.current = null; load(false); refreshEvents(); }} onSignOut={onSignOut} />
       )}

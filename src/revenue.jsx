@@ -369,7 +369,7 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
       </section>
 
       <button type="button" className="btn primary big" onClick={() => actions.openRevenue(toDateInput(isCurrent ? today : new Date(month.getFullYear(), month.getMonth(), dim)))}>+ Ciro gir</button>
-      {onSales ? <button type="button" className="btn big rv-sales" onClick={onSales}>⬆ Pazaryeri Excel raporu yükle<small>Trendyol · Hepsiburada satış raporu</small></button> : null}
+      {onSales ? <button type="button" className="btn big rv-sales" onClick={onSales}>📦 Ürün bazında satış raporu<small>Excel yükle · ürün, pazaryeri ve stok kıyası</small></button> : null}
       <div className="wl-tools" style={{ marginTop: -8 }}>
         <span className="hint" style={{ flex: '1 1 160px' }}>Excel'e aktar:</span>
         <button type="button" className="btn" onClick={() => actions.exportRevenue(month, 'ay')}>⬇ {MONTHS[month.getMonth()]}</button>
@@ -395,8 +395,8 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
       </section>
 
       {/* Günlük liste */}
-      <section className="section">
-        <div className="section-head"><h2>Günler</h2><span className="meta">{list.length ? list.length + ' gün' : ''}</span></div>
+      <details className="section rv-days">
+        <summary className="section-head"><h2>Gün gün döküm</h2><span className="meta">{list.length ? list.length + ' gün · aç' : ''}</span></summary>
         <div className="card list">
           {list.length ? list.map((k) => {
             const d = fromDateInput(k);
@@ -429,7 +429,7 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
             );
           }) : <p className="empty">{loaded ? 'Henüz gün yok. "+ Ciro gir" ile başla.' : 'Yükleniyor…'}</p>}
         </div>
-      </section>
+      </details>
     </div>
   );
 }

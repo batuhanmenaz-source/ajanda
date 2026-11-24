@@ -35,7 +35,7 @@ function LocLink({ location, geo, small }) {
 }
 import {
   addDays, startOfDay, sameDay, fmtTime, fmtShort, fmtLong, whenLabel, rangeLabel, relDays, weekStart,
-  WEEKDAYS_SHORT, fromDateInput, toDateInput, daysBetween, dayLabel
+  WEEKDAYS, WEEKDAYS_SHORT, fromDateInput, toDateInput, daysBetween, dayLabel
 } from './dates.js';
 
 // ---------- Yardımcılar ----------
@@ -963,44 +963,59 @@ function DayAdd({ d, actions }) {
   );
 }
 
-// Gün kartı: başlık + kayıtlar (Hafta ve Liste görünümü, seçili gün)
-function DayCard({ d, items, now, actions, google, emptyText, onAdd }) {
-  const [adding, setAdding] = useState(false);
-  return (
-    <div className={'card upday' + (sameDay(d, now) ? ' is-today' : '')}>
-      <div className="upday-head">
-        <span className="upday-name">{dayLabel(d, now)}</span>
-        <span className="upday-date">{dayLabel(d, now) === fmtShort(d) ? WEEKDAYS_SHORT[d.getDay()] : WEEKDAYS_SHORT[d.getDay()] + ' · ' + fmtShort(d)}</span>
-        <button type="button" className="iconbtn upday-add" aria-label={fmtLong(d) + ' gününe ekle'} aria-expanded={adding} onClick={() => (onAdd ? onAdd(d) : setAdding(!adding))}><Icon.Plus width="18" height="18" /></button>
-      </div>
-      {adding ? <div className="cal-addrow"><DayAdd d={d} actions={actions} /></div> : null}
-      <div className="list">
-        {items.length ? items.map((e) => <DayItemRow key={e.key} e={e} actions={actions} compact />)
-          : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : emptyText || 'Boş gün'}</p>}
-      </div>
-    </div>
-  );
-}
-
 function MonthView({ data, events, google, now, actions, month, setMonth, sel, setSel, pass }) {
   const today = startOfDay(now);
   const gridStart = weekStart(month);
-  const ads = (data.collabs || []).filter((c) => c.status !== 'iptal' && c.start_at);
-  const cells = useMemo(() => Array.from({ length: 42 }, (_, i) => {
-    const d = addDays(gridStart, i);
-    const items = dayItems(d, { data, events }).filter(pass);
-    // Çok günlü kampanya/etkinlik ve yayındaki reklamlar şerit, diğerleri nokta/etiket
-    const bars = items.filter((e) => e.kind === 'campaign' && e.time === 'Tüm gün').map((e) => ({ key: e.key, color: e.item && e.item.marketplace ? mpColor(e.item.marketplace) : e.color }));
+  // Çok günlü kampanya/etkinlik ve influencer reklamları: haftaya yayılan, adı yazılı çubuklar
+  const spans = useMemo(() => {
+    const out = [];
+    (data.campaigns || []).forEach((c) => {
+      const s = fromDateInput(c.start_date), e = fromDateInput(c.end_date);
+      if (sameDay(s, e)) return;
+      const isEvent = c.kind === 'etkinlik';
+      if (!pass({ src: isEvent ? 'Etkinlik' : 'Kampanya' })) return;
+      out.push({ key: 'k' + c.id, s: startOfDay(s), e: startOfDay(e), label: c.name, sub: c.marketplace || '', color: c.marketplace ? mpColor(c.marketplace) : isEvent ? SRC_COLORS.Etkinlik : SRC_COLORS.Kampanya, rank: 0, open: () => actions.openCampaign(c) });
+    });
     if (pass({ src: 'Influencer' })) {
-      const d1 = addDays(d, 1);
-      ads.filter((c) => new Date(c.start_at) < d1 && adEnd(c) > d).forEach((c) => bars.push({ key: 'ab' + c.id, color: c.marketplace ? mpColor(c.marketplace) : SRC_COLORS.Influencer, ad: true }));
+      (data.collabs || []).filter((c) => c.status !== 'iptal' && c.start_at).forEach((c) => {
+        const s = adStart(c), e = adEnd(c);
+        if (sameDay(s, e)) return;
+        out.push({ key: 'a' + c.id, s: startOfDay(s), e: startOfDay(e), label: '🎬 ' + adWho(c, data.contacts) + (c.title ? ' · ' + c.title : ''), sub: c.marketplace || '', color: c.marketplace ? mpColor(c.marketplace) : SRC_COLORS.Influencer, rank: 1, ad: true, open: () => actions.openCollab(c) });
+      });
     }
-    const rest = items.filter((e) => !(e.kind === 'campaign' && e.time === 'Tüm gün') && e.kind !== 'collab');
-    return { d, items, bars, rest };
-  }), [data, events, gridStart.getTime(), pass]);
-  const rows = cells[35].d.getMonth() !== month.getMonth() ? 5 : 6;
-  const shown = cells.slice(0, rows * 7);
-  const selCell = sel ? shown.find((c) => sameDay(c.d, sel)) : null;
+    return out;
+  }, [data, pass]);
+  const weeks = useMemo(() => {
+    const ws = [];
+    for (let w = 0; w < 6; w++) {
+      const start = addDays(gridStart, w * 7), end = addDays(start, 6);
+      if (w >= 5 && start.getMonth() !== month.getMonth()) break;
+      // Şeritler: hafta içindeki parçalar, satırlara (lane) yerleştir
+      const segs = spans.filter((x) => x.s <= end && x.e >= start).map((x) => ({
+        ...x, c0: Math.max(0, daysBetween(start, x.s)), c1: Math.min(6, daysBetween(start, x.e)), cl: x.s < start, cr: x.e > end
+      })).sort((p, q) => p.rank - q.rank || p.c0 - q.c0 || (q.c1 - q.c0) - (p.c1 - p.c0));
+      const lanes = [];
+      const hiddenPer = Array(7).fill(0);
+      segs.forEach((g) => {
+        let l = lanes.findIndex((last) => last < g.c0);
+        if (l < 0) { l = lanes.length; lanes.push(-1); }
+        if (l >= 3) { for (let i = g.c0; i <= g.c1; i++) hiddenPer[i]++; g.lane = -1; return; }
+        lanes[l] = g.c1; g.lane = l;
+      });
+      const shownSegs = segs.filter((g) => g.lane >= 0);
+      const nl = Math.min(3, lanes.length);
+      const days = Array.from({ length: 7 }, (_, i) => {
+        const d = addDays(start, i);
+        const items = dayItems(d, { data, events }).filter(pass);
+        // Çubukta görünenleri tekrar yazma (kampanya "aktif/başlıyor/son gün", reklam başlangıç/bitiş)
+        const rest = items.filter((e) => !(e.span && (e.kind === 'campaign' || e.kind === 'collab')));
+        return { d, items, rest, hidden: hiddenPer[i] };
+      });
+      ws.push({ start, segs: shownSegs, nl, days });
+    }
+    return ws;
+  }, [data, events, gridStart.getTime(), pass, spans]);
+  const selDay = sel ? weeks.flatMap((w) => w.days).find((x) => sameDay(x.d, sel)) : null;
   const go = (n) => {
     const m = new Date(month.getFullYear(), month.getMonth() + n, 1);
     setMonth(m);
@@ -1008,51 +1023,56 @@ function MonthView({ data, events, google, now, actions, month, setMonth, sel, s
   };
   const isThisMonth = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
   return (
-    <>
-      <div className="week-nav">
-        <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
-        <span className="lbl">{MONTH_NAMES[month.getMonth()]} {month.getFullYear()}</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {!isThisMonth ? <button type="button" className="btn" onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSel(today); }}>Bugün</button> : null}
-          <button type="button" className="iconbtn" aria-label="Sonraki ay" onClick={() => go(1)}><Icon.Right /></button>
+    <div className="mc-wrap">
+      <div className="mc-main">
+        <div className="week-nav">
+          <button type="button" className="iconbtn" aria-label="Önceki ay" onClick={() => go(-1)}><Icon.Left /></button>
+          <span className="lbl">{MONTH_NAMES[month.getMonth()]} {month.getFullYear()}</span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {!isThisMonth ? <button type="button" className="btn" onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSel(today); }}>Bugün</button> : null}
+            <button type="button" className="iconbtn" aria-label="Sonraki ay" onClick={() => go(1)}><Icon.Right /></button>
+          </div>
         </div>
+        <div className="card mc">
+          <div className="mc-head" aria-hidden="true">{['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((w) => <span key={w}>{w}</span>)}</div>
+          {weeks.map((w) => (
+            <div key={w.start.toISOString()} className="mc-week" style={{ '--nl': w.nl }}>
+              {w.days.map(({ d, items, rest, hidden }) => {
+                const out = d.getMonth() !== month.getMonth();
+                const isToday = sameDay(d, today);
+                const isSel = sel && sameDay(d, sel);
+                const more = Math.max(0, rest.length - 2) + hidden;
+                return (
+                  <button type="button" key={d.toISOString()}
+                    className={'mc-day' + (out ? ' out' : '') + (d < today && !isToday ? ' past' : '') + (isToday ? ' today' : '') + (isSel ? ' sel' : '') + (d.getDay() === 0 || d.getDay() === 6 ? ' we' : '')}
+                    onClick={() => setSel(d)} aria-pressed={!!isSel} aria-label={fmtLong(d) + (items.length ? ', ' + items.length + ' kayıt' : ', boş')}>
+                    <span className="mc-num">{d.getDate()}</span>
+                    <span className="mc-items">
+                      {rest.slice(0, 2).map((e) => (
+                        <span key={e.key} className={'mc-it' + (e.done ? ' done' : '')}>
+                          <i style={{ background: e.color }} />{e.time && e.time !== 'Tüm gün' && !e.time.startsWith('–') ? <b>{e.time}</b> : null}<em>{e.title}</em>
+                        </span>
+                      ))}
+                      {more ? <span className="mc-more">+{more}</span> : null}
+                    </span>
+                    <span className="mc-dots" aria-hidden="true">{[...new Set(rest.map((e) => e.color))].slice(0, 4).map((c) => <i key={c} style={{ background: c }} />)}</span>
+                  </button>
+                );
+              })}
+              {w.segs.map((g) => (
+                <button key={g.key + w.start.getTime()} type="button" className={'mc-bar' + (g.ad ? ' ad' : '') + (g.cl ? ' cl' : '') + (g.cr ? ' cr' : '')}
+                  style={{ '--c0': g.c0, '--span': g.c1 - g.c0 + 1, '--lane': g.lane, '--bc': g.color }}
+                  onClick={(ev) => { ev.stopPropagation(); g.open(); }} title={g.label + (g.sub ? ' · ' + g.sub : '')}>
+                  <span>{g.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+        <p className="hint mc-note">Çubuklar çok günlü kampanya, etkinlik ve influencer reklamlarıdır; renk pazaryerini gösterir. Çubuğa dokun → kaydı aç, güne dokun → o günün listesi.</p>
       </div>
-      <div className="card mcal">
-        <div className="mcal-head" aria-hidden="true">
-          {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((w) => <span key={w}>{w}</span>)}
-        </div>
-        <div className="mcal-grid">
-          {shown.map(({ d, items, bars, rest }) => {
-            const out = d.getMonth() !== month.getMonth();
-            const past = d < today;
-            const isToday = sameDay(d, today);
-            const isSel = sel && sameDay(d, sel);
-            const colors = [...new Set(rest.map((e) => e.color))].slice(0, 4);
-            return (
-              <button type="button" key={d.toISOString()}
-                className={'mcal-day' + (out ? ' out' : '') + (past ? ' past' : '') + (isToday ? ' today' : '') + (isSel ? ' sel' : '')}
-                onClick={() => setSel(d)} aria-pressed={!!isSel}
-                aria-label={fmtLong(d) + (items.length ? ', ' + items.length + ' kayıt' : ', boş')}>
-                <span className="mcal-num">{d.getDate()}</span>
-                <span className="mcal-bars">
-                  {bars.slice(0, 3).map((b) => <span key={b.key} className={'mcal-bar' + (b.ad ? ' ad' : '')} style={{ background: b.color }} />)}
-                  {bars.length > 3 ? <span className="mcal-barmore">+{bars.length - 3}</span> : null}
-                </span>
-                <span className="mcal-dots">{colors.map((c) => <span key={c} className="dot" style={{ background: c, width: 6, height: 6 }} />)}</span>
-                <span className="mcal-labels">
-                  {items.slice(0, 3).map((e) => (
-                    <span key={e.key} className="mcal-label"><span className="dot" style={{ background: e.item && e.item.marketplace && (e.kind === 'campaign' || e.kind === 'collab') ? mpColor(e.item.marketplace) : e.color, width: 6, height: 6 }} />{e.title}</span>
-                  ))}
-                  {items.length > 3 ? <span className="mcal-more">+{items.length - 3}</span> : null}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <p className="hint" style={{ margin: '-6px 0 0' }}>Kalın şerit kampanya/etkinlik, ince şerit yayındaki influencer reklamı; renk pazaryerini gösterir.</p>
-      {selCell ? <SelectedDay d={selCell.d} items={selCell.items} now={now} actions={actions} google={google} /> : null}
-    </>
+      {selDay ? <SelectedDay d={selDay.d} items={selDay.items} now={now} actions={actions} google={google} /> : null}
+    </div>
   );
 }
 
@@ -1109,8 +1129,8 @@ function WeekView({ data, events, google, now, actions, day, setDay, pass }) {
       <SelectedDay d={sel.d} items={sel.items} now={now} actions={actions} google={google} />
       {later.length ? (
         <Section title={isThisWeek && sameDay(sel.d, today) ? 'Haftanın kalanı' : 'Sonraki günler'}>
-          <div className="cal-days">
-            {later.map(({ d, items }) => <DayCard key={d.toISOString()} d={d} items={items} now={now} actions={actions} google={google} />)}
+          <div className="card ag">
+            <AgendaDays days={later.map((x) => ({ d: x.d, items: x.items.filter((e) => !midSpan(e, x.d)) }))} now={now} actions={actions} google={google} />
           </div>
         </Section>
       ) : null}
@@ -1118,19 +1138,49 @@ function WeekView({ data, events, google, now, actions, day, setDay, pass }) {
   );
 }
 
+// Sade ajanda: gün başlığı + tek satırlık kayıtlar (Liste ve Hafta görünümü)
+const midSpan = (e, d) => e.span && e.kind === 'campaign' && !sameDay(e.span.s, d) && !sameDay(e.span.e, d);
+function AgendaDays({ days, now, actions, google }) {
+  const today = startOfDay(now);
+  return (
+    <>
+        {days.map(({ d, items }) => (
+        <div key={d.toISOString()} className={'ag-day' + (sameDay(d, today) ? ' today' : '') + (d.getDay() === 0 || d.getDay() === 6 ? ' we' : '')}>
+          <div className="ag-dh">
+            <b>{d.getDate()}</b>
+            <span>{dayLabel(d, now)}{dayLabel(d, now) !== WEEKDAYS[d.getDay()] ? <small>{WEEKDAYS[d.getDay()]}</small> : null}</span>
+            <button type="button" className="iconbtn" aria-label={fmtLong(d) + ' gününe ekle'} onClick={() => actions.newItemOn(d)}><Icon.Plus width="16" height="16" /></button>
+          </div>
+          <div className="ag-items">
+            {items.length ? items.map((e) => (
+              <button key={e.key} type="button" className={'ag-i' + (e.done ? ' done' : '')} onClick={() => openDayItem(e, actions)}>
+                <span className="ag-t">{e.time === 'Tüm gün' ? 'gün boyu' : e.time}</span>
+                <i style={{ background: e.item && e.item.marketplace && (e.kind === 'campaign' || e.kind === 'collab') ? mpColor(e.item.marketplace) : e.color }} />
+                <span className="ag-n">{e.title}</span>
+                {e.sub ? <span className="ag-s">{e.sub}</span> : null}
+              </button>
+            )) : <p className="empty">{google === 'checking' ? 'Yükleniyor…' : 'Kayıt yok'}</p>}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function ListView({ data, events, google, now, actions, pass }) {
   const [span, setSpan] = useState(30);
   const today = startOfDay(now);
+  // Çok günlü kampanyanın ara günleri ("aktif") her gün tekrar etmesin
   const days = Array.from({ length: span }, (_, i) => addDays(today, i))
-    .map((d) => ({ d, items: dayItems(d, { data, events }).filter(pass) }))
+    .map((d) => ({ d, items: dayItems(d, { data, events }).filter(pass).filter((e) => !(e.span && e.kind === 'campaign' && !sameDay(e.span.s, d) && !sameDay(e.span.e, d))) }))
     .filter((x, i) => i === 0 || x.items.length);
   const end = addDays(today, span - 1);
   return (
     <>
       <div className="week-nav"><span className="lbl">Önümüzdeki {span} gün</span><span className="hint" style={{ margin: 0 }}>{rangeLabel(today, end)}</span></div>
-      <div className="cal-days">
-        {days.map(({ d, items }) => <DayCard key={d.toISOString()} d={d} items={items} now={now} actions={actions} google={google} emptyText="Bugün için kayıt yok." />)}
-        {days.length === 1 && !days[0].items.length ? <div className="card"><p className="empty">Bu filtrede önümüzdeki {span} günde kayıt yok.</p></div> : null}
+      <div className="card ag">
+        <AgendaDays days={days} now={now} actions={actions} google={google} />
+        {days.length === 1 && !days[0].items.length ? <p className="empty">Bu filtrede önümüzdeki {span} günde kayıt yok.</p> : null}
       </div>
       {span < 180 ? <button type="button" className="btn" onClick={() => setSpan(span + 30)}>30 gün daha göster</button> : null}
     </>
@@ -1149,7 +1199,7 @@ export function CalendarScreen({ data, events, google, now, day, setDay, month, 
   const selectDay = (d) => { setDay(d); if (d.getMonth() !== month.getMonth() || d.getFullYear() !== month.getFullYear()) setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); };
   const props = { data, events, google, now, actions, pass };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 980 }}>
+    <div className={'calscreen v-' + view} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="seg three" role="tablist" aria-label="Takvim görünümü">
         {CAL_VIEWS.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{l}</button>)}
       </div>

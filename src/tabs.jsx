@@ -1,11 +1,11 @@
 // İş ve Özel alt sekmeleri (App ilk açılışta bunlara ihtiyaç duyar; ekranların kendisi gerektiğinde yüklenir)
-export const WORK_TABS = [['ozet', 'Özet'], ['ciro', 'Ciro'], ['kampanya', 'Kampanyalar'], ['mailler', 'Mailler'], ['bekleyenler', 'Bekleyenler'], ['influencer', 'Influencer'], ['notlar', 'Notlar'], ['satislar', 'Satış raporları'], ['raporlar', 'Raporlar']];
+export const WORK_TABS = [['ozet', 'Özet'], ['ciro', 'Ciro'], ['satislar', 'Satış raporu'], ['kampanya', 'Kampanyalar'], ['influencer', 'Influencer'], ['mailler', 'Mailler'], ['bekleyenler', 'Bekleyenler'], ['notlar', 'Notlar'], ['raporlar', 'Performans']];
 export const PRIVATE_TABS = [['ozet', 'Özet'], ['cuzdan', 'Cüzdan'], ['yarim', 'Yarim ❤️'], ['listeler', 'Listeler'], ['aliskanlik', 'Alışkanlıklar'], ['saglik', 'Sağlık'], ['ozelgun', 'Özel günler'], ['gunluk', 'Günlük not']];
 
 import { useState } from 'react';
 
 // Sık kullanılanlar her zaman görünür; geri kalanlar "Diğer" altında
-export const WORK_PRIMARY = ['ozet', 'ciro', 'kampanya', 'influencer', 'mailler'];
+export const WORK_PRIMARY = ['ozet', 'ciro', 'satislar', 'kampanya', 'influencer'];
 export const PRIVATE_PRIMARY = ['ozet', 'cuzdan', 'saglik', 'yarim', 'listeler'];
 
 export function SubTabs({ tabs, value, onChange, label, grid, primary }) {

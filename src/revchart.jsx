@@ -242,19 +242,8 @@ export function DailyRevenueChart({ month, revenue, campaigns, today, target, on
                 {selCamps.map((c) => <span key={c.id || c.name} style={{ '--c': c.color }}>{c.name}</span>)}
               </div>
             ) : null}
-            <div className="rch-rows">
-              {Object.entries(sd.by).sort((a, b) => b[1] - a[1]).map(([n, v]) => {
-                const w = wk && wk.by[n];
-                return (
-                  <div key={n} className="rch-row">
-                    <span className="rch-row-name"><span className="dot" style={{ background: mpColor(n) }} />{n}</span>
-                    <span className="rch-row-bar"><span style={{ width: (v / sd.v) * 100 + '%', background: mpColor(n) }} /></span>
-                    <span className="rch-row-v">{tlShort(v)}<em>%{Math.round((v / sd.v) * 100)}</em>
-                      {w ? <small className={v >= w ? 'up' : 'down'}>{v >= w ? '▲' : '▼'}{Math.abs(Math.round((v / w - 1) * 100))}%</small> : null}
-                    </span>
-                  </div>
-                );
-              })}
+            <div className="rch-mini">
+              {Object.entries(sd.by).sort((x, y) => y[1] - x[1]).map(([n, v]) => <span key={n}><i style={{ background: mpColor(n) }} />{n} <b>{tlShort(v)}</b></span>)}
             </div>
             <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => onEdit(sd.key)}>Bu günü düzenle</button>
           </div>

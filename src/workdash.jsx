@@ -94,7 +94,6 @@ export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, se
   const flagged = m.flagged || []; const waiting = m.waiting || [];
   const workRem = (data.reminders || []).filter((r) => !r.done && inScope(r, 'is'));
   const late = workRem.filter((r) => r.due_at && new Date(r.due_at) < now).sort((a, b) => a.due_at.localeCompare(b.due_at));
-  const todayRem = workRem.filter((r) => r.due_at && new Date(r.due_at) >= now && new Date(r.due_at) < addDays(today, 1)).sort((a, b) => a.due_at.localeCompare(b.due_at));
 
   const go = (t) => () => setSeg(t);
 
@@ -250,23 +249,6 @@ export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, se
           ) : <p className="empty">{m.configured === false ? 'İş maili bağlı değil.' : 'Bayraklı ya da cevap bekleyen mail yok.'}</p>}
         </Card>
 
-        {/* Bugün + gecikenler */}
-        <Card title="Bugün ve gecikenler" tone="#C92A2A" meta={late.length ? late.length + ' geciken' : todayRem.length ? todayRem.length + ' iş bugün' : ''}>
-          {late.length || todayRem.length ? (
-            <div className="wd-rows">
-              {[...late, ...todayRem].slice(0, 6).map((r) => {
-                const isLate = new Date(r.due_at) < now;
-                return (
-                  <button key={r.id} type="button" className="wd-row" onClick={() => actions.openReminder(r)}>
-                    <span className={'wd-ic ' + (isLate ? 'late' : 'today')} aria-hidden="true">{isLate ? '!' : '•'}</span>
-                    <span className="wd-row-main"><b>{r.title}</b><small>{r.marketplace || ''}</small></span>
-                    <span className={'wd-row-r' + (isLate ? ' late' : '')}>{isLate ? daysBetween(startOfDay(new Date(r.due_at)), today) ? daysBetween(startOfDay(new Date(r.due_at)), today) + ' gün gecikti' : 'bugün ' + fmtTime(new Date(r.due_at)) : fmtTime(new Date(r.due_at))}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : <p className="empty">Bugün için iş yok, geciken de yok 👏</p>}
-        </Card>
       </div>
     </div>
   );
