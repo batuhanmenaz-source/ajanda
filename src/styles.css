@@ -2510,3 +2510,7 @@ button.it-row:hover { background: var(--chip); }
   .ma-mp.total .ma-mp-n { grid-column: auto; display: none; }
   .ma-mp.total .ma-mp-v b::before { content: 'Toplam  '; font-weight: 600; color: var(--muted); white-space: pre; }
 }
+.cflag { flex: none; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.08); display: block; }
+.brand .side-flag { margin-left: auto; }
+.top-flag { display: inline-block; height: 20px; width: 30px; margin-right: 10px; vertical-align: 2px; }
+@media (min-width: 960px) { .top-flag { display: none; } }

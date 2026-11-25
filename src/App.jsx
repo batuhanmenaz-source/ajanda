@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 const SetupSheet = lazy(() => import('./setup.jsx').then((m) => ({ default: m.SetupSheet })));
+import { CircassianFlag } from './flag.jsx';
 import { Icon } from './Icons.jsx';
 import { TodayScreen, TodayEditSheet, CalendarScreen, CallsScreen, YarimPanel, MarketplacePanel, marketplaceCounts } from './screens.jsx';
 import { WORK_TABS, PRIVATE_TABS } from './tabs.jsx';
@@ -1165,7 +1166,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand"><span className="logo"><Icon.Calendar width="18" height="18" /></span>Ajanda</div>
+        <div className="brand"><span className="logo"><Icon.Calendar width="18" height="18" /></span>Ajanda<CircassianFlag height={20} className="side-flag" /></div>
         <button type="button" className="btn primary big" onClick={() => setSheet({ kind: 'quick' })}>+ Hızlı ekle</button>
         <button type="button" className="side-search" onClick={() => setSheet({ kind: 'search' })}><Icon.Search width="17" height="17" /><span>Ara</span><kbd>Ctrl K</kbd></button>
         <nav className="sidenav" aria-label="Ana menü">
@@ -1193,7 +1194,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
         <header className="topbar">
           <div style={{ minWidth: 0 }}>
             <div className="sub">{head[1]}</div>
-            <h1>{head[0]}</h1>
+            <h1><CircassianFlag className="top-flag" />{head[0]}</h1>
           </div>
           <div className="topbar-r">
             <button type="button" className="iconbtn top-search" aria-label="Ara" onClick={() => setSheet({ kind: 'search' })}><Icon.Search /></button>
