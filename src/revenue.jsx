@@ -360,7 +360,7 @@ export function RevenueScreen({ revenue: allRev, loaded, error, target, now, act
           <div><span className="rv-k">Günlük ortalama</span><span className="rv-v">{tl(avg)}</span></div>
           {forecast !== null ? <div><span className="rv-k">Ay sonu tahmini</span><span className="rv-v">{tl(forecast)}</span></div> : null}
           <div><span className="rv-k">Sipariş</span><span className="rv-v">{orders ? orders.toLocaleString('tr-TR') : '—'}</span></div>
-          <div><span className="rv-k">Girilen gün</span><span className="rv-v">{enteredDays} / {isCurrent ? today.getDate() : dim}</span></div>
+          <div><span className="rv-k">Girilen gün</span><span className="rv-v">{enteredDays} / {isCurrent ? today.getDate() - (byDay[toDateInput(today)] ? 0 : 1) || 1 : dim}</span></div>
         </div>
         {mpF ? null : tgt > 0 ? (
           <div className="rv-target">

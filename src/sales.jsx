@@ -116,6 +116,8 @@ async function saveCatalog(items, fileName) {
 
 // ---------- Yardımcılar ----------
 const MON = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+// Rapordaki son gün dün mü? Değilse "Son gün" (rapor geriden yüklendiyse etiket yanıltmasın)
+const dayWord = (k) => { if (!k) return 'Dün'; const t = new Date(); t.setHours(0, 0, 0, 0); const y = new Date(t); y.setDate(t.getDate() - 1); const f = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); return k === f(y) ? 'Dün' : k === f(t) ? 'Bugün' : 'Son gün'; };
 const dm = (k) => { const [, m, d] = k.split('-').map(Number); return d + ' ' + MON[m - 1]; };
 const plabel = (a, b) => (a === b ? dm(a) : dm(a) + ' – ' + dm(b));
 const nf = (v) => Math.round(v || 0).toLocaleString('tr-TR');
@@ -397,7 +399,7 @@ function ProductCard({ p, mps, cov, P, A, starred, onStar, onClose }) {
   const live = mps.filter((mp) => Object.values(p.v).some((t) => t[mp]));
   const st = stockOf(p, mps, cov);
   const tiles = [
-    { k: 'D', label: 'Dün · ' + dm(A), sub: [['önceki güne', deltaOf(p, 'D', 'D1', live, cov, 'q')], ['geçen ' + wdat(A) + '', deltaOf(p, 'D', 'Dw', live, cov, 'q')]] },
+    { k: 'D', label: dayWord(A) + ' · ' + dm(A), sub: [['önceki güne', deltaOf(p, 'D', 'D1', live, cov, 'q')], ['geçen ' + wdat(A) + '', deltaOf(p, 'D', 'Dw', live, cov, 'q')]] },
     { k: 'W', label: 'Son 7 gün', sub: [['önceki 7 güne', deltaOf(p, 'W', 'W1', live, cov, 'q')]] },
     { k: 'M', label: 'Son 30 gün', sub: [['önceki 30 güne', deltaOf(p, 'M', 'M1', live, cov, 'q')]] }
   ];
@@ -434,7 +436,7 @@ function ProductCard({ p, mps, cov, P, A, starred, onStar, onClose }) {
 
       {live.length ? (
         <div className="sr-pc-mp">
-          <div className="sr-pc-mpr head"><span>Pazaryeri</span><span>Dün</span><span>7 gün</span><span>30 gün</span></div>
+          <div className="sr-pc-mpr head"><span>Pazaryeri</span><span>{dayWord(A)}</span><span>7 gün</span><span>30 gün</span></div>
           {live.map((mp) => (
             <div key={mp} className="sr-pc-mpr">
               <span><i className="dot" style={{ background: mpColor(mp) }} />{mp}</span>
@@ -710,7 +712,7 @@ export function SalesView({ now, actions, prefs }) {
               const dw = i === 0 && total ? deltaOf(total, 'D', 'Dw', sel, cov, 'r') : null;
               return (
                 <div key={pid} className="sr-ov-t">
-                  <span className="sr-ov-l">{['Dün · ' + dm(A), 'Son 7 gün', 'Son 30 gün'][i]}{part(pid) ? <em>{part(pid)}</em> : null}</span>
+                  <span className="sr-ov-l">{[dayWord(A) + ' · ' + dm(A), 'Son 7 gün', 'Son 30 gün'][i]}{part(pid) ? <em>{part(pid)}</em> : null}</span>
                   <b>{tlShort(o.v)}</b>
                   <small>{nf(o.q)} adet</small>
                   <Chg d={o.d} label={['önceki güne', 'önceki 7 güne', 'önceki 30 güne'][i]} />
@@ -762,7 +764,7 @@ export function SalesView({ now, actions, prefs }) {
           <section className="card sr-list">
             <div className={'sr-row head' + (sel.length > 1 ? '' : ' one')} aria-hidden="true">
               <span className="sr-c-p">Ürün</span>
-              <span className="sr-c-n">Dün<small>{dm(A)}</small></span>
+              <span className="sr-c-n">{dayWord(A)}<small>{dm(A)}</small></span>
               <span className="sr-c-n">7 gün</span>
               <span className="sr-c-n">30 gün</span>
               {sel.length > 1 ? <span className="sr-c-mp">Pazaryeri payı</span> : null}
@@ -774,7 +776,7 @@ export function SalesView({ now, actions, prefs }) {
                   <span className="sr-code">{r.hero ? <i className={'sr-hero' + (stars.includes(r.p.id) ? ' on' : '')} title="Hero ürün">★</i> : null}{r.p.code || <em>{r.p.barcode || 'kodsuz'}</em>}</span>
                   <span className="sr-name">{r.p.n}</span>
                 </span>
-                {[['D', r.D, r.dD, 'Dün'], ['W', r.W, r.dW, '7g'], ['M', r.M, r.dM, '30g']].map(([k, v, d, l]) => (
+                {[['D', r.D, r.dD, dayWord(A) === 'Dün' ? 'Dün' : dm(A)], ['W', r.W, r.dW, '7g'], ['M', r.M, r.dM, '30g']].map(([k, v, d, l]) => (
                   <span key={k} className="sr-c-n"><em className="sr-ml">{l}</em><b>{fmtV(v)}</b><Chg d={d} /></span>
                 ))}
                 {r.share ? (
