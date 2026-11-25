@@ -2512,5 +2512,13 @@ button.it-row:hover { background: var(--chip); }
 }
 .cflag { flex: none; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.08); display: block; }
 .brand .side-flag { margin-left: auto; }
-.top-flag { display: inline-block; height: 20px; width: 30px; margin-right: 10px; vertical-align: 2px; }
+/* Geniş ekranda: içerik ile menü arasındaki boşlukta büyük bayrak */
+.gutter-flag { display: none; }
+@media (min-width: 1700px) {
+  .main { position: relative; }
+  .gutter-flag { display: flex; justify-content: center; position: absolute; top: 30px; left: 0; width: calc((100% - 1120px) / 2 + 32px); pointer-events: none; }
+  .gutter-flag .cflag { width: min(240px, calc(100% - 48px)); height: auto; aspect-ratio: 700 / 344; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+  .brand .side-flag { display: none; }
+}
+.top-flag { display: inline-block; height: 18px; width: 37px; margin-right: 10px; vertical-align: 2px; }
 @media (min-width: 960px) { .top-flag { display: none; } }

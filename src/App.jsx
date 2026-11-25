@@ -1191,6 +1191,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       </aside>
 
       <div className="main">
+        <div className="gutter-flag" aria-hidden="true"><CircassianFlag height={118} /></div>
         <header className="topbar">
           <div style={{ minWidth: 0 }}>
             <div className="sub">{head[1]}</div>

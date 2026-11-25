@@ -1,31 +1,34 @@
-// Çerkes (Adıge) bayrağı: yeşil zemin, 12 altın yıldız (9'u yay, 3'ü düz sıra), 3 çapraz ok.
-const G = '#00843D', Y = '#F7C82E';
-const star = (cx, cy, r) => {
+// Çerkes (Adıge) bayrağı: koyu yeşil zemin, 12 sarı yıldız (9'u geniş yay, 3'ü düz sıra), 3 çapraz ok.
+const G = '#2C6A1A', Y = '#FAFE30';
+const star = ([cx, cy], r = 17) => {
   const p = [];
   for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.4 : r;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.382 : r;
     p.push((cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1));
   }
   return p.join(' ');
 };
 const STARS = [
-  ...Array.from({ length: 9 }, (_, k) => { const t = ((-150 + 15 * k) * Math.PI) / 180; return [150 + 98 * Math.cos(t), 128 + 98 * Math.sin(t)]; }),
-  [118, 74], [150, 74], [182, 74],
-].map(([x, y]) => star(x, y, 11)).join(' M');
-const arrow = (rot) => (
-  <g transform={`rotate(${rot} 150 146)`}>
-    <line x1="150" y1="188" x2="150" y2="104" />
-    <polygon points="150,94 143,110 157,110" />
-    <path d="M150 178 l-8 10 M150 178 l8 10 M150 170 l-8 10 M150 170 l8 10" />
+  [84, 226], [123, 149], [185, 87], [262, 47], [349, 34], [436, 47], [513, 87], [575, 149], [614, 226],
+  [262, 102], [349, 102], [436, 102],
+];
+// Dikey ok (ucu yukarıda, tüyü aşağıda); çapraz oklar bunu (349,235) etrafında döndürür.
+const Arrow = ({ rot }) => (
+  <g transform={`rotate(${rot} 349 235)`}>
+    <line x1="349" y1="172" x2="349" y2="300" stroke={Y} strokeWidth="4" />
+    <polygon points="349,140 356,180 349,174 342,180" />
+    <polygon points="343,298 349,290 355,298 355,330 349,322 343,330" />
   </g>
 );
 
 export function CircassianFlag({ height = 18, className = '' }) {
   return (
-    <svg className={'cflag ' + className} viewBox="0 0 300 200" height={height} width={height * 1.5} role="img" aria-label="Çerkes bayrağı">
-      <rect width="300" height="200" fill={G} />
-      <g fill={Y}>{STARS.split(' M').map((p, i) => <polygon key={i} points={p} />)}</g>
-      <g stroke={Y} strokeWidth="5" strokeLinecap="round" fill={Y}>{arrow(-34)}{arrow(34)}{arrow(0)}</g>
+    <svg className={'cflag ' + className} viewBox="0 0 700 344" height={height} width={(height * 700) / 344} role="img" aria-label="Çerkes bayrağı">
+      <rect width="700" height="344" fill={G} />
+      <g fill={Y}>
+        {STARS.map((s, i) => <polygon key={i} points={star(s)} />)}
+        <Arrow rot={-39.5} /><Arrow rot={39.5} /><Arrow rot={0} />
+      </g>
     </svg>
   );
 }
