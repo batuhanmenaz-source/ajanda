@@ -1,6 +1,6 @@
 // Kampanyalar → İndirim kurguları: 2. ürüne %20, 5 Al 4 Öde, sepette %10, ödül ürün, indirim kodu…
 // Fiyat kampanyasına ek kurguların takibi, kullanım adedi ve pazaryeri indirim hakları.
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { MARKETPLACES, mpColor } from './constants.js';
 import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, daysBetween } from './dates.js';
 import { Section, Sheet } from './ui.jsx';
@@ -28,8 +28,11 @@ const condLbl = (p) => ((CONDS[p.type] || []).find((c) => c[0] === p.cond) || [,
 // Trendyol panelindeki varsayılan haklar (Kalan İndirim Hakkı: 100 / 50 / 50 / 10)
 export const DEFAULT_QUOTA = { Trendyol: { net: 100, kosullu: 50, birlikte: 50, kod: 10 } };
 
+// Kurgu kendi başına kampanya olunca açılan hazırlık adımları
+export const PROMO_PREPS = ['Kurguyu panelde kur', 'Mağaza reklamlarını kur', 'Influencer reklamlarını kur', 'Mağaza tasarımını güncelle'];
+
 // Hızlı başlangıç şablonları: tek dokunuşla tür, koşul ve değerler dolar
-const TEMPLATES = [
+export const TEMPLATES = [
   ['2. ürüne %20', { type: 'kosullu', cond: 'xurun', disc_type: 'yuzde', threshold: 2, disc_value: 20 }],
   ['5 Al 4 Öde', { type: 'kosullu', cond: 'adet', disc_type: 'xaly', threshold: 5, pay_qty: 4 }],
   ['3 Al 2 Öde', { type: 'kosullu', cond: 'adet', disc_type: 'xaly', threshold: 3, pay_qty: 2 }],
@@ -88,7 +91,7 @@ export function CampaignPromos({ c, promos, now, actions }) {
     <div className="cp">
       <div className="cp-h">
         <span>İndirim kurguları{list.length ? ' · ' + list.length : ''}</span>
-        <button type="button" className="linkbtn" onClick={add}>+ Kurgu ekle</button>
+        <button type="button" className="linkbtn" onClick={add}>{list.length ? '+ Bir kurgu daha' : '+ Kurgu ekle'}</button>
       </div>
       {list.length ? list.map((p) => {
         const t = typeOf(p.type); const used = usedTotal(p); const lim = Number(p.order_limit) || 0; const st = promoStatus(p, now);
@@ -108,7 +111,7 @@ export function CampaignPromos({ c, promos, now, actions }) {
     </div>
   );
 }
-const campDates = (c) => ({
+export const campDates = (c) => ({
   start_at: new Date(fromDateInput(c.start_date).getTime() + (c.start_time ? (Number(c.start_time.slice(0, 2)) * 60 + Number(c.start_time.slice(3, 5))) * 60000 : 10 * 3600000)).toISOString(),
   end_at: new Date(fromDateInput(c.end_date).getTime() + (c.end_time ? (Number(c.end_time.slice(0, 2)) * 60 + Number(c.end_time.slice(3, 5))) * 60000 : (23 * 60 + 59) * 60000)).toISOString()
 });
@@ -296,7 +299,10 @@ function PromoCard({ p, st, now, actions, camp }) {
           {revTotal(p) ? ' · ' + tlShort(revTotal(p)) + ' satış' : ''}
         </span>
       </div>
-      {st.key !== 'soon' ? <button type="button" className="btn ic-add" onClick={() => actions.openPromoUsage(p)}>+ Kullanım gir</button> : null}
+      <div className="pr-acts">
+        {st.key !== 'soon' ? <button type="button" className="btn ic-add" onClick={() => actions.openPromoUsage(p)}>+ Kullanım gir</button> : null}
+        {!camp && st.key !== 'past' ? <button type="button" className="btn ic-add" onClick={() => actions.promoToCampaign(p)} title="Kampanyalar listesinde ve takvimde ayrı kampanya olarak görünsün">📣 Kampanya yap</button> : null}
+      </div>
     </div>
   );
 }
@@ -309,7 +315,7 @@ export function PromoSheet({ initial, campaigns, onClose, onSave, onDelete }) {
   const e0 = initial.end_at ? new Date(initial.end_at) : (() => { const d = addDays(s0, 7); d.setHours(23, 0, 0, 0); return d; })();
   const str = (v) => (v != null && v !== '' ? String(v).replace('.', ',') : '');
   const [f, setF] = useState(() => ({
-    campaign_id: initial.campaign_id || '', marketplace: initial.marketplace || 'Trendyol', name: initial.name || '',
+    campaign_id: initial.campaign_id || (isEdit ? '' : '__new'), marketplace: initial.marketplace || 'Trendyol', name: initial.name || '',
     type: initial.type || 'kosullu', cond: initial.cond || 'xurun', disc_type: initial.disc_type || 'yuzde',
     disc_value: str(initial.disc_value), threshold: str(initial.threshold != null ? initial.threshold : (initial.type ? '' : 2)), pay_qty: initial.pay_qty ? String(initial.pay_qty) : '',
     reward: initial.reward || '', code: initial.code || '', scope: initial.scope || 'tum', scope_note: initial.scope_note || '',
@@ -363,6 +369,8 @@ export function PromoSheet({ initial, campaigns, onClose, onSave, onDelete }) {
   const badXY = rec.disc_type === 'xaly' && rec.threshold && rec.pay_qty && rec.pay_qty >= rec.threshold;
   const invalid = (f.type === 'kod' && !rec.code) || badXY || !f.sDate || !f.eDate || f.eDate < f.sDate;
 
+  const moreRef = useRef(false);
+  const setMore = (v) => { moreRef.current = v; };
   const submit = async (ev) => {
     ev.preventDefault();
     if (invalid || busy) return;
@@ -372,7 +380,7 @@ export function PromoSheet({ initial, campaigns, onClose, onSave, onDelete }) {
       await onSave({ id: initial.id, ...rec, campaign_id: f.campaign_id || null, marketplace: f.marketplace || null, name: f.name.trim() || null,
         reward: f.type === 'birlikte' ? f.reward.trim() || null : null, scope: f.scope, scope_note: f.scope === 'tum' ? null : f.scope_note.trim() || null,
         order_limit: f.order_limit ? parseInt(f.order_limit, 10) || null : null, start_at: iso(f.sDate, f.sTime), end_at: iso(f.eDate, f.eTime),
-        note: f.note.trim() || null, ...(isEdit ? {} : { uses: [] }) });
+        note: f.note.trim() || null, ...(isEdit ? {} : { uses: [] }) }, { more: moreRef.current });
     } finally { setBusy(false); }
   };
 
@@ -401,7 +409,8 @@ export function PromoSheet({ initial, campaigns, onClose, onSave, onDelete }) {
           <div className="field">
             <label htmlFor="pr-camp">Kampanya</label>
             <select id="pr-camp" value={f.campaign_id} onChange={(e) => pickCamp(e.target.value)}>
-              <option value="">Kampanyaya bağlı değil</option>
+              {!isEdit ? <option value="__new">＋ Kendi başına kampanya olsun</option> : null}
+              <option value="">Kampanyasız (sadece kurgu)</option>
               {campOpts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.marketplace ? ' · ' + c.marketplace : ''} ({fmtShort(fromDateInput(c.start_date))})</option>)}
             </select>
           </div>
@@ -464,6 +473,7 @@ export function PromoSheet({ initial, campaigns, onClose, onSave, onDelete }) {
           <label htmlFor="pr-name">İndirim adı (isteğe bağlı)</label>
           <input id="pr-name" type="text" value={f.name} onChange={(e) => set({ name: e.target.value })} placeholder={auto} />
         </div>
+        {f.campaign_id === '__new' ? <p className="hint pr-note">📣 Kaydedince <b>"{f.name.trim() || auto}"</b> adıyla ayrı bir kampanya açılır: kampanya listesinde, takvimde ve Google Takvim'de görünür, hazırlık adımları eklenir. Aynı kampanyaya sonra başka kurgular da ekleyebilirsin.</p> : null}
         <div className="ic-dates">
           <div className="field"><label htmlFor="pr-sd">Başlangıç</label><div className="row2" style={{ gap: 6 }}><input id="pr-sd" type="date" value={f.sDate} onChange={(e) => set({ sDate: e.target.value, ...(f.eDate < e.target.value ? { eDate: e.target.value } : {}) })} required /><input type="time" value={f.sTime} onChange={(e) => set({ sTime: e.target.value })} aria-label="Başlangıç saati" /></div></div>
           <div className="field"><label htmlFor="pr-ed">Bitiş</label><div className="row2" style={{ gap: 6 }}><input id="pr-ed" type="date" value={f.eDate} min={f.sDate} onChange={(e) => set({ eDate: e.target.value })} required /><input type="time" value={f.eTime} onChange={(e) => set({ eTime: e.target.value })} aria-label="Bitiş saati" /></div></div>
@@ -474,7 +484,10 @@ export function PromoSheet({ initial, campaigns, onClose, onSave, onDelete }) {
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
           {isEdit ? <button type="button" className="linkbtn" style={{ color: 'var(--danger)' }} onClick={() => onDelete(initial)}>Sil</button> : <span />}
-          <button type="submit" className="btn big primary" disabled={busy || invalid}>Kaydet</button>
+          <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {!isEdit && f.campaign_id ? <button type="submit" className="btn big" disabled={busy || invalid} onClick={() => setMore(true)}>Kaydet + bir kurgu daha</button> : null}
+            <button type="submit" className="btn big primary" disabled={busy || invalid} onClick={() => setMore(false)}>Kaydet</button>
+          </span>
         </div>
       </form>
     </Sheet>

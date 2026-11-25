@@ -2580,3 +2580,5 @@ button.it-row:hover { background: var(--chip); }
 .pr-preview b { font-family: var(--display); font-size: 18px; color: color-mix(in srgb, var(--t) 85%, black); }
 .pr-seg.three button, .seg.three button { line-height: 1.2; }
 @media (max-width: 480px) { .pr-seg.three { grid-template-columns: 1fr; } }
+.pr-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.pr-note { margin: -4px 0 0; padding: 10px 12px; border-radius: 10px; background: #FFF4E6; color: #8A3A0A; line-height: 1.45; }

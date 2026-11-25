@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { RULES, ruleLabel, parseRule, makeRule } from './recur.js';
 import { Sheet } from './ui.jsx';
+import { TEMPLATES, promoTitle, typeOf, campDates } from './promos.jsx';
 import { parseQuick } from './parse.js';
 import { parseMoney, catOf } from './money.js';
 import { AlertPicker } from './alertpicker.jsx';
@@ -579,7 +580,7 @@ export function NoteSheet({ initial, onClose, onSave, onDelete, alertDefaults = 
 }
 
 // ---------- Kampanya ----------
-export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefaults = DEFAULT_ALERTS }) {
+export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefaults = DEFAULT_ALERTS, promos, onAddPromo }) {
   const isEdit = !!initial.id;
   const today = toDateInput(new Date());
   const [name, setName] = useState(initial.name || '');
@@ -588,6 +589,10 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
   const [end, setEnd] = useState(initial.end_date || today);
   const [notes, setNotes] = useState(initial.notes || '');
   const [preps, setPreps] = useState(DEFAULT_PREPS.join('\n'));
+  // Yeni kampanyayla birlikte açılacak indirim kurguları (birden fazla seçilebilir)
+  const [tpls, setTpls] = useState([]);
+  const togTpl = (l) => setTpls((x) => (x.includes(l) ? x.filter((y) => y !== l) : [...x, l]));
+  const linked = isEdit ? (promos || []).filter((p) => p.campaign_id === initial.id) : [];
   const [kind, setKind] = useState(initial.kind === 'etkinlik' ? 'etkinlik' : 'kampanya');
   const [loc, setLoc] = useState({ text: initial.location || '', geo: initial.location_geo || '' });
   const isEvent = kind === 'etkinlik';
@@ -621,7 +626,11 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
           // Tekrar yalnız tek günlük etkinlikte (sütun yoksa bozmamak için gerektiğinde gönder: 27 numaralı SQL)
           ...(repeat || initial.repeat_rule ? { repeat_rule: isEvent && start === end ? (repeat || null) : null } : {}),
           alerts: isEvent ? alerts : { ...alerts, end: endAlert }, ...(loc.text.trim() || initial.location ? { location: loc.text.trim() || null, location_geo: loc.text.trim() ? (loc.geo || null) : null } : {}) },
-        isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean)
+        isEdit || isEvent ? null : preps.split('\n').map((s) => s.trim()).filter(Boolean),
+        isEdit || isEvent || !tpls.length ? {} : { promos: (() => {
+          const d = campDates({ start_date: start, end_date: end, start_time: timed ? sTime : null, end_time: timed ? eTime : null });
+          return TEMPLATES.filter(([l]) => tpls.includes(l)).map(([, t]) => ({ ...t, marketplace: mp || null, scope: 'tum', ...d }));
+        })() }
       );
     } finally { setBusy(false); }
   };
@@ -684,6 +693,22 @@ export function CampaignSheet({ initial, onClose, onSave, onDelete, alertDefault
           <div className="field">
             <label htmlFor="c-rep">Tekrar</label>
             <RepeatPicker id="c-rep" value={repeat} onChange={setRepeat} anchor={timed ? combine(start, sTime) : fromDateInput(start)} />
+          </div>
+        ) : null}
+        {!isEvent && !isEdit ? (
+          <div className="field">
+            <span className="lbl">İndirim kurguları <small className="muted">(isteğe bağlı · birden fazla seçebilirsin)</small></span>
+            <div className="typechips">
+              {TEMPLATES.map(([l, t]) => <button key={l} type="button" className={'chip' + (tpls.includes(l) ? ' on' : '')} aria-pressed={tpls.includes(l)} onClick={() => togTpl(l)}>{typeOf(t.type).i} {l}</button>)}
+            </div>
+            <span className="hint">{tpls.length ? tpls.length + ' kurgu kampanyayla birlikte açılır; sayıları ve ürünleri sonra kampanya kartından düzenlersin.' : 'Fiyat dışı kurgu varsa seç; başka kurgular kampanya kartındaki "+ Kurgu ekle" ile eklenir.'}</span>
+          </div>
+        ) : null}
+        {isEdit && !isEvent ? (
+          <div className="field">
+            <span className="lbl">İndirim kurguları{linked.length ? ' · ' + linked.length : ''}</span>
+            {linked.length ? <div className="typechips">{linked.map((p) => <span key={p.id} className="chip" style={{ cursor: 'default' }}>{typeOf(p.type).i} {promoTitle(p)}</span>)}</div> : null}
+            {onAddPromo ? <button type="button" className="btn" style={{ alignSelf: 'flex-start', marginTop: 6 }} onClick={() => onAddPromo({ campaign_id: initial.id, marketplace: initial.marketplace || 'Trendyol', ...campDates(initial) })}>+ {linked.length ? 'Bir kurgu daha ekle' : 'Kurgu ekle'}</button> : null}
           </div>
         ) : null}
         {!isEdit && !isEvent && (

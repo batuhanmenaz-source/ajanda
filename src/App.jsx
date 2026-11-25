@@ -25,7 +25,7 @@ import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleR
 import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
 import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
-import { PromoSheet, PromoQuotaSheet, promoTitle } from './promos.jsx';
+import { PromoSheet, PromoQuotaSheet, promoTitle, PROMO_PREPS } from './promos.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
 import { SearchSheet } from './search.jsx';
 import { useHealth, connectHealth, disconnectHealth, SportSheet, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
@@ -542,7 +542,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   };
 
   // ---------- Kampanyalar ----------
-  const saveCampaign = async (fields, preps) => {
+  const saveCampaign = async (fields, preps, extra = {}) => {
     try {
       let row;
       if (fields.id) {
@@ -559,8 +559,14 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       }
       const ids = await gsync(() => syncCampaign(row));
       if (ids) { await store.update('campaigns', row.id, ids); patchLocal('campaigns', row.id, ids); }
-      setSheet(null);
-      say(row.kind === 'etkinlik' ? 'Etkinlik kaydedildi' : 'Kampanya kaydedildi');
+      // Yeni kampanyayla birlikte seçilen indirim kurguları (SQL 32 yoksa kampanya yine kaydedilir)
+      let nP = 0;
+      if (extra.promos && extra.promos.length) {
+        try { const rows = await store.insertMany('promos', extra.promos.map((p) => ({ ...p, campaign_id: row.id, uses: [] }))); addLocal('promos', rows); nP = rows.length; }
+        catch (e) { fail(e); }
+      }
+      if (!extra.silent) { setSheet(null); say(row.kind === 'etkinlik' ? 'Etkinlik kaydedildi' : 'Kampanya kaydedildi' + (nP ? ' · ' + nP + ' kurguyla' : '')); }
+      return row;
     } catch (e) {
       const m = (e && e.message) || '';
       if (/start_time|end_time/.test(m)) { console.error(e); say('Kaydedilemedi: Kampanya saati için Supabase\'de 13 numaralı SQL\'i çalıştırman gerekiyor.'); }
@@ -895,7 +901,28 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
   const saveCode = async (c) => { await saveRow('inf_codes', c, 'İndirim kodu kaydedildi'); };
   const deleteCode = async (c) => { await deleteRow('inf_codes', c, '"' + c.code + '" kodu silinsin mi?'); };
   const saveCodeUsage = async (c, uses) => { await saveRow('inf_codes', { id: c.id, uses }, 'Kullanım kaydedildi'); };
-  const savePromo = async (p) => { await saveRow('promos', p, 'İndirim kurgusu kaydedildi'); };
+  // Kurgu kendi başına kampanya olacaksa önce kampanyayı (takvim + hazırlık adımlarıyla) aç, sonra kurguyu bağla
+  const campaignFromPromo = async (p) => {
+    const s0 = new Date(p.start_at), e0 = new Date(p.end_at);
+    const hhmm = (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    return saveCampaign({ name: promoTitle(p), marketplace: p.marketplace || null, start_date: toDateInput(s0), end_date: toDateInput(e0), notes: null, kind: 'kampanya',
+      start_time: hhmm(s0), end_time: hhmm(e0), alerts: alertDefs.campaign }, PROMO_PREPS, { silent: true });
+  };
+  const savePromo = async (p, opts = {}) => {
+    let rec = p;
+    if (p.campaign_id === '__new') {
+      const c = await campaignFromPromo(p);
+      if (!c) return;
+      rec = { ...p, campaign_id: c.id };
+    }
+    const row = await saveRow('promos', rec, p.campaign_id === '__new' ? 'Kurgu kampanya olarak kaydedildi · takvime eklendi' : 'İndirim kurgusu kaydedildi');
+    if (row && opts.more) setSheet({ kind: 'promo', item: { campaign_id: row.campaign_id, marketplace: row.marketplace, start_at: row.start_at, end_at: row.end_at } });
+  };
+  const promoToCampaign = async (p) => {
+    const c = await campaignFromPromo(p);
+    if (!c) return;
+    await saveRow('promos', { id: p.id, campaign_id: c.id }, '"' + c.name + '" kampanyası açıldı · takvime eklendi');
+  };
   const deletePromo = async (p) => { await deleteRow('promos', p, '"' + promoTitle(p) + '" kurgusu silinsin mi?'); };
   const savePromoUsage = async (p, uses) => { await saveRow('promos', { id: p.id, uses }, 'Kullanım kaydedildi'); };
   const exportCodes = async (opts) => {
@@ -1041,6 +1068,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openPromo: (x) => setSheet({ kind: 'promo', item: x }),
     openPromoUsage: (x) => setSheet({ kind: 'promouse', item: x }),
     openPromoQuota: (mp) => setSheet({ kind: 'promoquota', item: mp }),
+    promoToCampaign,
     openContact: (x) => setSheet({ kind: 'contact', item: x }),
     openHabit: (x) => setSheet({ kind: 'habit', item: x.id ? x : { ...x, sort: data.habits.length } }),
     openList: (x) => setSheet({ kind: 'list', item: x }),
@@ -1294,7 +1322,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'note' && <NoteSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveNote} onDelete={deleteNote} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'mailSetup' && <MailSetupSheet onClose={() => { setSheet(null); mailState.reload(); }} onTrust={(fp) => store.saveSettings({ mail_cert_fp: fp })} />}
       {sheet && sheet.kind === 'gevent' && <GoogleEventSheet ev={sheet.item} onClose={() => setSheet(null)} onConvert={(c) => setSheet({ kind: 'campaign', item: c })} />}
-      {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} alertDefaults={alertDefs} />}
+      {sheet && sheet.kind === 'campaign' && <CampaignSheet initial={sheet.item} promos={data.promos} onAddPromo={(c) => setSheet({ kind: 'promo', item: c })} onClose={() => setSheet(null)} onSave={saveCampaign} onDelete={deleteCampaign} alertDefaults={alertDefs} />}
       {sheet && sheet.kind === 'alertDefaults' && <AlertDefaultsSheet defaults={alertDefs} onClose={() => setSheet(null)} onSave={saveAlertDefaults} />}
       {sheet && sheet.kind === 'yarim' && (
         <Sheet title="Yarim" onClose={() => setSheet(null)}>
