@@ -2516,8 +2516,8 @@ button.it-row:hover { background: var(--chip); }
 .gutter-flag { display: none; }
 @media (min-width: 1700px) {
   .main { position: relative; }
-  .gutter-flag { display: flex; justify-content: center; position: absolute; top: 30px; left: 0; width: calc((100% - 1120px) / 2 + 32px); pointer-events: none; }
-  .gutter-flag .cflag { width: min(240px, calc(100% - 48px)); height: auto; aspect-ratio: 700 / 344; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+  .gutter-flag { display: flex; justify-content: center; position: absolute; top: 36px; left: 0; width: calc((100% - 1120px) / 2 + 32px); pointer-events: none; }
+  .gutter-flag .cflag { width: min(160px, calc(100% - 64px)); height: auto; aspect-ratio: 700 / 344; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
   .brand .side-flag { display: none; }
 }
 .top-flag { display: inline-block; height: 18px; width: 37px; margin-right: 10px; vertical-align: 2px; }
