@@ -25,7 +25,7 @@ import { checkGoogle, listEvents, GoogleAuthError, clearGoogleCache, lastGoogleR
 import { collectBackup, uploadToDrive, downloadJSON, backupName, parseBackup, summarize, BACKUP_TABLES } from './backup.js';
 import { AdSheet } from './ads.jsx';
 import { CodeSheet, CodeUsageSheet } from './codes.jsx';
-import { PromoSheet, PromoQuotaSheet, promoTitle, PROMO_PREPS } from './promos.jsx';
+import { PromoSheet, PromoQuotaSheet, PromoLinkSheet, PromoAttachSheet, promoTitle, PROMO_PREPS } from './promos.jsx';
 import { useMail, MailSetupSheet } from './mail.jsx';
 import { SearchSheet } from './search.jsx';
 import { useHealth, connectHealth, disconnectHealth, SportSheet, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
@@ -575,14 +575,13 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       else fail(e);
     }
   };
-  const deleteCampaign = async (c) => {
-    if (!window.confirm('"' + c.name + '" ' + (c.kind === 'etkinlik' ? 'etkinliği' : 'kampanyası ve hazırlık adımları') + ' silinsin mi?')) return;
+  const deleteCampaign = async (c, ask = true) => {
+    if (ask && !window.confirm('"' + c.name + '" ' + (c.kind === 'etkinlik' ? 'etkinliği' : 'kampanyası ve hazırlık adımları') + ' silinsin mi?')) return;
     try {
       await gsync(() => unsyncCampaign(c));
       await store.remove('campaigns', c.id);
       removeLocal('campaigns', c.id);
-      setSheet(null);
-      say(c.kind === 'etkinlik' ? 'Etkinlik silindi' : 'Kampanya silindi');
+      if (ask) { setSheet(null); say(c.kind === 'etkinlik' ? 'Etkinlik silindi' : 'Kampanya silindi'); }
     } catch (e) { fail(e); }
   };
   const toggleTask = async (t) => {
@@ -918,6 +917,16 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     const row = await saveRow('promos', rec, p.campaign_id === '__new' ? 'Kurgu kampanya olarak kaydedildi · takvime eklendi' : 'İndirim kurgusu kaydedildi');
     if (row && opts.more) setSheet({ kind: 'promo', item: { campaign_id: row.campaign_id, marketplace: row.marketplace, start_at: row.start_at, end_at: row.end_at } });
   };
+  // Kurguyu başka kampanyaya bağla; kurgu için otomatik açılmış (adı kurguyla aynı, başka kurgusu yok) eski kampanyayı sor ve kaldır
+  const linkPromo = async (p, cid) => {
+    if (cid === '__new') { await promoToCampaign(p); return; }
+    const old = data.campaigns.find((c) => c.id === p.campaign_id);
+    const target = data.campaigns.find((c) => c.id === cid);
+    const row = await saveRow('promos', { id: p.id, campaign_id: cid || null }, target ? '"' + promoTitle(p) + '" → ' + target.name + ' kampanyasına bağlandı' : 'Kampanya bağlantısı kaldırıldı');
+    if (!row || !old || old.id === cid) return;
+    const alone = !(data.promos || []).some((x) => x.campaign_id === old.id && x.id !== p.id);
+    if (alone && old.name === promoTitle(p) && window.confirm('Bu kurgu için ayrıca açılmış "' + old.name + '" kampanyası artık boş. Takvimden de silinsin mi?')) await deleteCampaign(old, false);
+  };
   const promoToCampaign = async (p) => {
     const c = await campaignFromPromo(p);
     if (!c) return;
@@ -1069,6 +1078,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openPromoUsage: (x) => setSheet({ kind: 'promouse', item: x }),
     openPromoQuota: (mp) => setSheet({ kind: 'promoquota', item: mp }),
     promoToCampaign,
+    openPromoLink: (x) => setSheet({ kind: 'promolink', item: x }),
+    openPromoAttach: (c) => setSheet({ kind: 'promoattach', item: c }),
     openContact: (x) => setSheet({ kind: 'contact', item: x }),
     openHabit: (x) => setSheet({ kind: 'habit', item: x.id ? x : { ...x, sort: data.habits.length } }),
     openList: (x) => setSheet({ kind: 'list', item: x }),
@@ -1296,6 +1307,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'infcodeuse' && <CodeUsageSheet code={sheet.item} onClose={() => setSheet(null)} onSave={saveCodeUsage} />}
       {sheet && sheet.kind === 'promo' && <PromoSheet initial={sheet.item} campaigns={data.campaigns} onClose={() => setSheet(null)} onSave={savePromo} onDelete={deletePromo} />}
       {sheet && sheet.kind === 'promouse' && <CodeUsageSheet code={sheet.item} title={'Kullanım · ' + promoTitle(sheet.item)} revLabel="Kurgulu satış (₺)" onClose={() => setSheet(null)} onSave={savePromoUsage} />}
+      {sheet && sheet.kind === 'promolink' && <PromoLinkSheet promo={sheet.item} campaigns={data.campaigns} onClose={() => setSheet(null)} onLink={linkPromo} />}
+      {sheet && sheet.kind === 'promoattach' && <PromoAttachSheet campaign={sheet.item} promos={data.promos} campaigns={data.campaigns} onClose={() => setSheet(null)} onLink={linkPromo} />}
       {sheet && sheet.kind === 'promoquota' && <PromoQuotaSheet mp={sheet.item} quota={promoQuota} onClose={() => setSheet(null)} onSave={savePromoQuota} />}
       {sheet && sheet.kind === 'collab' && <AdSheet initial={sheet.item} collabs={data.collabs} contacts={data.contacts} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('collabs', f, 'Reklam kaydedildi')} onDelete={(x) => deleteRow('collabs', x, 'Bu reklam silinsin mi?')} />}

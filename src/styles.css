@@ -2582,3 +2582,23 @@ button.it-row:hover { background: var(--chip); }
 @media (max-width: 480px) { .pr-seg.three { grid-template-columns: 1fr; } }
 .pr-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 .pr-note { margin: -4px 0 0; padding: 10px 12px; border-radius: 10px; background: #FFF4E6; color: #8A3A0A; line-height: 1.45; }
+.chip.pr-star { border-color: #FFC078; background: #FFF9DB; }
+.chip.pr-star.on { background: var(--ink); border-color: var(--ink); }
+.pr-sug { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #EDF2FF; border: 1px solid #BAC8FF; font-size: 13px; color: #364FC7; line-height: 1.45; }
+.pr-sug .btn { align-self: flex-start; }
+.cp-hb { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.pl-list { display: flex; flex-direction: column; gap: 6px; }
+.pl-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; text-align: left; border: 1px solid var(--line); border-left: 4px solid var(--mp); background: var(--surface); border-radius: 10px; padding: 9px 12px; font: inherit; cursor: pointer; color: var(--ink); }
+.pl-row:hover { background: var(--chip); }
+.pl-main { display: flex; flex-direction: column; min-width: 0; }
+.pl-main b { font-size: 14px; } .pl-main small { font-size: 12px; color: var(--muted); }
+.pl-tag { flex: none; font-size: 11px; font-weight: 700; color: #2B8A3E; background: var(--green-soft); border-radius: 999px; padding: 3px 8px; }
+.pi { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); border-left: 4px solid var(--t); background: var(--surface); }
+.pi-s { width: auto; min-height: 34px; padding: 4px 8px; font-size: 13px; font-weight: 600; border-radius: 8px; }
+.pi-f { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; font-weight: 600; flex: 1 1 auto; }
+.pi-f input.pi-n { min-height: 34px; padding: 4px 6px; text-align: center; font-weight: 700; font-size: 14px; border-radius: 8px; }
+.pi-u { width: auto; min-height: 34px; padding: 2px 4px; font-size: 13px; font-weight: 700; border-radius: 8px; }
+.pi-x { margin-left: auto; width: 32px; height: 32px; min-height: 32px; }
+.field .pi select.pi-s, .field .pi select.pi-u { width: auto; flex: none; }
+.field .pi input.pi-n { flex: none; min-height: 34px; padding: 4px 6px; }
+.field .pi select.pi-u { min-width: 52px; }

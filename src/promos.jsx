@@ -32,9 +32,10 @@ export const DEFAULT_QUOTA = { Trendyol: { net: 100, kosullu: 50, birlikte: 50, 
 export const PROMO_PREPS = ['Kurguyu panelde kur', 'Mağaza reklamlarını kur', 'Influencer reklamlarını kur', 'Mağaza tasarımını güncelle'];
 
 // Hızlı başlangıç şablonları: tek dokunuşla tür, koşul ve değerler dolar
+// İlk ikisi her kampanyada kurulan standartlar (⭐)
 export const TEMPLATES = [
-  ['2. ürüne %20', { type: 'kosullu', cond: 'xurun', disc_type: 'yuzde', threshold: 2, disc_value: 20 }],
-  ['5 Al 4 Öde', { type: 'kosullu', cond: 'adet', disc_type: 'xaly', threshold: 5, pay_qty: 4 }],
+  ['2. ürüne %20', { type: 'kosullu', cond: 'xurun', disc_type: 'yuzde', threshold: 2, disc_value: 20 }, true],
+  ['5 Al 4 Öde', { type: 'kosullu', cond: 'adet', disc_type: 'xaly', threshold: 5, pay_qty: 4 }, true],
   ['3 Al 2 Öde', { type: 'kosullu', cond: 'adet', disc_type: 'xaly', threshold: 3, pay_qty: 2 }],
   ['2 adete %15', { type: 'kosullu', cond: 'adet', disc_type: 'yuzde', threshold: 2, disc_value: 15 }],
   ['₺500 üzeri ₺75', { type: 'kosullu', cond: 'tutar', disc_type: 'tl', threshold: 500, disc_value: 75 }],
@@ -91,7 +92,10 @@ export function CampaignPromos({ c, promos, now, actions }) {
     <div className="cp">
       <div className="cp-h">
         <span>İndirim kurguları{list.length ? ' · ' + list.length : ''}</span>
-        <button type="button" className="linkbtn" onClick={add}>{list.length ? '+ Bir kurgu daha' : '+ Kurgu ekle'}</button>
+        <span className="cp-hb">
+          {(promos || []).some((p) => p.campaign_id !== c.id && promoStatus(p, now).key !== 'past') ? <button type="button" className="linkbtn" onClick={() => actions.openPromoAttach(c)}>🔗 Var olanı bağla</button> : null}
+          <button type="button" className="linkbtn" onClick={add}>{list.length ? '+ Bir kurgu daha' : '+ Kurgu ekle'}</button>
+        </span>
       </div>
       {list.length ? list.map((p) => {
         const t = typeOf(p.type); const used = usedTotal(p); const lim = Number(p.order_limit) || 0; const st = promoStatus(p, now);
@@ -301,9 +305,112 @@ function PromoCard({ p, st, now, actions, camp }) {
       </div>
       <div className="pr-acts">
         {st.key !== 'soon' ? <button type="button" className="btn ic-add" onClick={() => actions.openPromoUsage(p)}>+ Kullanım gir</button> : null}
-        {!camp && st.key !== 'past' ? <button type="button" className="btn ic-add" onClick={() => actions.promoToCampaign(p)} title="Kampanyalar listesinde ve takvimde ayrı kampanya olarak görünsün">📣 Kampanya yap</button> : null}
+        {st.key !== 'past' ? <button type="button" className="btn ic-add" onClick={() => actions.openPromoLink(p)}>🔗 {camp ? 'Kampanyayı değiştir' : 'Kampanyaya bağla'}</button> : null}
       </div>
     </div>
+  );
+}
+
+// Tarihleri çakışan kampanyalar: önce aynı pazaryeri, sonra en çok örtüşen
+export function overlapCamps(camps, mp, sDate, eDate) {
+  return (camps || []).filter((c) => c.kind !== 'etkinlik' && c.start_date <= eDate && c.end_date >= sDate)
+    .map((c) => ({ c, sc: (c.marketplace === mp ? 1000 : !c.marketplace ? 500 : 0) - Math.abs(daysBetween(fromDateInput(c.start_date), fromDateInput(sDate))) }))
+    .filter((x) => x.sc >= 0 || !mp).sort((a, b) => b.sc - a.sc).map((x) => x.c);
+}
+
+// ---- Satır içi kurgu düzenleyici (kampanya formunda): şekil + elle girilen sayılar
+export const SHAPES = [
+  ['xurun', 'X. ürüne indirim', { type: 'kosullu', cond: 'xurun', disc_type: 'yuzde', threshold: 2, disc_value: 20 }],
+  ['xaly', 'X Al Y Öde', { type: 'kosullu', cond: 'adet', disc_type: 'xaly', threshold: 5, pay_qty: 4 }],
+  ['adet', 'Adete indirim', { type: 'kosullu', cond: 'adet', disc_type: 'yuzde', threshold: 2, disc_value: 15 }],
+  ['tutar', 'Tutar üzeri indirim', { type: 'kosullu', cond: 'tutar', disc_type: 'tl', threshold: 500, disc_value: 75 }],
+  ['net', 'Sepette indirim', { type: 'net', disc_type: 'yuzde', disc_value: 10 }],
+  ['odul', 'Hediye / ödül ürün', { type: 'birlikte', cond: 'sepet', disc_type: 'odul', threshold: 400, disc_value: 1 }]
+];
+export const shapeOf = (p) => (p.type === 'net' ? 'net' : p.type === 'birlikte' ? 'odul' : p.cond === 'xurun' ? 'xurun' : p.cond === 'tutar' ? 'tutar' : p.disc_type === 'xaly' ? 'xaly' : 'adet');
+export function PromoInline({ p, onChange, onRemove }) {
+  const sh = shapeOf(p);
+  const n = (k, w = 54, ph = '') => <input type="text" inputMode="decimal" className="pi-n" style={{ width: w }} value={p[k] == null ? '' : String(p[k]).replace('.', ',')} placeholder={ph} aria-label={k}
+    onChange={(e) => { const v = e.target.value.replace(',', '.'); onChange({ ...p, [k]: v === '' ? '' : v }); }} />;
+  const unit = () => (
+    <select className="pi-u" value={p.disc_type === 'tl' ? 'tl' : 'yuzde'} onChange={(e) => onChange({ ...p, disc_type: e.target.value })} aria-label="Birim"><option value="yuzde">%</option><option value="tl">₺</option></select>
+  );
+  return (
+    <div className="pi" style={{ '--t': typeOf(p.type).c }}>
+      <select className="pi-s" value={sh} onChange={(e) => onChange({ ...(SHAPES.find((x) => x[0] === e.target.value)[2]) })} aria-label="Kurgu şekli">
+        {SHAPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+      <span className="pi-f">
+        {sh === 'xurun' ? <>{n('threshold', 40)}<span>. ürüne</span>{unit()}{n('disc_value')}</> : null}
+        {sh === 'xaly' ? <>{n('threshold', 40)}<span>Al</span>{n('pay_qty', 40)}<span>Öde</span></> : null}
+        {sh === 'adet' ? <>{n('threshold', 40)}<span>adete</span>{unit()}{n('disc_value')}</> : null}
+        {sh === 'tutar' ? <><span>₺</span>{n('threshold', 70)}<span>üzeri</span>{unit()}{n('disc_value')}</> : null}
+        {sh === 'net' ? <><span>Sepette</span>{unit()}{n('disc_value')}</> : null}
+        {sh === 'odul' ? <><span>₺</span>{n('threshold', 70)}<span>üzeri ödül ürün ₺</span>{n('disc_value', 50)}</> : null}
+      </span>
+      <button type="button" className="iconbtn pi-x" aria-label="Kurguyu çıkar" onClick={onRemove}>✕</button>
+    </div>
+  );
+}
+// Form değerini kayda çevir (sayılar)
+export const cleanPromo = (p) => {
+  const num = (v) => (v === '' || v == null ? null : Number(String(v).replace(',', '.')) || null);
+  return { type: p.type, cond: p.cond || null, disc_type: p.disc_type, disc_value: p.disc_type === 'xaly' ? null : num(p.disc_value), threshold: num(p.threshold), pay_qty: p.disc_type === 'xaly' ? parseInt(p.pay_qty, 10) || null : null };
+};
+
+// ---- Kurguyu bir kampanyaya bağla / kampanyayı değiştir
+export function PromoLinkSheet({ promo: p, campaigns, onClose, onLink }) {
+  const now = new Date();
+  const todayK = toDateInput(now);
+  const s = p.start_at ? toDateInput(new Date(p.start_at)) : todayK, e = p.end_at ? toDateInput(new Date(p.end_at)) : s;
+  const over = overlapCamps(campaigns, p.marketplace, s, e).filter((c) => c.id !== p.campaign_id);
+  const rest = (campaigns || []).filter((c) => c.kind !== 'etkinlik' && c.id !== p.campaign_id && !over.includes(c) && c.end_date >= toDateInput(addDays(startOfDay(now), -30)))
+    .sort((a, b) => b.start_date.localeCompare(a.start_date));
+  const cur = (campaigns || []).find((c) => c.id === p.campaign_id);
+  const row = (c, tag) => (
+    <button key={c.id} type="button" className="pl-row" style={{ '--mp': c.marketplace ? mpColor(c.marketplace) : '#868E96' }} onClick={() => onLink(p, c.id)}>
+      <span className="pl-main"><b>{c.name}</b><small>{[c.marketplace, fmtShort(fromDateInput(c.start_date)) + ' – ' + fmtShort(fromDateInput(c.end_date))].filter(Boolean).join(' · ')}</small></span>
+      {tag ? <span className="pl-tag">{tag}</span> : null}
+    </button>
+  );
+  return (
+    <Sheet title={'Kampanyaya bağla · ' + promoTitle(p)} onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <p className="hint" style={{ margin: 0 }}>{cur ? <>Şu an <b>{cur.name}</b> kampanyasına bağlı. </> : 'Şu an hiçbir kampanyaya bağlı değil. '}Bağladığın kampanyanın kartında bu kurgu da görünür, ikisi birlikte takip edilir.</p>
+        {over.length ? <><span className="lbl">Tarihleri çakışanlar</span><div className="pl-list">{over.map((c) => row(c, 'aynı tarihlerde'))}</div></> : null}
+        {rest.length ? <><span className="lbl">Diğer kampanyalar</span><div className="pl-list">{rest.slice(0, 12).map((c) => row(c))}</div></> : null}
+        {!over.length && !rest.length ? <p className="empty">Bağlanabilecek kampanya yok.</p> : null}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {!cur || cur.name !== promoTitle(p) ? <button type="button" className="btn" onClick={() => onLink(p, '__new')}>📣 Kendi kampanyası olsun</button> : null}
+          {cur ? <button type="button" className="btn" onClick={() => onLink(p, null)}>Bağlantıyı kaldır</button> : null}
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+// ---- Kampanya kartından: var olan kurguyu bu kampanyaya bağla
+export function PromoAttachSheet({ campaign: c, promos, campaigns, onClose, onLink }) {
+  const now = new Date();
+  const cand = (promos || []).filter((p) => p.campaign_id !== c.id && promoStatus(p, now).key !== 'past')
+    .map((p) => ({ p, over: p.start_at && p.end_at && toDateInput(new Date(p.start_at)) <= c.end_date && toDateInput(new Date(p.end_at)) >= c.start_date, same: !c.marketplace || p.marketplace === c.marketplace }))
+    .sort((a, b) => (b.over + b.same) - (a.over + a.same));
+  const campName = (id) => ((campaigns || []).find((x) => x.id === id) || {}).name;
+  return (
+    <Sheet title={'Kurgu bağla · ' + c.name} onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <p className="hint" style={{ margin: 0 }}>Ayrı kurduğun bir kurguyu seç; bu kampanyanın kartına taşınır ve birlikte takip edilir.</p>
+        {cand.length ? <div className="pl-list">{cand.map(({ p, over }) => {
+          const t = typeOf(p.type); const cn = campName(p.campaign_id);
+          return (
+            <button key={p.id} type="button" className="pl-row" style={{ '--mp': t.c }} onClick={() => onLink(p, c.id)}>
+              <span className="pl-main"><b>{t.i} {promoTitle(p)}</b><small>{[p.marketplace, p.start_at ? fmtShort(new Date(p.start_at)) + ' – ' + fmtShort(new Date(p.end_at || p.start_at)) : '', cn ? 'şu an: ' + cn : 'kampanyasız'].filter(Boolean).join(' · ')}</small></span>
+              {over ? <span className="pl-tag">aynı tarihlerde</span> : null}
+            </button>
+          );
+        })}</div> : <p className="empty">Bağlanabilecek kurgu yok. Kurguları İndirim kurguları sekmesinden ekleyebilirsin.</p>}
+      </div>
+    </Sheet>
   );
 }
 
@@ -400,8 +507,8 @@ export function PromoSheet({ initial, campaigns, onClose, onSave, onDelete }) {
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!isEdit ? (
           <div className="field">
-            <span className="lbl">Hızlı başla</span>
-            <div className="typechips">{TEMPLATES.map(([l, t]) => <button key={l} type="button" className={'chip' + (auto === promoLabel(t) ? ' on' : '')} onClick={() => applyTpl(t)}>{l}</button>)}</div>
+            <span className="lbl">Standart kurgular <small className="muted">· seçince alanlar dolar, sayıları aşağıdan istediğin gibi değiştirirsin</small></span>
+            <div className="typechips">{TEMPLATES.map(([l, t, star]) => <button key={l} type="button" className={'chip' + (auto === promoLabel(t) ? ' on' : '') + (star ? ' pr-star' : '')} onClick={() => applyTpl(t)}>{star ? '⭐ ' : ''}{l}</button>)}</div>
           </div>
         ) : null}
 
@@ -423,6 +530,16 @@ export function PromoSheet({ initial, campaigns, onClose, onSave, onDelete }) {
           </div>
         </div>
 
+        {(() => {
+          if (f.campaign_id && f.campaign_id !== '__new') return null;
+          const sug = overlapCamps(campOpts, f.marketplace, f.sDate, f.eDate)[0];
+          return sug ? (
+            <div className="pr-sug">
+              <span>🔗 Bu tarihlerde {sug.marketplace || ''} <b>"{sug.name}"</b> kampanyası var. Kurgu onunla birlikte takip edilsin mi?</span>
+              <button type="button" className="btn" onClick={() => set({ campaign_id: sug.id })}>{sug.name} kampanyasına bağla</button>
+            </div>
+          ) : null;
+        })()}
         <div className="field">
           <span className="lbl">İndirim türü</span>
           <div className="pr-types" role="radiogroup" aria-label="İndirim türü">
