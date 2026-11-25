@@ -16,7 +16,7 @@ import { WORK_TABS, PRIVATE_TABS, SubTabs, WORK_PRIMARY, PRIVATE_PRIMARY } from 
 export { WORK_TABS, PRIVATE_TABS, SubTabs };
 
 
-export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder, mail, salesPrefs }) {
+export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded, revError, revTarget, revOrder, mail, salesPrefs, promoQuota }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SubTabs tabs={WORK_TABS} value={seg} onChange={setSeg} label="İş bölümleri" grid primary={WORK_PRIMARY} />
@@ -28,7 +28,7 @@ export function WorkScreen({ seg, setSeg, data, now, actions, revenue, revLoaded
         : seg === 'raporlar' ? <ReportsView data={data} revenue={revenue} now={now} actions={actions} />
         : seg === 'notlar' ? <MarketplaceNotes data={data} actions={actions} />
           : seg === 'influencer' ? <InfluencerScreen data={data} now={now} actions={actions} />
-            : <CampaignsScreen data={data} actions={actions} revenue={revenue} now={now} />}
+            : <CampaignsScreen data={data} actions={actions} revenue={revenue} now={now} quota={promoQuota} />}
     </div>
   );
 }

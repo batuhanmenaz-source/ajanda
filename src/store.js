@@ -2,7 +2,7 @@
 import { supabase } from './supabase.js';
 import { addDays, startOfDay, toDateInput } from './dates.js';
 
-export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories', 'followups', 'inf_codes'];
+export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories', 'followups', 'inf_codes', 'promos'];
 export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls', ...NEW_TABLES];
 // SQL'i henüz çalıştırılmamış olabilecek tablolar: hata verirse boş sayılır
 const OPTIONAL = new Set(['missed_calls', ...NEW_TABLES]);
@@ -27,7 +27,8 @@ const ORDER = {
   yarim_items: ['sort', true],
   memories: ['day', false],
   followups: ['since', true],
-  inf_codes: ['start_at', false]
+  inf_codes: ['start_at', false],
+  promos: ['start_at', false]
 };
 // Açılışta yalnız son ~14 ayın harcamaları yüklenir (hepsi yedekte durur)
 const SINCE = { money: ['day', 430] };
@@ -391,6 +392,22 @@ export function createDemoStore() {
       { id: uid(), code: 'CILT100', handle: '@ciltbakimgunlugu', marketplace: 'Hepsiburada', brand: 'DERMA:B', disc_type: 'tl', disc_value: 100, min_basket: 750, use_limit: 200, scope: 'tum', start_at: at(-5, 14), end_at: at(9, 23), uses: [{ d: d(-2), n: 37, rev: 41200 }, { d: d(-1), n: 58, rev: 63900 }], created_at: at(-5, 14) },
       { id: uid(), code: 'MAKYAJ20', handle: '@makyajkutusu', marketplace: 'Trendyol', brand: 'ZEROID', disc_type: 'yuzde', disc_value: 20, min_basket: 400, use_limit: 150, scope: 'urun', scope_note: '5 ürün', start_at: at(-40, 10), end_at: at(-12, 23), uses: [{ d: d(-30), n: 64, rev: 38100 }, { d: d(-12), n: 150, rev: 92600 }], created_at: at(-40, 10) },
       { id: uid(), code: 'GUZEL10', handle: '@guzelliksirlari', marketplace: 'Amazon', brand: 'Missha', disc_type: 'yuzde', disc_value: 10, min_basket: 300, use_limit: 500, scope: 'tum', start_at: at(3, 13), end_at: at(17, 23), uses: [], created_at: at(-1, 10) }
+    ];
+  }
+  if (!db.promos) {
+    const t = startOfDay(new Date());
+    const at = (n, h) => { const x = addDays(t, n); x.setHours(h, 0, 0, 0); return x.toISOString(); };
+    const d = (n) => toDateInput(addDays(t, n));
+    const camps = (db.campaigns || []).filter((c) => c.kind !== 'etkinlik').sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const live = camps.find((c) => c.start_date <= d(0) && c.end_date >= d(0)) || camps[0];
+    const next = camps.find((c) => c.start_date > d(0));
+    const cs = (c) => (c ? { campaign_id: c.id, marketplace: c.marketplace || 'Trendyol' } : { campaign_id: null, marketplace: 'Trendyol' });
+    db.promos = [
+      { id: uid(), ...cs(live), name: null, type: 'kosullu', cond: 'xurun', disc_type: 'yuzde', disc_value: 20, threshold: 2, scope: 'marka', scope_note: 'Missha maskeler', order_limit: 500, start_at: at(-3, 10), end_at: at(4, 23), uses: [{ d: d(-2), n: 64, rev: 38400 }, { d: d(-1), n: 141, rev: 85100 }], created_at: at(-4, 10) },
+      { id: uid(), ...cs(live), name: null, type: 'kosullu', cond: 'adet', disc_type: 'xaly', threshold: 5, pay_qty: 4, scope: 'urun', scope_note: '4682, 4626', order_limit: 200, start_at: at(-3, 10), end_at: at(4, 23), uses: [{ d: d(-1), n: 37, rev: 29600 }], created_at: at(-4, 10) },
+      { id: uid(), ...cs(live), name: null, type: 'net', disc_type: 'yuzde', disc_value: 10, scope: 'tum', start_at: at(-3, 10), end_at: at(4, 23), uses: [], created_at: at(-4, 10) },
+      { id: uid(), ...cs(next), name: null, type: 'kosullu', cond: 'tutar', disc_type: 'tl', disc_value: 75, threshold: 500, scope: 'tum', order_limit: 300, start_at: next ? next.start_date + 'T07:00:00.000Z' : at(6, 10), end_at: next ? next.end_date + 'T20:00:00.000Z' : at(10, 23), uses: [], created_at: at(-1, 10) },
+      { id: uid(), campaign_id: null, marketplace: 'Hepsiburada', name: 'Sepette hediye', type: 'birlikte', cond: 'sepet', disc_type: 'odul', disc_value: 1, threshold: 400, scope: 'tum', scope_note: 'Ödül: mini krem', start_at: at(-20, 10), end_at: at(-8, 23), uses: [{ d: d(-14), n: 52, rev: 31000 }, { d: d(-8), n: 118, rev: 70900 }], created_at: at(-21, 10) }
     ];
   }
   if (!db.followups) {

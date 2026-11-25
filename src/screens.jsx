@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { CampaignPromos, PromosView, promoStatus } from './promos.jsx';
 import { Icon } from './Icons.jsx';
 import { Mp, Check, Section, Progress, Sheet } from './ui.jsx';
 import { MARKETPLACES, SRC_COLORS, mpColor, YARIM_START, YARIM_STARTS } from './constants.js';
@@ -1244,7 +1245,7 @@ export function CalendarScreen({ data, events, google, now, day, setDay, month, 
 }
 
 // ---------- KAMPANYALAR ----------
-function CampaignCard({ c, tasks, actions, revenue, now }) {
+function CampaignCard({ c, tasks, actions, revenue, now, promos }) {
   const [newTask, setNewTask] = useState('');
   const ts = tasksOf(tasks, c.id);
   const st = campaignStatus(c);
@@ -1268,6 +1269,7 @@ function CampaignCard({ c, tasks, actions, revenue, now }) {
       <CampTimeBar c={c} st={st} />
       {ts.length ? <Progress done={ts.filter((t) => t.done).length} total={ts.length} /> : null}
       {st.key === 'live' ? <CampaignResult c={c} revenue={revenue} now={now} actions={actions} /> : null}
+      <CampaignPromos c={c} promos={promos} now={now} actions={actions} />
       <div className="list" style={{ gap: 0 }}>
         {ts.map((t) => (
           <div key={t.id} className="task">
@@ -1328,7 +1330,21 @@ function CampTimeline({ list, now, onOpen }) {
   );
 }
 
-export function CampaignsScreen({ data, actions, revenue, now = new Date() }) {
+export function CampaignsScreen({ data, actions, revenue, now = new Date(), quota }) {
+  const [sub, setSubS] = useState(() => { try { return sessionStorage.getItem('ajanda-camp-sub') || 'kamp'; } catch { return 'kamp'; } });
+  const setSub = (v) => { setSubS(v); try { sessionStorage.setItem('ajanda-camp-sub', v); } catch { /* yok say */ } };
+  const livePromos = (data.promos || []).filter((p) => promoStatus(p, now).key === 'live').length;
+  const switcher = (
+    <div className="rch-mode ic-switch" role="tablist" aria-label="Kampanya bölümleri">
+      <button type="button" role="tab" aria-selected={sub === 'kamp'} className={sub === 'kamp' ? 'on' : ''} onClick={() => setSub('kamp')}>📣 Kampanyalar</button>
+      <button type="button" role="tab" aria-selected={sub === 'kurgu'} className={sub === 'kurgu' ? 'on' : ''} onClick={() => setSub('kurgu')}>🎯 İndirim kurguları{livePromos ? <span className="ic-badge" style={{ background: '#E8590C' }}>{livePromos}</span> : null}</button>
+    </div>
+  );
+  if (sub === 'kurgu') return <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{switcher}<PromosView data={data} now={now} actions={actions} quota={quota} /></div>;
+  return <CampaignsMain data={data} actions={actions} revenue={revenue} now={now} switcher={switcher} />;
+}
+
+function CampaignsMain({ data, actions, revenue, now, switcher }) {
   const [showPast, setShowPast] = useState(false);
   const withSt = data.campaigns.filter((c) => c.kind !== 'etkinlik').map((c) => ({ c, st: campaignStatus(c) }));
   const current = withSt.filter((x) => x.st.key !== 'past').sort((a, b) => a.c.start_date.localeCompare(b.c.start_date));
@@ -1343,9 +1359,10 @@ export function CampaignsScreen({ data, actions, revenue, now = new Date() }) {
   const firstEnd = live.slice().sort((a, b) => a.c.end_date.localeCompare(b.c.end_date))[0];
   const mk = toDateInput(today).slice(0, 7);
   const monthDone = past.filter((x) => x.c.end_date.startsWith(mk)).length;
-  const grid = (arr) => <div className="notes-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>{arr.map(({ c }) => <CampaignCard key={c.id} c={c} tasks={data.campaign_tasks} actions={actions} revenue={revenue} now={now} />)}</div>;
+  const grid = (arr) => <div className="notes-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>{arr.map(({ c }) => <CampaignCard key={c.id} c={c} tasks={data.campaign_tasks} actions={actions} revenue={revenue} now={now} promos={data.promos} />)}</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {switcher}
       <StatStrip items={[
         { label: 'Aktif', value: live.length, unit: 'kampanya', tone: '#2B8A3E', sub: firstEnd ? 'ilk biten: ' + (firstEnd.c.marketplace || firstEnd.c.name) + ' · ' + fmtShort(fromDateInput(firstEnd.c.end_date)) : 'şu an aktif yok' },
         { label: 'Yaklaşan', value: soon.length, unit: 'kampanya', tone: '#C2410C', sub: soon[0] ? 'sıradaki: ' + soon[0].c.name + ' · ' + soon[0].st.label.toLocaleLowerCase('tr-TR') : 'planlanan yok' },

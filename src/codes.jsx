@@ -13,7 +13,7 @@ const pad = (n) => String(n).padStart(2, '0');
 const hm = (d) => pad(d.getHours()) + ':' + pad(d.getMinutes());
 
 // ---- Hesaplar
-const usesOf = (c) => (Array.isArray(c.uses) ? [...c.uses] : []).filter((u) => u && u.d).sort((a, b) => a.d.localeCompare(b.d));
+export const usesOf = (c) => (Array.isArray(c.uses) ? [...c.uses] : []).filter((u) => u && u.d).sort((a, b) => a.d.localeCompare(b.d));
 export const usedTotal = (c) => { const u = usesOf(c); return u.length ? Number(u[u.length - 1].n) || 0 : 0; };
 export const revTotal = (c) => { const u = usesOf(c).filter((x) => x.rev != null && x.rev !== ''); return u.length ? Number(u[u.length - 1].rev) || 0 : 0; };
 // Belirli günde (dahil) o güne kadarki toplam kullanım
@@ -54,8 +54,8 @@ export function InfluencerScreen({ data, now, actions }) {
   );
 }
 
-const PERIODS = [['30', 'Son 30 gün'], ['ay', 'Bu ay'], ['gecen', 'Geçen ay'], ['tumu', 'Tümü']];
-function periodOf(p, now) {
+export const PERIODS = [['30', 'Son 30 gün'], ['ay', 'Bu ay'], ['gecen', 'Geçen ay'], ['tumu', 'Tümü']];
+export function periodOf(p, now) {
   const t = startOfDay(now);
   if (p === '30') return [toDateInput(addDays(t, -29)), toDateInput(t)];
   if (p === 'ay') return [toDateInput(new Date(t.getFullYear(), t.getMonth(), 1)), toDateInput(t)];
@@ -207,7 +207,7 @@ export function codeTime(c, now = new Date()) {
   const fill = Math.min(1, Math.max(0.02, (now - s) / Math.max(1, e - s)));
   return { kind: e - now < 86400000 ? 'live end' : 'live', fill, left: 'Bitişe ' + dur(e - now), right: fmtShort(e) + ' ' + hm(e), short: dur(e - now) + ' kaldı', pct: Math.round(fill * 100) };
 }
-function CodeTimeBar({ c, now }) {
+export function CodeTimeBar({ c, now }) {
   const t = codeTime(c, now);
   if (!t) return null;
   return (
@@ -366,7 +366,7 @@ export function CodeSheet({ initial, codes, collabs, onClose, onSave, onDelete }
 }
 
 // ---- Kullanım girişi: paneldeki güncel toplam kullanım adedi (ve isteğe bağlı kodlu satış)
-export function CodeUsageSheet({ code: c, onClose, onSave }) {
+export function CodeUsageSheet({ code: c, onClose, onSave, title, what = 'kullanım', revLabel = 'Kodlu satış (₺)' }) {
   const u = usesOf(c);
   const last = u[u.length - 1];
   const [day, setDay] = useState(toDateInput(new Date()));
@@ -392,13 +392,13 @@ export function CodeUsageSheet({ code: c, onClose, onSave }) {
     try { await onSave(c, final); } finally { setBusy(false); }
   };
   return (
-    <Sheet title={'Kullanım · ' + c.code} onClose={onClose}>
+    <Sheet title={title || 'Kullanım · ' + c.code} onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <p className="hint" style={{ margin: 0 }}>Pazaryeri panelinde görünen <b>toplam</b> kullanım adedini yaz. Günlük artış ve dönem raporu bu toplamların farkından hesaplanır.{last ? ' Son giriş: ' + fmtShort(fromDateInput(last.d)) + ' · ' + Number(last.n).toLocaleString('tr-TR') + ' kullanım.' : ''}</p>
         <div className="row3 ic-row3">
           <div className="field"><label htmlFor="cu-d">Tarih</label><input id="cu-d" type="date" value={day} max={toDateInput(new Date())} onChange={(e) => setDay(e.target.value)} /></div>
           <div className="field"><label htmlFor="cu-n">Toplam kullanım</label><input id="cu-n" type="number" min="0" inputMode="numeric" value={n} onChange={(e) => setN(e.target.value)} placeholder={last ? String(last.n) : '0'} autoFocus /></div>
-          <div className="field"><label htmlFor="cu-r">Kodlu satış (₺)</label><input id="cu-r" type="text" inputMode="decimal" value={rev} onChange={(e) => setRev(e.target.value)} placeholder="isteğe bağlı" /></div>
+          <div className="field"><label htmlFor="cu-r">{revLabel}</label><input id="cu-r" type="text" inputMode="decimal" value={rev} onChange={(e) => setRev(e.target.value)} placeholder="isteğe bağlı" /></div>
         </div>
         {diff != null ? <span className={'hint'} style={{ marginTop: -6, color: diff < 0 ? 'var(--danger)' : 'var(--green)', fontWeight: 700 }}>{diff < 0 ? 'Önceki girişten az: kontrol et' : '+' + diff.toLocaleString('tr-TR') + ' kullanım (' + fmtShort(fromDateInput(prevBefore.d)) + "'den beri)"}</span> : null}
         <button type="button" className="btn" onClick={add} disabled={!Number.isFinite(nNum)}>Listeye ekle ve başka gün gir</button>

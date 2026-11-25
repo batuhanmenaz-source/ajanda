@@ -1,5 +1,6 @@
 // Hızlı arama ve komutlar (Ctrl/⌘+K ya da /): kayıtlarda ara, sayfaya git, yeni kayıt başlat.
 // Yalnız zaten yüklü verilerde arar; ağ isteği yok.
+import { promoTitle } from './promos.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from './ui.jsx';
 
@@ -25,6 +26,7 @@ export function SearchSheet({ data, actions, onClose }) {
     { g: 'Yeni', icon: '⏰', t: 'Yeni hatırlatma', go: () => actions.quickNew('reminder') },
     { g: 'Yeni', icon: '📞', t: 'Yeni arama', go: () => actions.quickNew('call') },
     { g: 'Yeni', icon: '📣', t: 'Yeni kampanya', go: () => actions.quickNew('campaign') },
+    { g: 'Yeni', icon: '🎯', t: 'Yeni indirim kurgusu', go: () => actions.openPromo({}) },
     { g: 'Yeni', icon: '🎬', t: 'Yeni influencer reklamı', go: () => actions.quickNew('ad') },
     { g: 'Yeni', icon: '📈', t: 'Ciro gir', go: () => actions.openRevenue() },
     { g: 'Yeni', icon: '👛', t: 'Gider ekle', go: () => actions.openMoney({ kind: 'gider' }) },
@@ -40,6 +42,7 @@ export function SearchSheet({ data, actions, onClose }) {
     (data.calls || []).forEach((c) => add('Aramalar', '📞', c.who, [c.topic, c.phone, fmtD(c.due_at), c.done ? 'arandı' : ''].filter(Boolean).join(' · '), () => actions.openCall(c)));
     (data.campaigns || []).forEach((c) => add('Kampanyalar', c.kind === 'etkinlik' ? '🎟️' : '📣', c.name, [c.marketplace, c.start_date === c.end_date ? fmtD(c.start_date) : fmtD(c.start_date) + ' – ' + fmtD(c.end_date)].filter(Boolean).join(' · '), () => actions.openCampaign(c), c.notes));
     (data.collabs || []).forEach((c) => add('Influencer', '🎬', c.title || c.handle || 'Reklam', [c.handle, c.platform, c.brand, c.marketplace, fmtD(c.start_at)].filter(Boolean).join(' · '), () => actions.openCollab(c)));
+    (data.promos || []).forEach((p) => add('İndirim kurguları', '🎯', promoTitle(p), [p.marketplace, ((data.campaigns || []).find((c) => c.id === p.campaign_id) || {}).name, p.end_at ? 'bitiş ' + fmtD(p.end_at) : ''].filter(Boolean).join(' · '), () => actions.openPromo(p)));
     (data.inf_codes || []).forEach((c) => add('İndirim kodları', '🏷️', c.code, [c.handle, c.marketplace, c.end_at ? 'bitiş ' + fmtD(c.end_at) : ''].filter(Boolean).join(' · '), () => actions.openCode(c)));
     (data.notes || []).forEach((n) => add('Notlar', '📝', n.title || 'Not', [n.marketplace, (n.body || '').slice(0, 60)].filter(Boolean).join(' · '), () => actions.openNote(n), n.body));
     (data.followups || []).forEach((f) => add('Bekleyenler', f.done ? '✓' : '⏳', f.title, [f.party, f.marketplace, f.done ? 'kapandı' : ''].filter(Boolean).join(' · '), () => actions.openFollowup(f)));

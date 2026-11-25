@@ -1,4 +1,6 @@
 // İş → Özet: işin tamamına tek bakış (ciro, kampanya, influencer, bekleyen, mail, geciken)
+import { promoTitle } from './promos.jsx';
+import { usedTotal } from './codes.jsx';
 import { useMemo } from 'react';
 import { mpColor, SRC_COLORS } from './constants.js';
 import { WEEKDAYS, MONTHS, startOfDay, addDays, toDateInput, fromDateInput, daysBetween, fmtShort, fmtTime } from './dates.js';
@@ -108,6 +110,10 @@ export function WorkDashboard({ data, now, actions, revenue, revTarget, mail, se
   adsLive.filter((c) => { const w = adWindow(c, now); return w.e - now < 86400000; }).forEach((c) => att.push({ k: 'a' + c.id, tone: 'blue', icon: '🎬', text: <><b>{c.handle || c.title || adWho(c, data.contacts)}</b> reklamı {dur(adWindow(c, now).e - now)} sonra bitiyor{adRev(c) ? '' : ' · cirosunu girmeyi unutma'}</>, go: () => actions.openCollab(c) }));
   const codesEnd = (data.inf_codes || []).filter((c) => c.end_at && new Date(c.end_at) >= now && new Date(c.end_at) < addDays(today, 2));
   if (codesEnd.length) att.push({ k: 'codes', tone: 'blue', icon: '🏷️', text: <><b>{codesEnd.length} indirim kodu</b> {codesEnd.every((c) => new Date(c.end_at) < addDays(today, 1)) ? 'bugün' : 'yarın'} bitiyor: {codesEnd.slice(0, 4).map((c) => c.code).join(', ')}{codesEnd.length > 4 ? '…' : ''}</>, go: go('influencer') });
+  const promosOpen = (data.promos || []).filter((p) => p.end_at && new Date(p.end_at) >= now);
+  const promoEnd = promosOpen.filter((p) => new Date(p.end_at) < addDays(today, 1));
+  if (promoEnd.length) att.push({ k: 'pe', tone: 'amber', icon: '🎯', text: <><b>{promoEnd.length} indirim kurgusu</b> bugün bitiyor: {promoEnd.slice(0, 3).map(promoTitle).join(', ')}{promoEnd.length > 3 ? '…' : ''}</>, go: () => { try { sessionStorage.setItem('ajanda-camp-sub', 'kurgu'); } catch { /* yok say */ } setSeg('kampanya'); } });
+  promosOpen.filter((p) => p.order_limit && usedTotal(p) / Number(p.order_limit) >= 0.9 && new Date(p.start_at || 0) <= now).slice(0, 2).forEach((p) => att.push({ k: 'pl' + p.id, tone: 'red', icon: '🎯', text: <><b>{promoTitle(p)}</b> kullanım limitine yaklaştı · {usedTotal(p).toLocaleString('tr-TR')} / {Number(p.order_limit).toLocaleString('tr-TR')}{p.marketplace ? ' · ' + p.marketplace : ''}</>, go: () => actions.openPromo(p) }));
   const sd = salesDigest;
   if (sd && sd.day && daysBetween(fromDateInput(sd.day), today) <= 5) (sd.alerts || []).forEach((a, i) => att.push({ k: 's' + i, tone: a.t === 'drop' ? 'amber' : 'red', icon: a.t === 'stock' ? '📦' : a.t === 'stop' ? '⛔' : '📉', text: <><b>{a.x.charAt(0).toLocaleUpperCase('tr-TR') + a.x.slice(1)}</b> · {a.n}</>, go: go('satislar') }));
   fups.filter((f) => daysBetween(fromDateInput(f.since), today) >= 14).slice(0, 2).forEach((f) => att.push({ k: 'f' + f.id, tone: 'amber', icon: '⏳', text: <><b>{f.title}</b> {daysBetween(fromDateInput(f.since), today)} gündür bekliyor{f.party ? ' · ' + f.party : ''}</>, go: () => (actions.openFollowup ? actions.openFollowup(f) : setSeg('bekleyenler')) }));
