@@ -42,8 +42,6 @@ insert into public.push_cron (id) values (1) on conflict (id) do nothing;
 
 -- Her dakika Ajanda sunucusuna "gönderilecek bildirim var mı?" diye sorar
 create extension if not exists pg_cron with schema pg_catalog;
-grant usage on schema cron to postgres;
-grant all privileges on all tables in schema cron to postgres;
 create extension if not exists pg_net with schema extensions;
 -- Aynı adla tekrar çalıştırılırsa var olan görev güncellenir
 select cron.schedule(
