@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icons.jsx';
 import { Sheet, Section, Check } from './ui.jsx';
 import { SubTabs } from './tabs.jsx';
+import { MoodView, MoodMini } from './mood.jsx';
 import { YarimPanel } from './screens.jsx';
 import { LocationField } from './sheets.jsx';
 import { tl, parseTL } from './revenue.jsx';
@@ -10,7 +11,7 @@ import { mapsLink, mapsTarget } from './location.js';
 import { specialUpcoming, specialLabel, SPECIAL_ICON } from './special.js';
 import { addDays, startOfDay, toDateInput, fromDateInput, fmtShort, daysBetween, MONTHS } from './dates.js';
 
-export const YARIM_TABS = [['ozet', 'Özet'], ['anilar', 'Anılar'], ['sevdikleri', 'Sevdikleri'], ['hediyeler', 'Hediye fikirleri'], ['planlar', 'Birlikte yapılacaklar']];
+export const YARIM_TABS = [['ozet', 'Özet'], ['duygu', 'Duygu durumu 🐠'], ['anilar', 'Anılar'], ['sevdikleri', 'Sevdikleri'], ['hediyeler', 'Hediye fikirleri'], ['planlar', 'Birlikte yapılacaklar']];
 export const LIKE_CATS = ['Çiçek', 'Renk', 'Kahve / içecek', 'Yemek', 'Tatlı', 'Restoran', 'Marka', 'Parfüm', 'Beden / numara', 'Yüzük ölçüsü', 'Hobi', 'Müzik / sanatçı', 'Diğer'];
 const LIKE_ICON = { 'Çiçek': '🌷', 'Renk': '🎨', 'Kahve / içecek': '☕', 'Yemek': '🍝', 'Tatlı': '🍰', 'Restoran': '🍽️', 'Marka': '🛍️', 'Parfüm': '🌸', 'Beden / numara': '👗', 'Yüzük ölçüsü': '💍', 'Hobi': '🎯', 'Müzik / sanatçı': '🎵', 'Diğer': '✨' };
 export const PLAN_CATS = ['Yer', 'Restoran', 'Film / dizi', 'Etkinlik', 'Tatil', 'Diğer'];
@@ -59,7 +60,7 @@ export function pickSurpriseIdea(ideas, gifts) {
   return pool[Math.floor(Math.random() * pool.length)] || DEFAULT_SURPRISE_IDEAS[0];
 }
 
-function Photo({ path, getUrl, className, alt }) {
+export function Photo({ path, getUrl, className, alt }) {
   const [url, setUrl] = useState(path && path.startsWith('data:') ? path : '');
   useEffect(() => {
     if (!path || path.startsWith('data:')) return undefined;
@@ -76,7 +77,8 @@ export function YarimPage({ seg, setSeg, data, now, actions, love, prefs, photoU
   return (
     <div className="ypage" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SubTabs tabs={YARIM_TABS} value={seg} onChange={setSeg} label="Yarim bölümleri" />
-      {seg === 'anilar' ? <Memories data={data} now={now} actions={actions} photoUrl={photoUrl} />
+      {seg === 'duygu' ? <MoodView data={data} now={now} actions={actions} prefs={prefs} photoUrl={photoUrl} />
+        : seg === 'anilar' ? <Memories data={data} now={now} actions={actions} photoUrl={photoUrl} />
         : seg === 'sevdikleri' ? <Likes data={data} actions={actions} />
           : seg === 'hediyeler' ? <Gifts data={data} now={now} actions={actions} />
             : seg === 'planlar' ? <Plans data={data} now={now} actions={actions} />
@@ -104,6 +106,7 @@ function Overview({ data, now, actions, love, prefs, photoUrl, goSeg }) {
         </div>
       )) : null}
       <YarimPanel data={data} now={now} actions={actions} love={love} />
+      <MoodMini data={data} now={now} prefs={prefs} photoUrl={photoUrl} onOpen={actions.openMood} onGo={() => goSeg('duygu')} />
       <WeekendIdea data={data} now={now} actions={actions} goSeg={goSeg} />
       <SurpriseCard prefs={prefs} data={data} now={now} actions={actions} />
     </div>

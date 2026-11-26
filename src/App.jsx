@@ -31,6 +31,7 @@ import { SearchSheet } from './search.jsx';
 import { useHealth, connectHealth, disconnectHealth, SportSheet, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
 import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote, syncCode, syncFlags } from './sync.js';
 import { NotifySheet } from './notify.jsx';
+import { MoodSheet, parseMoodExcel, shrinkSquare, moodNames } from './mood.jsx';
 
 const TABS = [
   { id: 'bugun', label: 'Bugün', icon: Icon.Today },
@@ -40,7 +41,7 @@ const TABS = [
   { id: 'aramalar', label: 'Aramalar', icon: Icon.Phone }
 ];
 
-const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [], yarim_items: [], memories: [], followups: [], inf_codes: [], promos: [] };
+const EMPTY = { reminders: [], calls: [], notes: [], daily_notes: [], campaigns: [], campaign_tasks: [], missed_calls: [], contacts: [], collabs: [], special_dates: [], lists: [], list_items: [], habits: [], habit_logs: [], money: [], money_fixed: [], yarim_items: [], memories: [], followups: [], inf_codes: [], promos: [], moods: [] };
 
 export default function App({ store, demo, email, onSignOut, onReconnect, googleSave }) {
   const [data, setData] = useState(EMPTY);
@@ -486,6 +487,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     else if (/collabs/.test(msg) && /ad_revenue/.test(msg)) say('Kaydedilemedi: Reklam cirosu için Supabase\'de 20 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /commission/.test(msg)) say('Kaydedilemedi: Komisyon oranı için Supabase\'de 18 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/collabs/.test(msg) && /start_at|end_at|platform|handle/.test(msg)) say('Kaydedilemedi: Influencer reklamları için Supabase\'de 17 numaralı SQL\'i çalıştırman gerekiyor.');
+    else if (/moods/.test(msg)) say('Kaydedilemedi: Duygu durumu için Supabase\'de 34 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/promos/.test(msg)) say('Kaydedilemedi: İndirim kurguları için Supabase\'de 32 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/inf_codes/.test(msg)) say('Kaydedilemedi: İndirim kodları için Supabase\'de 24 numaralı SQL\'i çalıştırman gerekiyor.');
     else if (/followups|nudge_/.test(msg)) say('Kaydedilemedi: Bekleyenler için Supabase\'de 16 numaralı SQL\'i çalıştırman gerekiyor.');
@@ -845,6 +847,50 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     try { const s2 = await store.saveSettings({ yarim_prefs: next }); setYarimPrefs(s2.yarim_prefs || next); return true; }
     catch (e) { fail(e); return false; }
   };
+  // ---- Duygu durumu (moods)
+  const mergeMoods = (rows) => setData((d) => {
+    const by = new Map((d.moods || []).map((x) => [x.day, x]));
+    rows.forEach((r) => by.set(r.day, { ...(by.get(r.day) || {}), ...r }));
+    return { ...d, moods: [...by.values()].sort((a, b) => b.day.localeCompare(a.day)) };
+  });
+  const saveMood = async (rec) => {
+    try { const { id, ...row } = rec; const rows = await store.upsertMoods([row]); mergeMoods(rows); setSheet(null); say('Kaydedildi 🐠'); }
+    catch (e) { fail(e); }
+  };
+  const deleteMood = async (rec) => { await deleteRow('moods', rec, (rec.day ? rec.day.split('-').reverse().join('.') : 'Bu gün') + ' kaydı silinsin mi?'); };
+  const importMoods = async (file) => {
+    say('Excel okunuyor…');
+    try {
+      const p = await parseMoodExcel(file);
+      const up = (b) => store.uploadPhoto('anilar', b.blob, 'duygu', b.ext);
+      const cur = yarimPrefs.mood || {};
+      const mood = { ...cur, names: p.names };
+      if (!(cur.avatars && cur.avatars.r && cur.avatars.b) && p.images.avatars.length === 2) mood.avatars = { r: await up(p.images.avatars[0]), b: await up(p.images.avatars[1]) };
+      if (!(cur.fish && cur.fish.length) && p.images.fish.length) {
+        mood.fish = [];
+        for (const f of p.images.fish) {
+          let wide = false;
+          try { const bm = await createImageBitmap(f.blob); wide = bm.width / bm.height > 1.6; if (bm.close) bm.close(); } catch { /* yok say */ }
+          mood.fish.push({ path: await up(f), wide });
+        }
+      }
+      const rows = await store.upsertMoods(p.rows);
+      mergeMoods(rows);
+      await saveYarimPrefs({ ...yarimPrefs, mood });
+      say(rows.length + ' gün aktarıldı 🐠' + (mood.avatars && !cur.avatars ? ' · profil resimleri ve balıklar eklendi' : ''));
+    } catch (e) { if (/Tarih|gün bulunamadı/.test(String(e && e.message))) say(e.message); else fail(e); }
+  };
+  const setMoodAvatar = async (who, file) => {
+    try {
+      const blob = await shrinkSquare(file);
+      const path = await store.uploadPhoto('anilar', blob, 'duygu', 'jpg');
+      const cur = yarimPrefs.mood || {};
+      await saveYarimPrefs({ ...yarimPrefs, mood: { ...cur, avatars: { ...(cur.avatars || {}), [who]: path } } });
+      say('Profil resmi güncellendi');
+    } catch (e) { fail(e); }
+  };
+  const exportMoods = async () => { const { exportMoods: ex } = await import('./excel.js'); await ex({ moods: data.moods || [], names: moodNames(yarimPrefs) }); };
+
   // Sürpriz hatırlatması kur (açıksa ve bekleyen yoksa). Kurulumu yalnız aşağıdaki effect tetikler.
   const surpriseBusy = useRef(false);
   const scheduleSurprise = async (prefs) => {
@@ -1074,6 +1120,8 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     openYarimSettings: () => setSheet({ kind: 'yarimSettings' }),
     openYarim: () => { setSheet(null); setYarimSeg('ozet'); goTab('yarim'); },
     openMemory: (m) => setSheet({ kind: 'memory', item: m }),
+    openMood: (x) => setSheet({ kind: 'mood', item: x }),
+    importMoods, setMoodAvatar, exportMoods,
     openFollowup: (f) => setSheet({ kind: 'followup', item: f }),
     mailToReminder: (m) => { const x = new Date(); x.setMinutes(0, 0, 0); x.setHours(x.getHours() + 1); setSheet({ kind: 'item', item: { kind: 'reminder', title: m.subject + ' (' + m.fromName + ')', due_at: x.toISOString(), scope: 'is' } }); },
     mailToFollowup: (m) => setSheet({ kind: 'followup', item: { title: m.subject, party: m.fromName, since: toDateInput(new Date()), note: 'Mail: ' + m.from } }),
@@ -1382,6 +1430,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
       {sheet && sheet.kind === 'list' && <ListSheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('lists', f, 'Liste kaydedildi')} onDelete={(x) => deleteRow('lists', x, '"' + x.title + '" listesi ve içindekiler silinsin mi?')} />}
       {sheet && sheet.kind === 'followup' && <FollowupSheet initial={sheet.item} followups={data.followups} onClose={() => setSheet(null)} onSave={saveFollowup} onDelete={deleteFollowup} />}
+      {sheet && sheet.kind === 'mood' && <MoodSheet initial={sheet.item} moods={data.moods} prefs={yarimPrefs} onClose={() => setSheet(null)} onSave={saveMood} onDelete={deleteMood} />}
       {sheet && sheet.kind === 'memory' && <MemorySheet initial={sheet.item} photoUrl={photoUrl} onClose={() => setSheet(null)} onSave={saveMemory} onDelete={deleteMemory} />}
       {sheet && sheet.kind === 'yitem' && <YarimItemSheet initial={sheet.item} onClose={() => setSheet(null)}
         onSave={(f) => saveRow('yarim_items', f, f.kind === 'hediye' ? 'Hediye fikri kaydedildi 🎁' : f.kind === 'plan' ? 'Kaydedildi ✨' : 'Kaydedildi 💗')}

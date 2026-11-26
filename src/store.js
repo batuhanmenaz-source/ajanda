@@ -2,7 +2,7 @@
 import { supabase } from './supabase.js';
 import { addDays, startOfDay, toDateInput } from './dates.js';
 
-export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories', 'followups', 'inf_codes', 'promos'];
+export const NEW_TABLES = ['contacts', 'collabs', 'special_dates', 'lists', 'list_items', 'habits', 'habit_logs', 'money', 'money_fixed', 'yarim_items', 'memories', 'followups', 'inf_codes', 'promos', 'moods'];
 export const TABLES = ['reminders', 'calls', 'notes', 'daily_notes', 'campaigns', 'campaign_tasks', 'missed_calls', ...NEW_TABLES];
 // SQL'i henüz çalıştırılmamış olabilecek tablolar: hata verirse boş sayılır
 const OPTIONAL = new Set(['missed_calls', ...NEW_TABLES]);
@@ -28,7 +28,8 @@ const ORDER = {
   memories: ['day', false],
   followups: ['since', true],
   inf_codes: ['start_at', false],
-  promos: ['start_at', false]
+  promos: ['start_at', false],
+  moods: ['day', false]
 };
 // Açılışta yalnız son ~14 ayın harcamaları yüklenir (hepsi yedekte durur)
 const SINCE = { money: ['day', 430] };
@@ -150,6 +151,16 @@ export function createSupabaseStore() {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw error;
     },
+    // Duygu durumu: aynı gün varsa güncelle (Excel'den içe aktarma da bunu kullanır)
+    async upsertMoods(rows) {
+      const out = [];
+      for (let i = 0; i < rows.length; i += 200) {
+        const { data, error } = await supabase.from('moods').upsert(rows.slice(i, i + 200), { onConflict: 'user_id,day' }).select();
+        if (error) throw error;
+        out.push(...(data || []));
+      }
+      return out;
+    },
     async upsertDaily(note_date, body) {
       const { data, error } = await supabase
         .from('daily_notes')
@@ -168,10 +179,10 @@ export function createSupabaseStore() {
       if (error) throw error;
       return path;
     },
-    async uploadPhoto(bucket, blob, folder) {
+    async uploadPhoto(bucket, blob, folder, ext = 'jpg') {
       const { data: u } = await supabase.auth.getUser();
-      const path = u.user.id + '/' + (folder || 'genel') + '/' + crypto.randomUUID() + '.jpg';
-      const { error } = await supabase.storage.from(bucket).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+      const path = u.user.id + '/' + (folder || 'genel') + '/' + crypto.randomUUID() + '.' + ext;
+      const { error } = await supabase.storage.from(bucket).upload(path, blob, { contentType: ext === 'png' ? 'image/png' : 'image/jpeg', upsert: false });
       if (error) throw error;
       return path;
     },
@@ -410,6 +421,18 @@ export function createDemoStore() {
       { id: uid(), campaign_id: null, marketplace: 'Hepsiburada', name: 'Sepette hediye', type: 'birlikte', cond: 'sepet', disc_type: 'odul', disc_value: 1, threshold: 400, scope: 'tum', scope_note: 'Ödül: mini krem', start_at: at(-20, 10), end_at: at(-8, 23), uses: [{ d: d(-14), n: 52, rev: 31000 }, { d: d(-8), n: 118, rev: 70900 }], created_at: at(-21, 10) }
     ];
   }
+  if (!db.moods) {
+    // Örnek: son 60 günün yarısında sabah/akşam puanları
+    const t = startOfDay(new Date());
+    const cl = (v) => Math.max(1, Math.min(10, Math.round(v)));
+    db.moods = [];
+    for (let k = 60; k >= 0; k--) {
+      const d = addDays(t, -k);
+      if ([0, 6].includes(d.getDay()) && k % 3) continue;
+      const base = 7 + Math.sin(k / 6) * 1.2;
+      db.moods.push({ id: uid(), day: toDateInput(d), r_am: cl(base + 1 - (k % 4 === 0 ? 3 : 0)), r_pm: k === 0 ? null : cl(base + 0.5), b_am: cl(base - 0.5 + (k % 5 === 0 ? 2 : 0)), b_pm: k === 0 ? null : cl(base + (k % 7 === 0 ? -2 : 0.6)), note: k === 23 ? '200. gün 💖' : k === 9 ? 'Mağaza açılışı' : null, created_at: d.toISOString() });
+    }
+  }
   if (!db.followups) {
     const t = startOfDay(new Date());
     const d = (n) => toDateInput(addDays(t, n));
@@ -450,6 +473,7 @@ export function createDemoStore() {
       if (table === 'contacts') db.collabs = db.collabs.filter((r) => r.contact_id !== id);
       save();
     },
+    async upsertMoods(rows) { db.moods = db.moods || []; const out = rows.map((r) => { const i = db.moods.findIndex((m) => m.day === r.day); if (i >= 0) { db.moods[i] = { ...db.moods[i], ...r }; return db.moods[i]; } const n = { id: uid(), created_at: new Date().toISOString(), ...r }; db.moods.push(n); return n; }); save(); return out; },
     async upsertDaily(note_date, body) {
       const ex = db.daily_notes.find((r) => r.note_date === note_date);
       if (ex) { ex.body = body; save(); return ex; }

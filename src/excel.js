@@ -288,3 +288,11 @@ export async function exportSalesCard({ head, data, label, day }) {
     { name: 'Bilgi', rows: info, widths: [20, 70] }
   ], 'satis-raporu-' + slug(label) + '.xlsx');
 }
+
+// Duygu durumu: her gün tek satır
+export async function exportMoods({ moods, names }) {
+  const head = ['Tarih', names.r + ' · Sabah', names.r + ' · Akşam', names.b + ' · Sabah', names.b + ' · Akşam', 'Not'].map(H);
+  const v = (x) => (x == null ? S('') : N(x));
+  const rows = [...moods].sort((a, b) => a.day.localeCompare(b.day)).map((m) => [D(m.day), v(m.r_am), v(m.r_pm), v(m.b_am), v(m.b_pm), S(m.note)]);
+  await save([{ name: 'Duygu durumu', rows: [head, ...rows], widths: [12, 16, 16, 16, 16, 40], sticky: 1 }], 'duygu-durumu-' + toDateInput(new Date()) + '.xlsx');
+}
