@@ -803,7 +803,7 @@ export function YarimSettingsSheet({ initial, count, onClose, onSave }) {
 }
 
 // ---------- Cevapsız çağrı bağlantısı ----------
-function CopyBox({ label, value }) {
+export function CopyBox({ label, value }) {
   const [ok, setOk] = useState(false);
   const copy = async () => {
     try { await navigator.clipboard.writeText(value); setOk(true); setTimeout(() => setOk(false), 1500); } catch { /* yok say */ }
@@ -916,7 +916,7 @@ function BackupSection({ demo, backup, onBackupNow, onDownload, onRestore, onRec
 }
 
 // ---------- Hesap ----------
-export function AccountSheet({ email, google, demo, onSetup, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, onAlertDefaults, onMailSetup, healthConnected, onHealthConnect, onHealthDisconnect, healthHidden, onToggleHealth, onEditToday, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
+export function AccountSheet({ email, google, demo, onSetup, onNotify, onClose, onReconnect, onRefresh, onSignOut, onMissedSetup, onAlertDefaults, onMailSetup, healthConnected, onHealthConnect, onHealthDisconnect, healthHidden, onToggleHealth, onEditToday, yarimHidden, onToggleYarim, backup, onBackupNow, onDownload, onRestore }) {
   const gText = { ok: 'Bağlı', checking: 'Kontrol ediliyor…', needs_login: 'Yeniden bağlanmalı', error: 'Ulaşılamıyor', off: 'Örnek modda kapalı' }[google] || google;
   return (
     <Sheet title="Hesap" onClose={onClose}>
@@ -928,6 +928,7 @@ export function AccountSheet({ email, google, demo, onSetup, onClose, onReconnec
       <BackupSection demo={demo} backup={backup} onBackupNow={onBackupNow} onDownload={onDownload} onRestore={onRestore} onReconnect={onReconnect} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!demo && <button type="button" className="btn big" onClick={onReconnect}>Google Takvim'i yeniden bağla</button>}
+        {onNotify ? <button type="button" className="btn big primary" onClick={onNotify}>📲 Ajanda bildirimleri · telefon</button> : null}
         {onAlertDefaults ? <button type="button" className="btn big" onClick={onAlertDefaults}>🔔 Varsayılan hatırlatmalar</button> : null}
         {onMailSetup ? <button type="button" className="btn big" onClick={onMailSetup}>📧 İş maili (IMAP) bağlantısı</button> : null}
         {!demo && onHealthConnect ? (healthConnected

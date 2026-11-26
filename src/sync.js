@@ -7,6 +7,9 @@ import { toOverrides, normAlerts, NAG_RRULE } from './alerts.js';
 
 // Kullanıcının seçtiği hatırlatmalar (alerts) yoksa eski sabit davranış kullanılır
 const timedOverrides = (x, start) => (x.alerts ? toOverrides(x.alerts, { start, allDay: false }).overrides : [0]);
+// Ajanda bildirimleri açıkken hatırlatma/arama/not için Google Takvim bildirimi susturulabilir (etkinlik takvimde kalır)
+export const syncFlags = { silent: false };
+const itemOverrides = (x, start) => (syncFlags.silent ? [] : timedOverrides(x, start));
 const atTime = (date, at) => { const d = new Date(date); const [h, m] = (at || '09:00').split(':').map(Number); d.setHours(h || 0, m || 0, 0, 0); return d; };
 
 const mpPrefix = (mp) => (mp ? '[' + mp + '] ' : '');
@@ -24,7 +27,7 @@ export async function syncReminder(r) {
     start: new Date(r.due_at),
     location: r.location || undefined,
     recurrence: r.repeat_rule ? rrule(r.repeat_rule, r.due_at) : r.alerts && r.alerts.nag ? NAG_RRULE : undefined,
-    overrides: timedOverrides(r, new Date(r.due_at))
+    overrides: itemOverrides(r, new Date(r.due_at))
   });
 }
 
@@ -38,7 +41,7 @@ export async function syncCall(c) {
     description: (c.phone ? 'Telefon: ' + c.phone + '\n' : '') + 'Ajanda araması',
     start: new Date(c.due_at),
     recurrence: c.alerts && c.alerts.nag ? NAG_RRULE : undefined,
-    overrides: timedOverrides(c, new Date(c.due_at))
+    overrides: itemOverrides(c, new Date(c.due_at))
   });
 }
 
@@ -172,7 +175,7 @@ export async function syncNote(n) {
     summary: '📝 ' + mpPrefix(n.marketplace) + n.title,
     description: ((n.body || '').slice(0, 800) + '\n\nAjanda notu').trim(),
     start: new Date(n.remind_at),
-    overrides: timedOverrides(n, new Date(n.remind_at))
+    overrides: itemOverrides(n, new Date(n.remind_at))
   });
 }
 

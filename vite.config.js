@@ -41,6 +41,8 @@ export default defineConfig({
       workbox: {
         // Fiş okuma dosyaları büyük; yalnız kullanılınca indirilir
         globIgnores: ['ocr/**'],
+        // Bildirimler: push / bildirime dokunma
+        importScripts: ['/push-sw.js'],
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/ocr\//],
         runtimeCaching: []
       }

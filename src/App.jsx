@@ -29,7 +29,8 @@ import { PromoSheet, PromoQuotaSheet, PromoLinkSheet, PromoAttachSheet, promoTit
 import { useMail, MailSetupSheet } from './mail.jsx';
 import { SearchSheet } from './search.jsx';
 import { useHealth, connectHealth, disconnectHealth, SportSheet, buildPlan, goalsOf, sportOf, DAY_SHORT, exName, ymdLocal as hYmd } from './health.jsx';
-import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote, syncCode } from './sync.js';
+import { syncReminder, syncCall, syncCampaign, unsyncCampaign, syncSpecialDate, syncCollab, syncNote, syncCode, syncFlags } from './sync.js';
+import { NotifySheet } from './notify.jsx';
 
 const TABS = [
   { id: 'bugun', label: 'Bugün', icon: Icon.Today },
@@ -222,6 +223,65 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     try { const s2 = await store.saveSettings({ health_goals: g }); setHealthGoals(s2.health_goals || g); say('Hedeflerin kaydedildi 🎯' + calMsg); return true; }
     catch (e) { if (/health_goals/.test(String(e && e.message))) say('Kaydedilemedi: Supabase\'de 26 numaralı SQL\'i çalıştırman gerekiyor.'); else fail(e); return false; }
   };
+  // Ajanda bildirim ayarları (app_settings.notify; SQL 33)
+  const [notify, setNotify] = useState(null);
+  const saveNotify = async (n) => {
+    try { await store.saveSettings({ notify: n }); }
+    catch (e) { if (/notify/.test(String(e && e.message))) throw new Error('Supabase\'de 33 numaralı SQL\'i çalıştırman gerekiyor.'); throw e; }
+    setNotify(n); syncFlags.silent = !!n.gcal_silent;
+  };
+  // Google Takvim'deki var olan hatırlatma/arama/not bildirimlerini sustur ya da geri aç
+  const applySilent = async (on) => {
+    syncFlags.silent = !!on;
+    const nowT = Date.now() - 86400000;
+    const jobs = [
+      ...data.reminders.filter((r) => !r.done && r.google_event_id && r.due_at && (new Date(r.due_at) > nowT || r.repeat_rule || (r.alerts && r.alerts.nag))).map((r) => ['reminders', r, () => syncReminder(r)]),
+      ...data.calls.filter((c) => !c.done && c.google_event_id && c.due_at && (new Date(c.due_at) > nowT || (c.alerts && c.alerts.nag))).map((c) => ['calls', c, () => syncCall(c)]),
+      ...(data.notes || []).filter((n) => n.google_event_id && n.remind_at && new Date(n.remind_at) > nowT).map((n) => ['notes', n, () => syncNote(n)])
+    ];
+    let done = 0;
+    for (const [table, it, fn] of jobs) {
+      const id = await gsync(fn);
+      if (id !== undefined && id !== it.google_event_id) { await store.update(table, it.id, { google_event_id: id }); patchLocal(table, it.id, { google_event_id: id }); }
+      done++;
+    }
+    say(done + ' kaydın Google Takvim bildirimi ' + (on ? 'susturuldu' : 'geri açıldı'));
+  };
+  // Bildirime dokununca: ?ac=r:<id> (kaydı aç), ?git=satislar|kurgu|bugun
+  const [pendingOpen, setPendingOpen] = useState(() => { try { const q = new URLSearchParams(location.search); return q.get('ac') || (q.get('git') ? 'git:' + q.get('git') : ''); } catch { return ''; } });
+  useEffect(() => {
+    try { const u = new URL(location.href); if (u.searchParams.has('ac') || u.searchParams.has('git')) { u.searchParams.delete('ac'); u.searchParams.delete('git'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } } catch { /* yok say */ }
+    if (!('serviceWorker' in navigator)) return undefined;
+    const onMsg = (e) => {
+      const d = e.data || {};
+      if (d.type === 'ajanda-refresh') load(true);
+      if (d.type === 'ajanda-open' && d.url) {
+        try { const q = new URL(d.url, location.origin).searchParams; const y = q.get('yeni'); if (y === 'ciro') { goTab('ciro'); setSheet({ kind: 'revenue', day: toDateInput(new Date()) }); return; } setPendingOpen(q.get('ac') || (q.get('git') ? 'git:' + q.get('git') : '')); load(true); } catch { /* yok say */ }
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!pendingOpen) return;
+    if (pendingOpen.startsWith('git:')) {
+      const g = pendingOpen.slice(4); setPendingOpen('');
+      if (g === 'kurgu') { try { sessionStorage.setItem('ajanda-camp-sub', 'kurgu'); } catch { /* yok say */ } goTab('kampanya'); }
+      else goTab(g === 'bugun' ? 'bugun' : g);
+      return;
+    }
+    const [k, id] = pendingOpen.split(':');
+    const list = k === 'r' ? data.reminders : k === 'c' ? data.calls : data.notes || [];
+    const it = list.find((x) => x.id === id);
+    if (!it) return; // veri henüz yüklenmedi
+    setPendingOpen('');
+    if (k === 'r') setSheet({ kind: 'item', item: { ...it, kind: 'reminder' } });
+    else if (k === 'c') setSheet({ kind: 'item', item: { ...it, kind: 'call', title: it.who } });
+    else setSheet({ kind: 'note', item: it });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpen, data]);
+
   // Pazaryeri indirim hakları (app_settings.promo_quota; SQL 32 yoksa bu cihazda)
   const [promoQuota, setPromoQuota] = useState(() => { try { return JSON.parse(localStorage.getItem('ajanda-promo-quota') || 'null'); } catch { return null; } });
   const savePromoQuota = async (q) => {
@@ -270,7 +330,7 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
     (async () => {
       try {
         const [s, c] = await Promise.all([store.getSettings(), store.loveCount()]);
-        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setMoneyCats(s.money_cats || []); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setHealthGoals(s.health_goals || null); if (s.sales_prefs) setSalesPrefs(s.sales_prefs); if (s.promo_quota) setPromoQuota(s.promo_quota); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
+        if (alive) { setLove({ phone: s.yarim_phone || '', message: s.love_message || '', count: c, token: s.webhook_token || '' }); setRevTarget(s.revenue_target || null); setBudgets(s.budgets || {}); setMoneyCats(s.money_cats || []); setAlertDefs(mergeAlertDefaults(s.alert_defaults)); setYarimPrefs(s.yarim_prefs || {}); setHealthGoals(s.health_goals || null); if (s.sales_prefs) setSalesPrefs(s.sales_prefs); if (s.promo_quota) setPromoQuota(s.promo_quota); setNotify(s.notify || null); syncFlags.silent = !!(s.notify && s.notify.gcal_silent); setPrefsLoaded(true); setBackup((b) => ({ ...b, last: s.last_backup_at || b.last, loaded: true })); }
       } catch (e) { console.warn('Yarim ayarları yüklenemedi', e); }
     })();
     return () => { alive = false; };
@@ -1375,8 +1435,9 @@ export default function App({ store, demo, email, onSignOut, onReconnect, google
             onMailSetup={() => setSheet({ kind: 'mailSetup' })} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onReconnect={reconnect} />
         </Suspense>
       )}
+      {sheet && sheet.kind === 'notify' && <NotifySheet demo={demo} value={notify} onSave={saveNotify} onApplySilent={demo ? null : applySilent} onClose={() => setSheet(null)} />}
       {sheet && sheet.kind === 'account' && (
-        <AccountSheet email={email} onSetup={() => setSheet({ kind: 'setup' })} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })}
+        <AccountSheet email={email} onSetup={() => setSheet({ kind: 'setup' })} onNotify={() => setSheet({ kind: 'notify' })} google={google} demo={demo} onClose={() => setSheet(null)} onReconnect={reconnect} onMissedSetup={() => setSheet({ kind: 'missedSetup' })} onAlertDefaults={() => setSheet({ kind: 'alertDefaults' })} onMailSetup={() => setSheet({ kind: 'mailSetup' })}
           healthConnected={!!(healthState.health && healthState.health.connected)} onHealthConnect={async () => { const r = await connectHealth(); if (r && r.error) say(r.error); }}
           onHealthDisconnect={async () => { await disconnectHealth(); healthState.reload(); say('Google Health bağlantısı kaldırıldı'); }}
           healthHidden={healthHidden} onToggleHealth={toggleHealthHidden} onEditToday={() => setSheet({ kind: 'todayEdit' })} yarimHidden={yarimHidden} onToggleYarim={() => { setYarimHidden(!yarimHidden); say(yarimHidden ? 'Yarim alanı gösteriliyor ❤️' : 'Yarim alanı bu cihazda gizlendi'); }}
