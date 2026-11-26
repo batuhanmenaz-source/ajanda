@@ -1,7 +1,7 @@
 // Ajanda'nın kendi bildirimleri (Web Push).
 //   GET  ?action=key   → sunucudaki genel (public) VAPID anahtarı; tarayıcı bununla abone olur
 //   POST ?action=test  → giriş yapmış kullanıcının cihazlarına deneme bildirimi
-//   POST ?action=tick  → Supabase zamanlayıcısı (pg_cron) her dakika çağırır; zamanı gelen bildirimleri yollar
+//   ?action=tick&key=… → zamanlayıcı (cron-job.org) her dakika çağırır; zamanı gelen bildirimleri yollar
 //   POST ?action=act   → bildirimdeki "Yapıldı" / "Yarına ertele" düğmeleri (cihaz anahtarıyla doğrulanır)
 // Gizli VAPID anahtarı yalnız Vercel ortam değişkeninde durur (VAPID_PRIVATE_KEY).
 process.env.TZ = 'Europe/Istanbul'; // tarih hesapları Türkiye saatiyle
@@ -253,7 +253,8 @@ export default async function handler(req, res) {
 
   if (action === 'tick') {
     const { data: c } = await sb.from('push_cron').select('secret').eq('id', 1).maybeSingle();
-    if (!c || req.headers['x-cron-key'] !== c.secret) { res.status(401).json({ error: 'unauthorized' }); return; }
+    const given = req.headers['x-cron-key'] || (req.query || {}).key; // başlık ya da ?key= (cron-job.org gibi servisler için)
+    if (!c || given !== c.secret) { res.status(401).json({ error: 'unauthorized' }); return; }
     const now = new Date();
     const { data: subs } = await sb.from('push_subs').select('*');
     const byUser = {};

@@ -40,17 +40,6 @@ create table if not exists public.push_cron (
 alter table public.push_cron enable row level security;
 insert into public.push_cron (id) values (1) on conflict (id) do nothing;
 
--- Her dakika Ajanda sunucusuna "gönderilecek bildirim var mı?" diye sorar
-create extension if not exists pg_cron with schema pg_catalog;
-create extension if not exists pg_net with schema extensions;
--- Aynı adla tekrar çalıştırılırsa var olan görev güncellenir
-select cron.schedule(
-  'ajanda-bildirim',
-  '* * * * *',
-  $$ select net.http_post(
-       url := 'https://ajanda-nu.vercel.app/api/push?action=tick',
-       headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-key', (select secret from public.push_cron where id = 1)),
-       body := '{}'::jsonb,
-       timeout_milliseconds := 25000
-     ) $$
-);
+-- Zamanlayıcı: cron-job.org her dakika aşağıdaki adresi çağırır (Supabase pg_cron bu projede kurulamadı).
+-- Bu sorgunun sonucundaki adresi kopyalayıp cron-job.org'a gir.
+select 'https://ajanda-nu.vercel.app/api/push?action=tick&key=' || secret as zamanlayici_adresi from public.push_cron where id = 1;
