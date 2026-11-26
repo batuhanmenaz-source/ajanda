@@ -140,10 +140,11 @@ export function QuickAdd({ onClose, onSave, onDetail, defaultYarim, yarimHidden,
     return {
       ...own,
       date: own.date || all.date, hasTime: own.date ? own.hasTime : all.hasTime, endDate: own.endDate || (own.date ? null : all.endDate),
-      mp: own.mp || all.mp, brand: own.brand || all.brand,
+      // Metinde yoksa gönderenin adından (ör. "Ayşe (Trendyol KAM)")
+      mp: own.mp || all.mp || (from ? parseQuick(from).mp : null) || null, brand: own.brand || all.brand,
       type: own.type !== 'Hatırlatma' ? own.type : (all.type === 'Not' ? 'Hatırlatma' : all.type)
     };
-  }, [q, shared]);
+  }, [q, shared, from]);
   // "250 market", "+45000 maaş" gibi yazılanlar cüzdana gider
   const money = useMemo(() => (shared ? null : parseMoney(q)), [q, shared]);
   // "bekle: Beymen varyant talebi" → Bekleyen
