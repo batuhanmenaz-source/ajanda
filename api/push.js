@@ -237,7 +237,9 @@ export default async function handler(req, res) {
 
   if (action === 'act') { const r = await act(sb, await body(req)); res.status(r.status).json(r.j); return; }
 
-  if (!vapid()) { res.status(500).json({ error: 'missing_vapid', message: 'VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY Vercel ayarlarında yok.' }); return; }
+  const hasVapid = !!vapid();
+  // Zamanlayıcı anahtarlar girilmeden de "başarılı" görsün (cron-job.org art arda hatada görevi kapatıyor)
+  if (!hasVapid && action !== 'tick') { res.status(500).json({ error: 'missing_vapid', message: 'VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY Vercel ayarlarında yok.' }); return; }
 
   if (action === 'test') {
     const jwt = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -255,6 +257,7 @@ export default async function handler(req, res) {
     const { data: c } = await sb.from('push_cron').select('secret').eq('id', 1).maybeSingle();
     const given = req.headers['x-cron-key'] || (req.query || {}).key; // başlık ya da ?key= (cron-job.org gibi servisler için)
     if (!c || given !== c.secret) { res.status(401).json({ error: 'unauthorized' }); return; }
+    if (!hasVapid) { res.status(200).json({ ok: false, waiting: 'VAPID anahtarları Vercel\'e henüz girilmedi' }); return; }
     const now = new Date();
     const { data: subs } = await sb.from('push_subs').select('*');
     const byUser = {};
